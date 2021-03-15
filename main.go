@@ -28,14 +28,14 @@ var SafariAuto = Browser{
 
 func main() {
 
-    client, err := cclient.NewClient(tls.HelloChrome_Auto, "https://nTnzbu6i:QFmCfns3sxI3LsT5yhrYORq791Onx3Aqd491p6bFgn0CXR6B2GM0boie7jKdxz41Th5VA-wSyEvMWRA6@usa.resi.proxies.group:14584")
+    client, err := cclient.NewClient(tls.HelloChrome_Auto, "")
     // client, err := cclient.NewClient(tls.HelloChrome_Auto)
     if err != nil {
         log.Fatal(err)
     }
 
 
-
+    fmt.Println("aaa")
     resp, err := client.Get("https://ja3er.com/json")
 	if err != nil {
         fmt.Println(err)
