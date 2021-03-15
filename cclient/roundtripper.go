@@ -29,7 +29,7 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
+	// req.Header.Set("User-Agent", "dfghdfghgfd")
 
 	addr := rt.getDialTLSAddr(req)
 	if _, ok := rt.cachedTransports[addr]; !ok {
@@ -126,6 +126,7 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 
 func newRoundTripper(clientHello utls.ClientHelloID, dialer ...proxy.ContextDialer) http.RoundTripper {
 	if len(dialer) > 0 {
+	
 		return &roundTripper{
 			dialer: dialer[0],
 
@@ -135,6 +136,7 @@ func newRoundTripper(clientHello utls.ClientHelloID, dialer ...proxy.ContextDial
 			cachedConnections: make(map[string]net.Conn),
 		}
 	} else {
+
 		return &roundTripper{
 			dialer: proxy.Direct,
 

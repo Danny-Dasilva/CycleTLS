@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"fmt"
 
 	"golang.org/x/net/http2"
 )
@@ -85,11 +86,21 @@ func newConnectDialer(proxyUrlStr string) (proxy.ContextDialer, error) {
 
 	if proxyUrl.User != nil {
 		if proxyUrl.User.Username() != "" {
+			// password, _ := proxyUrl.User.Password()
+			// client.DefaultHeader.Set("Proxy-Authorization", "Basic "+
+			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
+			
+			username := proxyUrl.User.Username()
 			password, _ := proxyUrl.User.Password()
-			client.DefaultHeader.Set("Proxy-Authorization", "Basic "+
-				base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
+		
+			// client.DefaultHeader.SetBasicAuth(username, password)
+			auth := username + ":" + password
+			basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
+			client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
 		}
 	}
+	client.DefaultHeader.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
+	fmt.Println("je;;;ee",)
 	return client, nil
 }
 
