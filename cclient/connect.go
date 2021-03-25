@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"fmt"
 
 	"golang.org/x/net/http2"
 )
@@ -99,8 +98,7 @@ func newConnectDialer(proxyUrlStr string) (proxy.ContextDialer, error) {
 			client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
 		}
 	}
-	client.DefaultHeader.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
-	fmt.Println("je;;;ee",)
+	// client.DefaultHeader.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
 	return client, nil
 }
 
@@ -128,7 +126,6 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			req.Header[k] = v
 		}
 	}
-
 	connectHttp2 := func(rawConn net.Conn, h2clientConn *http2.ClientConn) (net.Conn, error) {
 		req.Proto = "HTTP/2.0"
 		req.ProtoMajor = 2
