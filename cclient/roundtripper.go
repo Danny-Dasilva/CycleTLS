@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 
@@ -30,7 +31,7 @@ type roundTripper struct {
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// req.Header.Set("User-Agent", "dfghdfghgfd")
-
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
 	addr := rt.getDialTLSAddr(req)
 	if _, ok := rt.cachedTransports[addr]; !ok {
 		if err := rt.getTransport(req, addr); err != nil {
