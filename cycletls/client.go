@@ -1,26 +1,31 @@
-package cclient
+package cycletls
 
 import (
 	"golang.org/x/net/proxy"
 	"net/http"
 
-	utls "github.com/refraction-networking/utls"
 )
+type Browser struct {
+	JA3       string
+	UserAgent string
+}
 
 
 
-func NewClient(clientHello utls.ClientHelloID, proxyUrl ...string) (http.Client, error) {
+
+func NewClient(browser Browser, proxyUrl ...string) (http.Client, error) {
+	//fix check PR
 	if len(proxyUrl) > 0 && len(proxyUrl[0]) > 0 {
 		dialer, err := newConnectDialer(proxyUrl[0])
 		if err != nil {
 			return http.Client{}, err
 		}
 		return http.Client{
-			Transport: newRoundTripper(clientHello, dialer),
+			Transport: newRoundTripper(browser, dialer),
 		}, nil
 	} else {
 		return http.Client{
-			Transport: newRoundTripper(clientHello, proxy.Direct),
+			Transport: newRoundTripper(browser, proxy.Direct),
 		}, nil
 	}
 }

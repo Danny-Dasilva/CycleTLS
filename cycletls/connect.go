@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // stolen from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
-package cclient
+package cycletls
 
 import (
 	"bufio"
