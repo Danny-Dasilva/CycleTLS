@@ -1,0 +1,45 @@
+{
+    "name": "cycletls",
+    "version": "1.0.5",
+    "description": "Mimic TLS/JA3 fingerprint in JS with help from Go",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "author": "Danny-Dasilva",
+    "scripts": {
+      "build": "tsc",
+      "build:windows": "cross-env GOOS=windows go build -o ./dist/index.exe ./golang",
+      "build:linux": "cross-env GOOS=linux go build -o ./dist/index ./golang && chmod +x ./dist/index",
+      "build:mac": "cross-env GOOS=darwin go build -o ./dist/index-mac ./golang && chmod +x ./dist/index-mac",
+      "prepare": "npm run build && npm run build:windows && npm run build:linux && npm run build:mac"
+    },
+    "repository": {
+      "type": "git",
+      "directory": "git+https://github.com/Danny-Dasilva/cycletls.git"
+    },
+    "keywords": [
+      "cycletls",
+      "utls",
+      "ja3",
+      "spoof",
+      "fingerprint",
+      "mimic"
+    ],
+    "license": "MIT",
+    "bugs": {
+      "url": "https://github.com/Danny-Dasilva/cycletls/issues"
+    },
+    "homepage": "https://github.com/Danny-Dasilva/cycletls#readme",
+    "dependencies": {
+      "ws": "^7.3.1"
+    },
+    "devDependencies": {
+      "@types/ws": "^7.2.6",
+      "@typescript-eslint/eslint-plugin": "^3.6.1",
+      "@typescript-eslint/parser": "^3.6.1",
+      "cross-env": "^7.0.3",
+      "eslint": "^7.4.0",
+      "eslint-plugin-prefer-arrow": "^1.2.1",
+      "typescript": "^3.9.7"
+    }
+  }
+  
