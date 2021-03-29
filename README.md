@@ -1,4 +1,4 @@
-# CycleTls
+# CycleTLS
 
 todo: redo-socket request api and bugfixes for error (wrong https proxy, incorrect JA3 and so on)
 
