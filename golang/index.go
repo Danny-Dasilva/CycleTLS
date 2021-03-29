@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"os"
 	"fmt"
-	// tls "github.com/refraction-networking/utls"
-	// JA3 "github.com/CUCyber/ja3transport"
 )
 
 type myTLSRequest struct {
@@ -160,16 +158,12 @@ func main() {
 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
 			continue
 		}
-
+		
 		err = c.WriteMessage(websocket.TextMessage, data)
 		if err != nil {
 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
 			continue
 		}
 	}
-
-
-
-    
 }
 
