@@ -1,6 +1,13 @@
 # CycleTLS
 
-todo: redo-socket request api and bugfixes for error (wrong https proxy, incorrect JA3 and so on)
+Currently in Active development 
+
+todo: 
+- [X] fix TS api 
+- [ ] redo-socket request api in go
+- [ ] bugfixes for error (wrong https proxy, incorrect JA3 and so on)
+- [ ] state checks for golang
+- [ ] concurrency and speedtests
 
 
 ### Setup
