@@ -2,7 +2,7 @@ import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { Server } from 'ws';
-export interface MyTlsRequestOptions {
+export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
   };
@@ -12,7 +12,7 @@ export interface MyTlsRequestOptions {
   proxy?: string;
 }
 
-export interface MyTlsResponse {
+export interface CycleTLSResponse {
   status: number;
   body: string;
   headers: {
@@ -87,7 +87,7 @@ class Golang extends EventEmitter {
   }
 }
 
-const initMyTls = async (
+const initCycleTLS = async (
   initOptions: {
     port?: number;
     debug?: boolean;
@@ -95,18 +95,18 @@ const initMyTls = async (
 ): Promise<{
   (
     url: string,
-    options: MyTlsRequestOptions,
+    options: CycleTLSRequestOptions,
     method?: 'head' | 'get' | 'post' | 'put' | 'delete' | 'trace' | 'options' | 'connect' | 'patch'
-  ): Promise<MyTlsResponse>;
-  head(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  get(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  post(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  put(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  delete(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  trace(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  options(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  connect(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
-  patch(url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse>;
+  ): Promise<CycleTLSResponse>;
+  head(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  get(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  post(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  put(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  delete(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  trace(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  options(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  connect(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  patch(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
 }> => {
   return new Promise((resolveReady) => {
     let { port, debug } = initOptions;
@@ -117,10 +117,10 @@ const initMyTls = async (
     const instance = new Golang(port, debug);
 
     instance.on('ready', () => {
-      const mytls = (() => {
-        const MyTls = async (
+      const CycleTLS = (() => {
+        const CycleTLS = async (
           url: string,
-          options: MyTlsRequestOptions,
+          options: CycleTLSRequestOptions,
           method:
             | 'head'
             | 'get'
@@ -131,7 +131,7 @@ const initMyTls = async (
             | 'options'
             | 'connect'
             | 'patch' = 'get'
-        ): Promise<MyTlsResponse> => {
+        ): Promise<CycleTLSResponse> => {
           return new Promise((resolveRequest, rejectRequest) => {
             const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
 
@@ -162,44 +162,44 @@ const initMyTls = async (
             });
           });
         };
-        MyTls.head = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'head');
+        CycleTLS.head = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'head');
         };
-        MyTls.get = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'get');
+        CycleTLS.get = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'get');
         };
-        MyTls.post = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'post');
+        CycleTLS.post = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'post');
         };
-        MyTls.put = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'put');
+        CycleTLS.put = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'put');
         };
-        MyTls.delete = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'delete');
+        CycleTLS.delete = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'delete');
         };
-        MyTls.trace = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'trace');
+        CycleTLS.trace = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'trace');
         };
-        MyTls.options = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'options');
+        CycleTLS.options = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'options');
         };
-        MyTls.connect = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'options');
+        CycleTLS.connect = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'options');
         };
-        MyTls.patch = (url: string, options: MyTlsRequestOptions): Promise<MyTlsResponse> => {
-          return MyTls(url, options, 'patch');
+        CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, 'patch');
         };
 
-        return MyTls;
+        return CycleTLS;
       })();
-      resolveReady(mytls);
+      resolveReady(CycleTLS);
     });
   });
 };
 
-export default initMyTls;
+export default initCycleTLS;
 
 // CommonJS support for default export
-module.exports = initMyTls;
-module.exports.default = initMyTls;
+module.exports = initCycleTLS;
+module.exports.default = initCycleTLS;
 module.exports.__esModule = true;

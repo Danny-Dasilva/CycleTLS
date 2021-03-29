@@ -36,21 +36,21 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 exports.__esModule = true;
-// const initMyTls = require('./src/index');
+// const initCycleTLS = require('./src/index');
 var index_js_1 = require("../dist/index.js");
-// Typescript: import initMyTls from 'mytls';
+// Typescript: import initCycleTLS from 'cycletls';
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var myTls, response;
+    var cycleTLS, response;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
-                myTls = _a.sent();
-                return [4 /*yield*/, myTls('https://api.ipify.org/?format=json', {
+                cycleTLS = _a.sent();
+                return [4 /*yield*/, cycleTLS('https://api.ipify.org/?format=json', {
                         body: '',
                         ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
                         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
-                        proxy: ''
+                        proxy: 'http://scripting:stat@154.16.222.1:3120'
                     })];
             case 2:
                 response = _a.sent();
