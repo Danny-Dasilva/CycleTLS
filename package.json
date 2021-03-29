@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "directory": "git+https://github.com/Danny-Dasilva/cycletls.git"
+    "directory": "git+https://github.com/Danny-Dasilva/CycleTLS.git"
   },
   "keywords": [
     "cycletls",
@@ -26,9 +26,9 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Danny-Dasilva/cycletls/issues"
+    "url": "https://github.com/Danny-Dasilva/CycleTLS/issues"
   },
-  "homepage": "https://github.com/Danny-Dasilva/cycletls#readme",
+  "homepage": "https://github.com/Danny-Dasilva/CycleTLS#readme",
   "dependencies": {
     "ws": "^7.3.1"
   },
