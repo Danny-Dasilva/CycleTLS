@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"fmt"
@@ -115,20 +116,24 @@ func main() {
 		}
 
 
-		resp, err := client.Get(mytlsrequest.Options.URL)
-		// resp, err := client.Get("https://api.ipify.org/?format=json")
+
+		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
 		if err != nil {
-			fmt.Println(err)
-			log.Fatal(err)
-		} else {
-			fmt.Println(resp.StatusCode)
-			// body, _ := ioutil.ReadAll(resp.Body)
-			// fmt.Println(string(body))
+			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			continue
 		}
 
-	
+		for k, v := range mytlsrequest.Options.Headers {
+			if k != "host" {
+				req.Header.Set(k, v)
+			}
+		}
 
-	
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			continue
+		}
 
 		defer resp.Body.Close()
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
@@ -148,7 +153,7 @@ func main() {
 				}
 			}
 		}
-		fmt.Println(bodyBytes)
+
 		Response := response{resp.StatusCode, string(bodyBytes), headers}
 
 		reply := myTLSResponse{mytlsrequest.RequestID, Response}
@@ -158,12 +163,63 @@ func main() {
 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
 			continue
 		}
-		
+
 		err = c.WriteMessage(websocket.TextMessage, data)
 		if err != nil {
 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
 			continue
 		}
+
+
+		// resp, err := client.Get(mytlsrequest.Options.URL)
+		// // resp, err := client.Get("https://api.ipify.org/?format=json")
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	log.Fatal(err)
+		// } else {
+		// 	fmt.Println(resp.StatusCode)
+		// 	// body, _ := ioutil.ReadAll(resp.Body)
+		// 	// fmt.Println(string(body))
+		// }
+
+	
+
+	
+
+		// defer resp.Body.Close()
+		// bodyBytes, err := ioutil.ReadAll(resp.Body)
+		// if err != nil {
+		// 	log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+		// 	continue
+		// }
+
+		// headers := make(map[string]string)
+
+		// for name, values := range resp.Header {
+		// 	if name == "Set-Cookie" {
+		// 		headers[name] = strings.Join(values, "/,/")
+		// 	} else {
+		// 		for _, value := range values {
+		// 			headers[name] = value
+		// 		}
+		// 	}
+		// }
+		// fmt.Println(bodyBytes)
+		// Response := response{resp.StatusCode, string(bodyBytes), headers}
+
+		// reply := myTLSResponse{mytlsrequest.RequestID, Response}
+
+		// data, err := json.Marshal(reply)
+		// if err != nil {
+		// 	log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+		// 	continue
+		// }
+		
+		// err = c.WriteMessage(websocket.TextMessage, data)
+		// if err != nil {
+		// 	log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+		// 	continue
+		// }
 	}
 }
 
