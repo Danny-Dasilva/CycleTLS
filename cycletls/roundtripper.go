@@ -104,7 +104,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(spec)
 	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, utls.HelloCustom)
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err

@@ -56,11 +56,13 @@ class Golang extends EventEmitter {
     });
 
     child.stderr.on('data', (stderr) => {
+      
       if (stderr.toString().includes('Request_Id_On_The_Left')) {
         const splitRequestIdAndError = stderr.toString().split('Request_Id_On_The_Left');
         const [requestId, error] = splitRequestIdAndError;
         this.emit(requestId, { error: new Error(error) });
       } else {
+        console.log(stderr.toString())
         debug
           ? cleanExit(new Error(stderr))
           : cleanExit(new Error('Invalid JA3 hash. Exiting... (Golang wrapper exception)'));

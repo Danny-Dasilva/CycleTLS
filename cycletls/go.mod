@@ -1,4 +1,4 @@
-module github.com/x04/cclient
+module github.com/Danny-Dasilva/CycleTLS
 
 go 1.16
 
