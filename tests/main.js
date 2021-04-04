@@ -40,21 +40,27 @@ exports.__esModule = true;
 var index_js_1 = require("../dist/index.js");
 // Typescript: import initCycleTLS from 'cycletls';
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var cycleTLS, response;
+    var cycleTLS, i, response;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
                 cycleTLS = _a.sent();
-                return [4 /*yield*/, cycleTLS('https://ja3er.com/json', {
-                        body: '',
-                        ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
-                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36'
-                    })];
+                i = 0;
+                _a.label = 2;
             case 2:
+                if (!(i < 10)) return [3 /*break*/, 5];
+                return [4 /*yield*/, cycleTLS('http://localhost:8080', {
+                        id: i
+                    })];
+            case 3:
                 response = _a.sent();
                 console.log(response);
-                return [2 /*return*/];
+                _a.label = 4;
+            case 4:
+                i++;
+                return [3 /*break*/, 2];
+            case 5: return [2 /*return*/];
         }
     });
 }); })();

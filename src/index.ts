@@ -3,21 +3,16 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import { Server } from 'ws';
 export interface CycleTLSRequestOptions {
-  headers?: {
-    [key: string]: any;
-  };
   body?: string;
   ja3?: string;
   userAgent?: string;
+  id?: number;
   proxy?: string;
 }
 
 export interface CycleTLSResponse {
   status: number;
   body: string;
-  headers: {
-    [key: string]: any;
-  };
 }
 
 let child: ChildProcessWithoutNullStreams;
@@ -152,14 +147,13 @@ const initCycleTLS = async (
             instance.once(requestId, (response) => {
               if (response.error) return rejectRequest(response.error);
 
-              const { Status: status, Body: body, Headers: headers } = response;
+              const { Status: status, Body: body, } = response;
 
-              if (headers['Set-Cookie']) headers['Set-Cookie'] = headers['Set-Cookie'].split('/,/');
+      
 
               resolveRequest({
                 status,
                 body,
-                headers,
               });
             });
           });

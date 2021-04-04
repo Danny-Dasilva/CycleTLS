@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/gorilla/websocket"
-	"io/ioutil"
-	"strings"
+	// "io/ioutil"
+	// "strings"
 	"log"
-	"net/http"
+	// "net/http"
+	"time"
 	"net/url"
 	"os"
 	"fmt"
+
 )
 
 type myTLSRequest struct {
@@ -21,7 +23,8 @@ type myTLSRequest struct {
 		Headers map[string]string `json:"headers"`
 		Body    string            `json:"body"`
 		Ja3     string            `json:"ja3"`
-		UserAgent     string            `json:"userAgent"`
+		UserAgent     string       `json:"userAgent"`
+		ID     int            		`json:"id"`
 		Proxy   string            `json:"proxy"`
 	} `json:"options"`
 }
@@ -49,7 +52,6 @@ var FirefoxAuto = Browser{
 type response struct {
 	Status  int
 	Body    string
-	Headers map[string]string
 }
 
 type myTLSResponse struct {
@@ -73,6 +75,51 @@ func getWebsocketAddr() string {
 	return u.String()
 }
 
+/////////////////////
+func process(job []byte, i int) {
+
+	message := job
+	mytlsrequest := new(myTLSRequest)
+	e := json.Unmarshal(message, &mytlsrequest)
+	if e != nil {
+		log.Print(e)
+	}
+
+
+	s := fmt.Sprintf("%f", mytlsrequest.Options.ID)
+
+	if  mytlsrequest.Options.ID == 2 {
+		time.Sleep(4 *  time.Second)
+		s = string("yaga")
+	}
+	Response := response{200, s}
+
+	reply := myTLSResponse{mytlsrequest.RequestID, Response}
+
+	data, err := json.Marshal(reply)
+	if err != nil {
+		log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+		
+	}
+	
+	fmt.Println(data)
+	err = greeting.WriteMessage(websocket.TextMessage, data)
+	if err != nil {
+		log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+		
+	}
+
+	
+	
+}
+
+var greeting *websocket.Conn
+func worker(jobChan <-chan  []byte, i int) {
+	for job := range jobChan {
+		process(job,i)
+	}
+}
+
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
@@ -84,6 +131,18 @@ func main() {
 		log.Print(err)
 		return
 	}
+	greeting = c
+
+	workerCount := 2
+	// make a channel with a capacity of 100.
+	jobChan := make(chan []byte, 100) // Or jobChan := make(chan int)
+
+	// start the worker
+	for i:=0; i<workerCount; i++ {
+		go worker(jobChan, i)
+	}
+	
+	
 
 	for {
 		_, message, err := c.ReadMessage()
@@ -91,85 +150,15 @@ func main() {
 			log.Print(err)
 			continue
 		}
+		 
+		if message != nil {
+			
 
-
-		mytlsrequest := new(myTLSRequest)
-		e := json.Unmarshal(message, &mytlsrequest)
-		if e != nil {
-			log.Print(err)
-			continue
+			jobChan <- message
+		
+		
 		}
-
-
-		var Default = Browser{
-			JA3:       mytlsrequest.Options.Ja3,
-			UserAgent:  mytlsrequest.Options.UserAgent,
-		}
-		fmt.Println(Default)
-
-
-
-		client, err := NewClient(Default, mytlsrequest.Options.Proxy)
-		// client, err := cclient.NewClient(tls.HelloChrome_Auto)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-
-
-		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
-		for k, v := range mytlsrequest.Options.Headers {
-			if k != "host" {
-				req.Header.Set(k, v)
-			}
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
-		defer resp.Body.Close()
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
-		headers := make(map[string]string)
-
-		for name, values := range resp.Header {
-			if name == "Set-Cookie" {
-				headers[name] = strings.Join(values, "/,/")
-			} else {
-				for _, value := range values {
-					headers[name] = value
-				}
-			}
-		}
-
-		Response := response{resp.StatusCode, string(bodyBytes), headers}
-
-		reply := myTLSResponse{mytlsrequest.RequestID, Response}
-
-		data, err := json.Marshal(reply)
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
-		err = c.WriteMessage(websocket.TextMessage, data)
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
+		
 
 	
 	}
