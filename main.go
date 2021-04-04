@@ -84,34 +84,39 @@ func main() {
 	log.SetFlags(0)
 
 	
-	for i := 1; i < 10000; i++ {
+
+    //this should be created outside
+
+    mytlsrequest := new(myTLSRequest)
+    mytlsrequest.RequestID = string('t')
+    mytlsrequest.Options.URL = "http://localhost:8080"
+    mytlsrequest.Options.Method = "GET"
+    mytlsrequest.Options.Headers = map[string]string{
+                                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36",
+
+                                    }
+    
+    mytlsrequest.Options.Ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0"
+
+
+
+
+    client, err := cycletls.NewClient(FirefoxAuto, mytlsrequest.Options.Proxy)
+    // client, err := cclient.NewClient(tls.HelloChrome_Auto)
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+	for i := 1; i < 100; i++ {
 		
         
-		mytlsrequest := new(myTLSRequest)
-        mytlsrequest.RequestID = "test"
-        mytlsrequest.Options.URL = "http://localhost:8080"
-        mytlsrequest.Options.Method = "GET"
-        mytlsrequest.Options.Headers = map[string]string{
-                                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36",
-
-                                        }
-        
-        mytlsrequest.Options.Ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0"
-
-
-
-
-		client, err := cycletls.NewClient(FirefoxAuto, mytlsrequest.Options.Proxy)
-		// client, err := cclient.NewClient(tls.HelloChrome_Auto)
-		if err != nil {
-			log.Fatal(err)
-		}
+		
 
 
 
 		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
 		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			log.Print(mytlsrequest.RequestID + "req" + err.Error())
 			continue
 		}
 
@@ -123,7 +128,7 @@ func main() {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			log.Print(mytlsrequest.RequestID + "resp" + err.Error())
 			continue
 		}
         
@@ -131,7 +136,7 @@ func main() {
         
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			log.Print(mytlsrequest.RequestID + "bodyBytes" + err.Error())
 			continue
 		}
 
