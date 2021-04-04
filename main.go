@@ -1,11 +1,31 @@
 package main
 
 import (
-    "log"
+	"flag"
 	"fmt"
 	"io/ioutil"
-    "./cycletls"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"time"
+
+	"./cycletls"
 )
+
+type myTLSRequest struct {
+	RequestID string `json:"requestId"`
+	Options   struct {
+		URL     string            `json:"url"`
+		Method  string            `json:"method"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+		Ja3     string            `json:"ja3"`
+		UserAgent     string            `json:"userAgent"`
+		Proxy   string            `json:"proxy"`
+	} `json:"options"`
+}
 
 
 // ChromeAuto mocks Chrome 78
@@ -26,24 +46,117 @@ var FirefoxAuto = cycletls.Browser{
 }
 
 
+
+type response struct {
+	Status  int
+	Body    string
+	Headers map[string]string
+}
+
+type myTLSResponse struct {
+	RequestID string
+	Response  response
+}
+
+func getWebsocketAddr() string {
+	port, exists := os.LookupEnv("WS_PORT")
+	fmt.Println(port)
+	var addr *string
+
+	if exists {
+		addr = flag.String("addr", "localhost:"+port, "http service address")
+	} else {
+		addr = flag.String("addr", "localhost:9112", "http service address")
+	}
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
+
+	return u.String()
+}
+
 func main() {
+    start := time.Now()
+    defer func() {
+        fmt.Println("Execution Time: ", time.Since(start))
+    }()
 
-    client, err := cycletls.NewClient(FirefoxAuto)
-    // client, err := cclient.NewClient(tls.HelloChrome_Auto)
-    if err != nil {
-        log.Fatal(err)
-    }
+	flag.Parse()
+	log.SetFlags(0)
+
+	
+	for i := 1; i < 10000; i++ {
+		
+        
+		mytlsrequest := new(myTLSRequest)
+        mytlsrequest.RequestID = "test"
+        mytlsrequest.Options.URL = "http://localhost:8080"
+        mytlsrequest.Options.Method = "GET"
+        mytlsrequest.Options.Headers = map[string]string{
+                                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36",
+
+                                        }
+        
+        mytlsrequest.Options.Ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0"
 
 
-    resp, err := client.Get("https://ja3er.com/json")
-    // resp, err := client.Get("https://api.ipify.org/?format=json")
-	if err != nil {
-        fmt.Println(err)
-		log.Fatal(err)
-    } else {
-        fmt.Println(resp.StatusCode)
-        body, _ := ioutil.ReadAll(resp.Body)
-        fmt.Println(string(body))
-    }
+
+
+		client, err := cycletls.NewClient(FirefoxAuto, mytlsrequest.Options.Proxy)
+		// client, err := cclient.NewClient(tls.HelloChrome_Auto)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+
+
+		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
+		if err != nil {
+			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			continue
+		}
+
+		for k, v := range mytlsrequest.Options.Headers {
+			if k != "host" {
+				req.Header.Set(k, v)
+			}
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			continue
+		}
+        
+		defer resp.Body.Close()
+        
+		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			continue
+		}
+
+		headers := make(map[string]string)
+
+		for name, values := range resp.Header {
+			if name == "Set-Cookie" {
+				headers[name] = strings.Join(values, "/,/")
+			} else {
+				for _, value := range values {
+					headers[name] = value
+				}
+			}
+		}
+
+		Response := response{resp.StatusCode, string(bodyBytes), headers}
+
+		reply := myTLSResponse{mytlsrequest.RequestID, Response}
+
+		
+
+		fmt.Println(reply)
+
+        fmt.Println(i)
+	
+	}
 }
 
