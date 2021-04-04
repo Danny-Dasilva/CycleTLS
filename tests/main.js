@@ -38,23 +38,67 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 exports.__esModule = true;
 // const initCycleTLS = require('./src/index');
 var index_js_1 = require("../dist/index.js");
+var performance = require('perf_hooks').performance;
 // Typescript: import initCycleTLS from 'cycletls';
-(function () { return __awaiter(void 0, void 0, void 0, function () {
-    var cycleTLS, response;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0: return [4 /*yield*/, index_js_1["default"]()];
-            case 1:
-                cycleTLS = _a.sent();
-                return [4 /*yield*/, cycleTLS('https://ja3er.com/json', {
+// (async () => {
+//   const cycleTLS = await initCycleTLS();
+//   const response = await cycleTLS('http://localhost:8080', {
+//     body: '',
+//     ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
+//     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36',
+//   });
+//   console.log(response)
+// })();
+function sleep(ms) {
+    return new Promise(function (resolve) { return setTimeout(resolve, ms); });
+}
+function delayedLog(item, cycleTLS) {
+    return __awaiter(this, void 0, void 0, function () {
+        var response;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, cycleTLS('http://localhost:8080', {
                         body: '',
                         ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
                         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36'
                     })];
-            case 2:
-                response = _a.sent();
-                console.log(response);
-                return [2 /*return*/];
-        }
+                case 1:
+                    response = _a.sent();
+                    console.log(item);
+                    return [2 /*return*/];
+            }
+        });
     });
-}); })();
+}
+function processArray(array) {
+    return __awaiter(this, void 0, void 0, function () {
+        var t0, cycleTLS, _i, array_1, item, t1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    t0 = performance.now();
+                    return [4 /*yield*/, index_js_1["default"]()];
+                case 1:
+                    cycleTLS = _a.sent();
+                    _i = 0, array_1 = array;
+                    _a.label = 2;
+                case 2:
+                    if (!(_i < array_1.length)) return [3 /*break*/, 5];
+                    item = array_1[_i];
+                    return [4 /*yield*/, delayedLog(item, cycleTLS)];
+                case 3:
+                    _a.sent();
+                    _a.label = 4;
+                case 4:
+                    _i++;
+                    return [3 /*break*/, 2];
+                case 5:
+                    t1 = performance.now();
+                    console.log("Call to processArray took " + (t1 - t0) + " milliseconds.");
+                    console.log('Done!');
+                    return [2 /*return*/];
+            }
+        });
+    });
+}
+processArray(Array(1000).fill(null).map(function (_, i) { return i; }));
