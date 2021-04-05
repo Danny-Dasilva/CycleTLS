@@ -8,6 +8,7 @@ import (
 	// "strings"
 	"log"
 	// "net/http"
+	"strconv"
 	"time"
 	"net/url"
 	"os"
@@ -30,22 +31,6 @@ type myTLSRequest struct {
 }
 
 
-// ChromeAuto mocks Chrome 78
-var ChromeAuto = Browser{
-	JA3:       "769,47–53–5–10–49161–49162–49171–49172–50–56–19–4,0–10–11,23–24–25,0",
-	UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36",
-}
-
-// SafariAuto mocks Safari 604.1
-var SafariAuto = Browser{
-	JA3:       "771,4865-4866-4867-49196-49195-49188-49187-49162-49161-52393-49200-49199-49192-49191-49172-49171-52392-157-156-61-60-53-47-49160-49170-10,65281-0-23-13-5-18-16-11-51-45-43-10-21,29-23-24-25,0",
-	UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 13_1_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.1 Mobile/15E148 Safari/604.1",
-}
-
-var FirefoxAuto = Browser{
-	JA3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
-	UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:86.0) Gecko/20100101 Firefox/86.0",
-}
 
 
 
@@ -75,8 +60,8 @@ func getWebsocketAddr() string {
 	return u.String()
 }
 
-/////////////////////
-func process(job []byte, i int) {
+// /////////////////////
+func process(job []byte, i int, link chan<- []byte) {
 
 	message := job
 	mytlsrequest := new(myTLSRequest)
@@ -86,11 +71,13 @@ func process(job []byte, i int) {
 	}
 
 
-	s := fmt.Sprintf("%f", mytlsrequest.Options.ID)
+	s := strconv.Itoa(mytlsrequest.Options.ID)
 
 	if  mytlsrequest.Options.ID == 2 {
 		time.Sleep(4 *  time.Second)
 		s = string("yaga")
+	} else {
+		time.Sleep(1 *  time.Second)
 	}
 	Response := response{200, s}
 
@@ -102,23 +89,42 @@ func process(job []byte, i int) {
 		
 	}
 	
-	fmt.Println(data)
-	err = greeting.WriteMessage(websocket.TextMessage, data)
-	if err != nil {
-		log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-		
-	}
+	m[s] = data
+	
+	
+	
 
 	
 	
+}
+func consumer() {
+	fmt.Println("called")
+	for {
+		for key, b := range m {
+		
+		
+		
+			err := greeting.WriteMessage(websocket.TextMessage, b)
+			if err != nil {
+				log.Print("err")		
+			}
+			fmt.Println(key)
+			delete(m,key)
+			
+		}
+
+	}
+	
+
 }
 
 var greeting *websocket.Conn
-func worker(jobChan <-chan  []byte, i int) {
+func worker(jobChan <-chan  []byte, i int, link chan<- []byte) {
 	for job := range jobChan {
-		process(job,i)
+		process(job,i, link)
 	}
 }
+var m = map[string][]byte{}
 
 func main() {
 	flag.Parse()
@@ -136,13 +142,14 @@ func main() {
 	workerCount := 2
 	// make a channel with a capacity of 100.
 	jobChan := make(chan []byte, 100) // Or jobChan := make(chan int)
-
+	// done := make(chan bool)
+	link := make(chan []byte)
 	// start the worker
 	for i:=0; i<workerCount; i++ {
-		go worker(jobChan, i)
+		go worker(jobChan, i, link)
 	}
 	
-	
+	go consumer()
 
 	for {
 		_, message, err := c.ReadMessage()
@@ -152,15 +159,72 @@ func main() {
 		}
 		 
 		if message != nil {
-			
-
 			jobChan <- message
-		
-		
 		}
 		
-
+		
 	
 	}
 }
+
+
+
+
+
+// func main() {
+// 	flag.Parse()
+// 	log.SetFlags(0)
+
+// 	websocketAddress := getWebsocketAddr()
+
+// 	c, _, err := websocket.DefaultDialer.Dial(websocketAddress, nil)
+// 	if err != nil {
+// 		log.Print(err)
+// 		return
+// 	}
+
+// 	for {
+// 		_, message, err := c.ReadMessage()
+// 		if err != nil {
+// 			log.Print(err)
+// 			continue
+// 		}
+
+
+		
+// 		mytlsrequest := new(myTLSRequest)
+// 		e := json.Unmarshal(message, &mytlsrequest)
+// 		if e != nil {
+// 			log.Print(e)
+// 		}
+
+
+// 		s := strconv.Itoa(mytlsrequest.Options.ID)
+
+// 		if  mytlsrequest.Options.ID == 2 {
+// 			time.Sleep(4 *  time.Second)
+// 			s = string("yaga")
+// 		}
+// 		Response := response{200, s}
+
+// 		reply := myTLSResponse{mytlsrequest.RequestID, Response}
+
+// 		data, err := json.Marshal(reply)
+// 		if err != nil {
+// 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			
+// 		}
+		
+// 		fmt.Println(reply)
+// 		err = c.WriteMessage(websocket.TextMessage, data)
+// 		if err != nil {
+// 			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+			
+// 		}
+
+
+	
+// 	}
+// }
+
 
