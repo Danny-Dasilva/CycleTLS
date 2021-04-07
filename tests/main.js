@@ -46,21 +46,13 @@ var index_js_1 = require("../dist/index.js");
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
                 cycleTLS = _a.sent();
-                i = 0;
-                _a.label = 2;
-            case 2:
-                if (!(i < 10)) return [3 /*break*/, 5];
-                return [4 /*yield*/, cycleTLS('http://localhost:8080', {
+                for (i = 0; i < 10; i++) {
+                    response = cycleTLS('http://localhost:8080', {
                         id: i
-                    })];
-            case 3:
-                response = _a.sent();
-                console.log(response);
-                _a.label = 4;
-            case 4:
-                i++;
-                return [3 /*break*/, 2];
-            case 5: return [2 /*return*/];
+                    });
+                    response.then(function (out) { return console.log(out); });
+                }
+                return [2 /*return*/];
         }
     });
 }); })();

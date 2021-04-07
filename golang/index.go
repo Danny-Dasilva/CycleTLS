@@ -75,12 +75,15 @@ func process(job []byte, i int, link chan<- []byte) {
 
 	if  mytlsrequest.Options.ID == 2 {
 		time.Sleep(4 *  time.Second)
-		s = string("yaga")
-	} else {
-		time.Sleep(1 *  time.Second)
+	} else if  mytlsrequest.Options.ID == 6 {
+		time.Sleep(6 *  time.Second)
+	} 	else {
+		time.Sleep(10 *  time.Millisecond)
 	}
-	Response := response{200, s}
 
+
+	Response := response{200, s}
+	fmt.Println(Response)
 	reply := myTLSResponse{mytlsrequest.RequestID, Response}
 
 	data, err := json.Marshal(reply)
@@ -89,36 +92,17 @@ func process(job []byte, i int, link chan<- []byte) {
 		
 	}
 	
-	m[s] = data
+	link <- data
 	
 	
 	
 
 	
 	
-}
-func consumer() {
-	fmt.Println("called")
-	for {
-		for key, b := range m {
-		
-		
-		
-			err := greeting.WriteMessage(websocket.TextMessage, b)
-			if err != nil {
-				log.Print("err")		
-			}
-			fmt.Println(key)
-			delete(m,key)
-			
-		}
-
-	}
-	
-
 }
 
 var greeting *websocket.Conn
+
 func worker(jobChan <-chan  []byte, i int, link chan<- []byte) {
 	for job := range jobChan {
 		process(job,i, link)
@@ -139,7 +123,7 @@ func main() {
 	}
 	greeting = c
 
-	workerCount := 2
+	workerCount := 10
 	// make a channel with a capacity of 100.
 	jobChan := make(chan []byte, 100) // Or jobChan := make(chan int)
 	// done := make(chan bool)
@@ -149,20 +133,52 @@ func main() {
 		go worker(jobChan, i, link)
 	}
 	
-	go consumer()
+	ch := make(chan []byte)
+    go func(ch chan  []byte) {
+        // Uncomment this block to actually read from stdin
+        for {
+            _, message, err := c.ReadMessage()
+            if err != nil { // Maybe log non io.EOF errors, if you want
+                close(ch)
+                return
+            }
+            ch <- message
+        }
+        
+       
+    }(ch)
+
 
 	for {
-		_, message, err := c.ReadMessage()
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		 
-		if message != nil {
-			jobChan <- message
-		}
+
+
+	
+
+
+		select {
+        case stdin, ok := <-ch:
+            if !ok {
+                break 
+            } else {
+				jobChan <- stdin
+            }
+        default:
+            // Do something when there is nothing read from stdin
+        }
+	
 		
 		
+		select {
+        case message := <-link:
+			err = c.WriteMessage(websocket.TextMessage, message)
+			if err != nil {
+				log.Print("Request_Id_On_The_Left" )
+				
+			}
+        default:
+
+        }
+
 	
 	}
 }

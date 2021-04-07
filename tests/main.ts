@@ -5,10 +5,10 @@ import initCycleTLS from '../dist/index.js'
 (async () => {
   const cycleTLS = await initCycleTLS();
   for (let i = 0; i < 10; i++) {
-    const response = await cycleTLS('http://localhost:8080', {
+    const response = cycleTLS('http://localhost:8080', {
       id: i,
     });
-    console.log(response)
+    response.then((out) => console.log(out))
 
   }
  
