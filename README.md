@@ -4,7 +4,9 @@ Currently in Active development
 
 todo: 
 - [X] fix TS api 
-- [ ] redo-socket request api in go
+- [X] redo-socket request api in go(now fully async
+- [ ] cleanup async code
+- [ ] test requests
 - [ ] bugfixes for error (wrong https proxy, incorrect JA3 and so on)
 - [ ] state checks for golang
 - [ ] concurrency and speedtests
