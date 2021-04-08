@@ -1,11 +1,15 @@
 
 // const initCycleTLS = require('./src/index');
 import initCycleTLS from '../dist/index.js'
+const { performance } = require('perf_hooks');
 // Typescript: import initCycleTLS from 'cycletls';
 
 (async () => {
   const cycleTLS = await initCycleTLS();
-  for (let i = 0; i < 10; i++) {
+  var t0 = performance.now()
+
+  const before = Date.now();
+  for (let i = 0; i < 10000; i++) {
     const response = cycleTLS('http://localhost:8080', {
       body: '',
       ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
@@ -13,11 +17,12 @@ import initCycleTLS from '../dist/index.js'
 
     });
 
-    response.then((out) => console.log(out))
-
+    response.then((out) => {
+      console.log(out)
+      var t1 = performance.now()
+      console.log("Call to doSomething took " + (t1 - t0) + " milliseconds.")
+    })
     
-
   }
-  console.log("done")
  
 })();
