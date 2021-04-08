@@ -15,6 +15,9 @@ import initCycleTLS from '../dist/index.js'
 
     response.then((out) => console.log(out))
 
+    
+
   }
+  console.log("done")
  
 })();

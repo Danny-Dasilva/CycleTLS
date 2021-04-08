@@ -65,8 +65,10 @@ class Golang extends EventEmitter {
 
     this.server.on('connection', (ws) => {
       this.emit('ready');
+      
 
       ws.on('message', (data: string) => {
+        
         const message = JSON.parse(data);
         this.emit(message.RequestID, message.Response);
       });

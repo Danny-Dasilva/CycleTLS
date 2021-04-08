@@ -54,6 +54,7 @@ var index_js_1 = require("../dist/index.js");
                     });
                     response.then(function (out) { return console.log(out); });
                 }
+                console.log("done");
                 return [2 /*return*/];
         }
     });

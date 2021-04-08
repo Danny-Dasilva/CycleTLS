@@ -41,6 +41,7 @@ type myTLSRequest struct {
 type Result struct {
     req *http.Request
     client http.Client
+	mytlsrequest myTLSRequest
 }
 
 type response struct {
@@ -125,6 +126,7 @@ func dispatcher(reqChan chan Result, socket *websocket.Conn) {
 		res := new(Result)
         res.client = client
         res.req = req
+		res.mytlsrequest = *mytlsrequest
         reqChan <- *res
     }
 }
@@ -172,7 +174,7 @@ func worker(reqChan chan Result, respChan chan []byte) {
 
 		Response := response{resp.StatusCode, string(bodyBytes)}
 		//mytls request id
-		reply := myTLSResponse{"i", Response}
+		reply := myTLSResponse{res.mytlsrequest.RequestID, Response}
 
 		data, err := json.Marshal(reply)
 		if err != nil {
