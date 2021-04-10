@@ -122,7 +122,7 @@ func dispatcher(reqChan chan Result, socket *websocket.Conn) {
 			}
 		}
 		
-		fmt.Println(mytlsrequest)
+
 		res := new(Result)
         res.client = client
         res.req = req
@@ -268,7 +268,6 @@ func main() {
 		res := new(Result)
         res.client = client
         res.req = req
-		res.mytlsrequest = *mytlsrequest
         ch <- *res
     }
 	}(ch)

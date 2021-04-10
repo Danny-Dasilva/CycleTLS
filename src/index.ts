@@ -3,23 +3,17 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import { Server } from 'ws';
 export interface CycleTLSRequestOptions {
-  headers?: {
-    [key: string]: any;
-  };
   body?: string;
   ja3?: string;
   userAgent?: string;
+  id?: number;
   proxy?: string;
 }
 
 export interface CycleTLSResponse {
   status: number;
   body: string;
-  headers: {
-    [key: string]: any;
-  };
 }
-
 let child: ChildProcessWithoutNullStreams;
 
 const cleanExit = (message?: string | Error) => {
@@ -71,8 +65,10 @@ class Golang extends EventEmitter {
 
     this.server.on('connection', (ws) => {
       this.emit('ready');
+      
 
       ws.on('message', (data: string) => {
+        
         const message = JSON.parse(data);
         this.emit(message.RequestID, message.Response);
       });
@@ -154,12 +150,11 @@ const initCycleTLS = async (
 
               const { Status: status, Body: body, Headers: headers } = response;
 
-              if (headers['Set-Cookie']) headers['Set-Cookie'] = headers['Set-Cookie'].split('/,/');
+              // if (headers['Set-Cookie']) headers['Set-Cookie'] = headers['Set-Cookie'].split('/,/');
 
               resolveRequest({
                 status,
                 body,
-                headers,
               });
             });
           });
