@@ -4,15 +4,16 @@ Currently in Active development
 
 todo: 
 - [X] fix TS api 
-- [X] redo-socket request api in go(now fully async
-- [ ] cleanup async code
-- [ ] test requests
-- [ ] bugfixes for error (wrong https proxy, incorrect JA3 and so on)
-- [ ] state checks for golang
+- [X] redo-socket request api in go(now fully async)
+- [X] test requests 
+- [ ] cleanup async code // close port 
+- [ ] test all error checks(wrong https proxy, incorrect JA3 and so on)
+- [ ] write test files for golang
 - [ ] concurrency and speedtests
+- [ ] release for npm
+- [ ] Add support for cookies
 
-
-### Setup
+### Dev Setup
 
 `npm install --dev`
 

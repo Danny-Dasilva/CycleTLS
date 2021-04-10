@@ -161,8 +161,9 @@ func worker(reqChan chan Result, respChan chan []byte) {
 		}
 
 		headers := make(map[string]string)
-
+		fmt.Println(resp.Header)
 		for name, values := range resp.Header {
+			// fmt.Println(name, values)
 			if name == "Set-Cookie" {
 				headers[name] = strings.Join(values, "/,/")
 			} else {

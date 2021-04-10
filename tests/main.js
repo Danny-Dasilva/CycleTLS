@@ -40,26 +40,65 @@ exports.__esModule = true;
 var index_js_1 = require("../dist/index.js");
 var performance = require('perf_hooks').performance;
 // Typescript: import initCycleTLS from 'cycletls';
+var ja3 = '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0';
+var userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36';
+var myDictionary = {
+    'https://httpbin.org/user-agent': {
+        'ja3': ja3,
+        'userAgent': userAgent
+    },
+    'http://httpbin.org/post': {
+        'body': '{"field":"POST-VAL"}',
+        'method': 'POST'
+    },
+    'http://httpbin.org/put': {
+        'body': '{"field":"PUT-VAL"}',
+        'method': 'PUT'
+    },
+    'http://httpbin.org/patch': {
+        'body': '{"field":"PATCH-VAL"}',
+        'method': 'PATCH'
+    },
+    'http://httpbin.org/delete': {
+        'body': '{"field":"DELETE-VAL"}',
+        'method': 'Delete'
+    },
+    'http://httpbin.org/headers': {
+        'headers': { "Authorization": "Bearer someexampletoken" }
+    },
+    // 'http://httpbin.org/cookies/set?name1=value1&name2=value2' : {
+    // },
+    'https://httpbin.org/ip': {},
+    'https://httpbin.org/response-headers?ExampleResponseHeader=HeaderisPickedUpByServer': {},
+    'https://httpbin.org/html': {},
+    'https://httpbin.org/delay/3': {} //this request will wait 3 s before returning so it should always show up last in the console.log
+};
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var cycleTLS, t0, before, i, response;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var cycleTLS, _loop_1, key;
+    var _a, _b, _c, _d;
+    return __generator(this, function (_e) {
+        switch (_e.label) {
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
-                cycleTLS = _a.sent();
-                t0 = performance.now();
-                before = Date.now();
-                for (i = 0; i < 10000; i++) {
-                    response = cycleTLS('http://localhost:8080', {
-                        body: '',
-                        ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
-                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36'
-                    });
+                cycleTLS = _e.sent();
+                _loop_1 = function (key) {
+                    var value = myDictionary[key];
+                    var body = (_a = value.body) !== null && _a !== void 0 ? _a : '';
+                    var method = (_b = value.method) !== null && _b !== void 0 ? _b : 'GET';
+                    var ja3Token = (_c = value.ja3) !== null && _c !== void 0 ? _c : ja3;
+                    var Agent = (_d = value.userAgent) !== null && _d !== void 0 ? _d : userAgent;
+                    var response = cycleTLS(key, {
+                        body: body,
+                        ja3: ja3Token,
+                        userAgent: Agent,
+                        headers: value.headers
+                    }, method);
                     response.then(function (out) {
-                        console.log(out);
-                        var t1 = performance.now();
-                        console.log("Call to doSomething took " + (t1 - t0) + " milliseconds.");
+                        console.log(key, out);
                     });
+                };
+                for (key in myDictionary) {
+                    _loop_1(key);
                 }
                 return [2 /*return*/];
         }
