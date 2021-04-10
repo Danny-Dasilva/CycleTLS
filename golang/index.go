@@ -47,7 +47,7 @@ type Result struct {
 type response struct {
 	Status  int
 	Body    string
-	// Headers map[string]string
+	Headers map[string]string
 }
 
 type myTLSResponse struct {
@@ -172,7 +172,7 @@ func worker(reqChan chan Result, respChan chan []byte) {
 			}
 		}
 
-		Response := response{resp.StatusCode, string(bodyBytes)}
+		Response := response{resp.StatusCode, string(bodyBytes), headers}
 		//mytls request id
 		reply := myTLSResponse{res.mytlsrequest.RequestID, Response}
 
