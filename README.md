@@ -6,7 +6,7 @@ todo:
 - [X] fix TS api 
 - [X] redo-socket request api in go(now fully async)
 - [X] test requests 
-- [ ] cleanup async code // close port 
+- [ ] cleanup async code // close port and exit once process is finished
 - [ ] test all error checks(wrong https proxy, incorrect JA3 and so on)
 - [ ] write test files for golang
 - [ ] concurrency and speedtests
