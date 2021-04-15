@@ -1,10 +1,10 @@
-module github.com/Danny-Dasilva/CycleTLS
+module index.go
 
-go 1.16
+go 1.14
 
 require (
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/refraction-networking/utls v0.0.0-20200806014556-219d12d0a4a1
-	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de // indirect
-	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
+	github.com/refraction-networking/utls v0.0.0-20201210053706-2179f286686b // indirect
+	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2 // indirect
+	golang.org/x/net v0.0.0-20210410081132-afb366fc7cd1 // indirect
 )
