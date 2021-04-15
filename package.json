@@ -1,7 +1,7 @@
 {
   "name": "cycletls",
-  "version": "1.0.5",
-  "description": "Mimic TLS/JA3 fingerprint in JS with help from Go",
+  "version": "0.0.1",
+  "description": "Spoof TLS/JA3 fingerprint in JS with help from Go",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": "Danny-Dasilva",
