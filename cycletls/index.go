@@ -1,4 +1,4 @@
-package main
+package cycletls
 
 import (
 	"encoding/json"
