@@ -3,15 +3,17 @@ package cycletls
 import (
 	"encoding/json"
 	"flag"
+
 	"io/ioutil"
-	"runtime"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 
@@ -167,6 +169,13 @@ func Init(workers ...bool) *cycleTLS {
     
 }
 
+
+func (client cycleTLS) Close() {
+	close(client.ReqChan)
+	close(client.RespChan)
+
+}
+
 // Worker Pool
 func workerPool(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
 	//MAX
@@ -201,8 +210,7 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 		}
 
 		reply := processRequest(*request)
-	   
-		
+
 		reqChan <- reply
 	}
 }
@@ -224,8 +232,13 @@ func writeSocket(respChan chan cycleTLSResponse, c *websocket.Conn) {
 				log.Print("Socket WriteMessage Failed" + err.Error())
 				continue
 			}
+			
         default:
         }
+
+		// if respChan == nil {
+		// 	break
+		// }
 	}
 }
 

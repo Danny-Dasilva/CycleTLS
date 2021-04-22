@@ -1,15 +1,7 @@
 # CycleTLS
 
-Currently in Active development 
+Currently in Active development see Projects Tab
 
-todo: 
-- [ ] cleanup async code // close port and exit once process is finished
-- [ ] Add git actions
-- [ ] Review all error checks(wrong https proxy, incorrect JA3 and so on)
-- [ ] write test files for golang
-- [ ] concurrency and speedtests
-- [ ] release for npm
-- [ ] Add support for cookies
 
 ### Dev Setup
 
@@ -39,8 +31,7 @@ see run.sh script for local testing
 
 ```ts
 
-// const initCycleTLS = require('./src/index');
-import initCycleTLS from '../dist/index.js'
+import initCycleTLS from 'cycletls'
 // Typescript: import initCycleTLS from 'cycletls';
 
 (async () => {
@@ -71,7 +62,7 @@ package main
 
 import (
 	"log"
-	"./cycletls"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func main() {
