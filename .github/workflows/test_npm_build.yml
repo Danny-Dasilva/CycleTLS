@@ -21,6 +21,6 @@ jobs:
             registry-url: 'https://registry.npmjs.org'
         - name: 🚀 publish
           run: npm publish --dry-run
-          working-directory: ./my-package
+          working-directory: ./
           env:
               NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}

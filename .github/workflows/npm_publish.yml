@@ -20,10 +20,10 @@ jobs:
             registry-url: 'https://registry.npmjs.org'
         - name: Bump Version
           run: npm version patch
-          working-directory: ./my-package
+          working-directory: ./
 
         - name: 🚀 Publish
           run: npm publish
-          working-directory: ./my-package
+          working-directory: ./
           env:
               NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
