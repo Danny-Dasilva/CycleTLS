@@ -41,16 +41,16 @@ var index_js_1 = require("../dist/index.js");
 var performance = require('perf_hooks').performance;
 // Typescript: import initCycleTLS from 'cycletls';
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var cycleTLS, t0, i, before, _loop_1, out_i_1, i_1;
+    var cycleTLS, i, before, _loop_1, t0, out_i_1, i_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
                 cycleTLS = _a.sent();
-                t0 = performance.now();
                 i = 0;
                 before = Date.now();
                 _loop_1 = function (i_1) {
+                    t0 = performance.now();
                     var response = cycleTLS('http://localhost:8081', {
                         body: '',
                         ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
@@ -63,7 +63,7 @@ var performance = require('perf_hooks').performance;
                     });
                     out_i_1 = i_1;
                 };
-                for (i_1 = 0; i_1 < 10000; i_1++) {
+                for (i_1 = 0; i_1 < 100000; i_1++) {
                     _loop_1(i_1);
                     i_1 = out_i_1;
                 }
