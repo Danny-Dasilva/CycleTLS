@@ -1,4 +1,4 @@
-name: "🚀 Publish"
+name: "🚀 Npm Publish"
 
 on:
     push:

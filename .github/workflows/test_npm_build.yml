@@ -19,8 +19,9 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
+        - name: Add type definitions
+          run: npm i --save-dev @types/node
+          working-directory: ./
         - name: 🚀 publish
           run: npm publish --dry-run
           working-directory: ./
-          env:
-              NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
