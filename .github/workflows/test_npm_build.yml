@@ -1,4 +1,4 @@
-name: "🚨 test publish"
+name: "🚨 npm test publish"
 
 on:
     push:

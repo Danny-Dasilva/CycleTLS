@@ -39,6 +39,7 @@ func main() {
 		select {
 		case elem := <-client.RespChan:
 			_ = elem
+			fmt.Println(elem)
 			conns++
 		}
     }

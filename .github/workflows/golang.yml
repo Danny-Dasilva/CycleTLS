@@ -1,4 +1,4 @@
-name: 🚨Go Publish
+name: 🚀 Go Publish
 
 on: [push, pull_request]
 
@@ -14,7 +14,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.16x
+        go-version: 1.14x
 
     - name: Build
       working-directory: ./cycletls
