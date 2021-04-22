@@ -1,4 +1,4 @@
-name: "🚨 npm test publish"
+name: "🚨 Npm Test publish"
 
 on:
     push:
@@ -20,7 +20,7 @@ jobs:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
         - name: 🚀 publish
-          run: npm publish
+          run: npm publish --dry-run
           working-directory: ./my-package
           env:
               NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
