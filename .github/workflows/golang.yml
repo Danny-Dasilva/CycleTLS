@@ -1,19 +1,12 @@
-name: 🚨Go Benchmarks
+name: 🚨Go Publish
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
 
   test:
-    strategy:
-      matrix:
-        go-version: [1.15x, 1.16x]
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
+ 
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
@@ -21,7 +14,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: 1.16x
 
     - name: Build
       working-directory: ./cycletls

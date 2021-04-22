@@ -1,9 +1,10 @@
-name: "🚀 publish"
+name: "🚨 test publish"
 
 on:
     push:
       branches: [ main ]
-
+    pull_request:
+      branches: [ main ]
 jobs:
     release:
         name: 🚀 publish
@@ -18,11 +19,7 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
-        - name: Bump Version
-          run: npm version patch
-          working-directory: ./my-package
-
-        - name: 🚀 Publish
+        - name: 🚀 publish
           run: npm publish
           working-directory: ./my-package
           env:
