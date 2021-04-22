@@ -17,7 +17,7 @@ see run.sh script for local testing
 
 ```ts
 
-import initCycleTLS from 'cycletls'
+const initCycleTLS = require('cycletls');
 // Typescript: import initCycleTLS from 'cycletls';
 
 (async () => {

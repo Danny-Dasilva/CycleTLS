@@ -183,6 +183,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 ///////////////////////// test code
 // stringToSpec creates a ClientHelloSpec based on a JA3 string
 func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
+	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
 	version := tokens[0]
@@ -256,48 +257,51 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 }
 
 
-
-var extMap = map[string]utls.TLSExtension{
-	"0": &utls.SNIExtension{},
-	"5": &utls.StatusRequestExtension{},
-	// These are applied later
-	// "10": &tls.SupportedCurvesExtension{...}
-	// "11": &tls.SupportedPointsExtension{...}
-	"13": &utls.SignatureAlgorithmsExtension{
-		SupportedSignatureAlgorithms: []utls.SignatureScheme{
-			utls.ECDSAWithP256AndSHA256,
-			utls.PSSWithSHA256,
-			utls.PKCS1WithSHA256,
-			utls.ECDSAWithP384AndSHA384,
-			utls.PSSWithSHA384,
-			utls.PKCS1WithSHA384,
-			utls.PSSWithSHA512,
-			utls.PKCS1WithSHA512,
-			utls.PKCS1WithSHA1,
+func genMap() (extMap map[string]utls.TLSExtension) {
+	extMap = map[string]utls.TLSExtension{
+		"0": &utls.SNIExtension{},
+		"5": &utls.StatusRequestExtension{},
+		// These are applied later
+		// "10": &tls.SupportedCurvesExtension{...}
+		// "11": &tls.SupportedPointsExtension{...}
+		"13": &utls.SignatureAlgorithmsExtension{
+			SupportedSignatureAlgorithms: []utls.SignatureScheme{
+				utls.ECDSAWithP256AndSHA256,
+				utls.PSSWithSHA256,
+				utls.PKCS1WithSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.PSSWithSHA384,
+				utls.PKCS1WithSHA384,
+				utls.PSSWithSHA512,
+				utls.PKCS1WithSHA512,
+				utls.PKCS1WithSHA1,
+			},
 		},
-	},
-	"16": &utls.ALPNExtension{
-		AlpnProtocols: []string{"h2", "http/1.1"},
-	},
-	"18": &utls.SCTExtension{},
-	"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
-	"23": &utls.UtlsExtendedMasterSecretExtension{},
-	"27": &utls.FakeCertCompressionAlgsExtension{},
-	"28": &utls.FakeRecordSizeLimitExtension{},
-	"35": &utls.SessionTicketExtension{},
-	"43": &utls.SupportedVersionsExtension{[]uint16{
-		utls.GREASE_PLACEHOLDER,
-		utls.VersionTLS13,
-		utls.VersionTLS12,
-		utls.VersionTLS11,
-		utls.VersionTLS10}},
-	"44": &utls.CookieExtension{},
-	"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
-		utls.PskModeDHE,
-	}},
-	"51":    &utls.KeyShareExtension{[]utls.KeyShare{}},
-	"13172": &utls.NPNExtension{},
-	"65281": &utls.RenegotiationInfoExtension{
-		Renegotiation: utls.RenegotiateOnceAsClient,
-	},
+		"16": &utls.ALPNExtension{
+			AlpnProtocols: []string{"h2", "http/1.1"},
+		},
+		"18": &utls.SCTExtension{},
+		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
+		"23": &utls.UtlsExtendedMasterSecretExtension{},
+		"27": &utls.FakeCertCompressionAlgsExtension{},
+		"28": &utls.FakeRecordSizeLimitExtension{},
+		"35": &utls.SessionTicketExtension{},
+		"43": &utls.SupportedVersionsExtension{[]uint16{
+			utls.GREASE_PLACEHOLDER,
+			utls.VersionTLS13,
+			utls.VersionTLS12,
+			utls.VersionTLS11,
+			utls.VersionTLS10}},
+		"44": &utls.CookieExtension{},
+		"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
+			utls.PskModeDHE,
+		}},
+		"51":    &utls.KeyShareExtension{[]utls.KeyShare{}},
+		"13172": &utls.NPNExtension{},
+		"65281": &utls.RenegotiationInfoExtension{
+			Renegotiation: utls.RenegotiateOnceAsClient,
+		},
+	}
+	return	
+
 }
