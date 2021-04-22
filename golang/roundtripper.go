@@ -20,7 +20,8 @@ import (
 var errProtocolNegotiated = errors.New("protocol negotiated")
 type ErrExtensionNotExist string
 func (e ErrExtensionNotExist) Error() string {
-	return fmt.Sprintf("Extension does not exist: %s\n", e)
+	fmt.Println("errr", e)
+	// return fmt.Sprintf("Extension does not exist: %s\n", e)
 }
 
 type roundTripper struct {
