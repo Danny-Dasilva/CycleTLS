@@ -24,9 +24,9 @@ type Options struct {
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
 	Ja3     string            `json:"ja3"`
-	UserAgent     string       `json:"userAgent"`
+	UserAgent     string      `json:"userAgent"`
 	Proxy   string            `json:"proxy"`  
-	           
+	Cookies []http.Cookie     `json:"cookies"`  
 }
 
 
@@ -57,7 +57,6 @@ type cycleTLS struct {
 	ReqChan chan fullRequest
     RespChan chan cycleTLSResponse
 }
-
 func getWebsocketAddr() string {
 	port, exists := os.LookupEnv("WS_PORT")
 
@@ -78,8 +77,9 @@ func getWebsocketAddr() string {
 func processRequest(request cycleTLSRequest) (result fullRequest) {
    
 	var browser = Browser{
-		JA3:       request.Options.Ja3,
+		JA3:        request.Options.Ja3,
 		UserAgent:  request.Options.UserAgent,
+		Cookies:    request.Options.Cookies,
 	}
 	
 	client, err := NewClient(browser, request.Options.Proxy)
