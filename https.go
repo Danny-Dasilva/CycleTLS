@@ -8,18 +8,12 @@ import (
 	"encoding/json"
 	"time"
 	"net/http"
-	"errors"
 	"strconv"
 	"strings"
 
 	
 )  
-//declaring a struct
-type Address struct {
-    Name    string
-    city    string
-    Pincode int
-}
+
 // A Cookie represents an HTTP cookie as sent in the Set-Cookie header of an
 // HTTP response or the Cookie header of an HTTP request.
 //
@@ -46,156 +40,17 @@ type Cookie struct {
 	Time Time `json:"time"`
 }
 
-// var Cookies = []Cookie 
-// { 
-//     Cookie {
-//         shortnm: 'a', 
-//         longnm: "multiple", 
-//         needArg: false, 
-//         help: "Usage for a",
-//     },
-//     Cookie {
-//         shortnm: 'b', 
-//         longnm: "b-option", 
-//         needArg: false, 
-//         help: "Usage for b",
-//     },
-// }
-  
-// Contains everything about an appointment
 
-// {
-// 	"Name": "Standard",
-// 	"value": 999,
-// 	"Domain": [
-// 		"Apple",
-// 		"Banana",
-// 		"Orange"
-// 	],
-	
-// 	"UserID": "2018-04-09T23:00:00Z"
-// }`)
-
-
-
-
-
-func test(t []Cookie)  (r []Cookie){
-	t = r 
-	return
-}
 type Options struct {
 	Cookies []Cookie 
 	name string
 
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Format enum type.
-type Format int32
-
-// Format enum values.
-const (
-	Timestamp Format = iota
-	TimestampNano
-	ANSIC
-	UnixDate
-	RubyDate
-	RFC822
-	RFC822Z
-	RFC850
-	RFC1123
-	RFC1123Z
-	RFC3339
-	RFC3339Nano
-	Kitchen
-)
-
-// Common errors.
-var (
-	ErrInvalidFormat = errors.New("invalid format")
-)
-
 // Time wraps time.Time overriddin the json marshal/unmarshal to pass
 // timestamp as integer
 type Time struct {
-	time.Time `bson:",inline"`
-	format    Format
-}
-
-func (t Time) formatTime(mode int) ([]byte, error) {
-	var ret string
-
-	switch t.format {
-	case ANSIC:
-		ret = t.Time.Format(time.ANSIC)
-	case UnixDate:
-		ret = t.Time.Format(time.UnixDate)
-	case RubyDate:
-		ret = t.Time.Format(time.RubyDate)
-	case RFC822:
-		ret = t.Time.Format(time.RFC822)
-	case RFC822Z:
-		ret = t.Time.Format(time.RFC822Z)
-	case RFC850:
-		ret = t.Time.Format(time.RFC850)
-	case RFC1123:
-		ret = t.Time.Format(time.RFC1123)
-	case RFC1123Z:
-		ret = t.Time.Format(time.RFC1123Z)
-	case RFC3339:
-		ret = t.Time.Format(time.RFC3339)
-	case RFC3339Nano:
-		ret = t.Time.Format(time.RFC3339Nano)
-	case Kitchen:
-		ret = t.Time.Format(time.Kitchen)
-	case Timestamp:
-		return []byte(strconv.FormatInt(t.Time.Unix(), 10)), nil
-	case TimestampNano:
-		return []byte(strconv.FormatInt(t.Time.UnixNano(), 10)), nil
-	default:
-		return nil, ErrInvalidFormat
-	}
-	switch mode {
-	default:
-		fallthrough
-	case 0: // json
-		return []byte(`"` + ret + `"`), nil
-	case 1: // bson
-		return []byte(ret), nil
-	}
-}
-
-// MarshalJSON implements json.Marshaler interface.
-func (t Time) MarshalJSON() ([]byte, error) {
-	if t.Time.IsZero() {
-		return []byte("null"), nil
-	}
-	return t.formatTime(0)
+	time.Time
 }
 
 // UnmarshalJSON implements json.Unmarshaler inferface.
@@ -239,50 +94,6 @@ func ParseDateString(dt string) (time.Time, error) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-type data struct {
-	Time Time `json:"time"`
-}
-
 func main() {
     
 
@@ -296,12 +107,12 @@ func main() {
 
 	var basenameOpts = []Cookie{ 
 		Cookie {
-			Name: "a", 
-			Value: "multiple", 
+			Name: "test1", 
+			Value: "arr", 
 			Expires: time.Now(),
 		},
 		Cookie {
-			Name: "yaaah", 
+			Name: "test2", 
 			Value: "b-option", 
 			Expires: time.Now(),
 		},
@@ -309,13 +120,24 @@ func main() {
 
 
 
-	var d data
+	var d Time
 	jStr := `{"time":"Mon, 02-Jan-2006 15:04:05 MST"}`
 	_ = json.Unmarshal([]byte(jStr), &d)
 
 	fmt.Println(d.Time)
 	
-	fmt.Println(Options{Cookies: basenameOpts, name: "test"})
+	fmt.Println(Options{Cookies: []Cookie{ 
+		Cookie {
+			Name: "test1", 
+			Value: "arr", 
+			Expires: time.Now(),
+		},
+		Cookie {
+			Name: "test2", 
+			Value: "b-option", 
+			Expires: time.Now(),
+		},
+	},})
 	var appointment []Cookie
 	err := json.Unmarshal(jsonData, &appointment)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 type Browser struct {
 	JA3       string
 	UserAgent string
+	Cookies   []Cookie
 }
 
 
