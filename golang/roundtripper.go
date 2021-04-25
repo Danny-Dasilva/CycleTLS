@@ -1,4 +1,4 @@
-package cycletls
+package main
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"strconv"
