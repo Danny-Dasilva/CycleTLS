@@ -29,7 +29,7 @@ type roundTripper struct {
 	JA3 			  string
 	UserAgent 		  string
 	
-	Cookies			  []http.Cookie
+	Cookies			  []Cookie
 	cachedConnections map[string]net.Conn
 	cachedTransports  map[string]http.RoundTripper
 
@@ -37,8 +37,6 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Fix there may be a better place to put this header
-	req.AddCookie(&http.Cookie{Name: "ds_user_id", Value: "my_id"})
 	// This is dumb but whatever
 	for _, properties := range rt.Cookies {
 		req.AddCookie(&http.Cookie{	Name: 		properties.Name, 
