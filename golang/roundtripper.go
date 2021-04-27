@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
-	"crypto/sha256"
+
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
-	"strconv"
 
 	utls "github.com/refraction-networking/utls"
 )
@@ -72,7 +73,7 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 	default:
 		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
 	}
-
+	
 	_, err := rt.dialTLS(context.Background(), "tcp", addr)
 	switch err {
 	case errProtocolNegotiated:
@@ -96,7 +97,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		delete(rt.cachedConnections, addr)
 		return conn, nil
 	}
-
 	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
@@ -106,6 +106,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if host, _, err = net.SplitHostPort(addr); err != nil {
 		host = addr
 	}
+	
 
 	// conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, rt.clientHelloId)
 	// if err = conn.Handshake(); err != nil {
@@ -127,12 +128,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err
 	}
-
-	if err = conn.Handshake(); err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-
 
 	//////////
 	if rt.cachedTransports[addr] != nil {
