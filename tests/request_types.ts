@@ -29,8 +29,19 @@ var myDictionary = {
   'http://httpbin.org/headers' : {         //returns headers in body
       'headers' : {"Authorization": "Bearer someexampletoken",}
   },
-  // 'http://httpbin.org/cookies/set?name1=value1&name2=value2' : {
-  // },
+  'http://httpbin.org/cookies' : {
+    'cookies': [
+      {
+        "name": "example1",
+        "value": "aaaaaaa",
+        "expires" : "Mon, 02-Jan-2022 15:04:05 EST"
+      },
+      {
+        "name": "example2",
+        "value": "bbbbbbbbb",
+        "expires" : "Tue, 06-Jan-2022 2:03:05 EST"
+      }]
+  },
   'http://httpbin.org/ip' : {}, //log ip 
   'http://httpbin.org/response-headers?ExampleResponseHeader=HeaderisPickedUpByServer' : {}, //log response headers
   'http://httpbin.org/html' : {}, //log html
@@ -49,12 +60,13 @@ var myDictionary = {
     let method = value.method ?? 'GET'
     let ja3Token = value.ja3 ?? ja3
     let Agent = value.userAgent ?? userAgent
-
+    let cookies = value.cookies
     const response = cycleTLS(key, {
       body: body,
       ja3: ja3Token,
       userAgent: Agent,
-      headers: value.headers
+      headers: value.headers,
+      cookies: cookies
     }, method);
 
     response.then((out) => {
