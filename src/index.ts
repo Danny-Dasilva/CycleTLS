@@ -6,6 +6,9 @@ export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
   };
+  cookies?: {
+    [key: string]: any;
+  };
   body?: string;
   ja3?: string;
   userAgent?: string;

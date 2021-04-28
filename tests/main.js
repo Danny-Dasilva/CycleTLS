@@ -41,21 +41,48 @@ var index_js_1 = require("../dist/index.js");
 var performance = require('perf_hooks').performance;
 // Typescript: import initCycleTLS from 'cycletls';
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var cycleTLS, response;
+    var cycleTLS, i, before, _loop_1, t0, out_i_1, i_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4 /*yield*/, index_js_1["default"]()];
             case 1:
                 cycleTLS = _a.sent();
-                response = cycleTLS('http://ja3er.com/json', {
-                    body: '',
-                    ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
-                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36',
-                    proxy: 'https://username:password@hostname.com:443'
-                });
-                response.then(function (out) {
-                    console.log(out);
-                });
+                i = 0;
+                before = Date.now();
+                _loop_1 = function (i_1) {
+                    t0 = performance.now();
+                    var response = cycleTLS('http://httpbin.org/cookies', {
+                        body: '',
+                        ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0',
+                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36',
+                        headers: {
+                            "Set-Cookie": "session-id=135-6549310-1711221; Domain=.amazon.com; Expires=Thu, 28-Apr-2022 07:06:43 GMT; Path=/; Secure"
+                        },
+                        cookies: [
+                            {
+                                "name": "example1",
+                                "value": "aaaaaaa",
+                                "expires": "Mon, 02-Jan-2022 15:04:05 EST"
+                            },
+                            {
+                                "name": "example2",
+                                "value": "bbbbbbbbb",
+                                "expires": "Tue, 06-Jan-2022 2:03:05 EST"
+                            }
+                        ]
+                    });
+                    response.then(function (out) {
+                        console.log(out);
+                        i_1++;
+                        var t1 = performance.now();
+                        console.log("Call to doSomething took " + (t1 - t0) + " milliseconds.", i_1);
+                    });
+                    out_i_1 = i_1;
+                };
+                for (i_1 = 0; i_1 < 1; i_1++) {
+                    _loop_1(i_1);
+                    i_1 = out_i_1;
+                }
                 return [2 /*return*/];
         }
     });

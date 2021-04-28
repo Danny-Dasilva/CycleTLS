@@ -19,7 +19,9 @@ import (
 )
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
+
 type ErrExtensionNotExist string
+
 func (e ErrExtensionNotExist) Error() string {
 	return fmt.Sprintf("Extension does not exist: %s\n", e)
 }
@@ -27,9 +29,10 @@ func (e ErrExtensionNotExist) Error() string {
 type roundTripper struct {
 	sync.Mutex
 	// fix typing
-	JA3 			  string
-	UserAgent 		  string
+	JA3       string
+	UserAgent string
 
+	Cookies           []Cookie
 	cachedConnections map[string]net.Conn
 	cachedTransports  map[string]http.RoundTripper
 
@@ -37,8 +40,23 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Fix there may be a better place to put this header
-	
+	// This is dumb but whatever
+	for _, properties := range rt.Cookies {
+		req.AddCookie(&http.Cookie{Name: properties.Name,
+			Value:      properties.Value,
+			Path:       properties.Path,
+			Domain:     properties.Domain,
+			Expires:    properties.JsonExpires.Time, //TODO: scuffed af
+			RawExpires: properties.RawExpires,
+			MaxAge:     properties.MaxAge,
+			HttpOnly:   properties.HttpOnly,
+			Secure:     properties.Secure,
+			SameSite:   properties.SameSite,
+			Raw:        properties.Raw,
+			Unparsed:   properties.Unparsed,
+		})
+		fmt.Println(properties.Raw)
+	}
 	req.Header.Set("User-Agent", rt.UserAgent)
 	addr := rt.getDialTLSAddr(req)
 	if _, ok := rt.cachedTransports[addr]; !ok {
@@ -58,7 +76,7 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 	default:
 		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
 	}
-	
+
 	_, err := rt.dialTLS(context.Background(), "tcp", addr)
 	switch err {
 	case errProtocolNegotiated:
@@ -91,7 +109,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if host, _, err = net.SplitHostPort(addr); err != nil {
 		host = addr
 	}
-	
 
 	// conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, rt.clientHelloId)
 	// if err = conn.Handshake(); err != nil {
@@ -106,10 +123,9 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, 
-		// MinVersion:         tls.VersionTLS10,
+	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS12, // Default is TLS13
-		}, utls.HelloCustom)
+		utls.HelloCustom)
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err
 	}
@@ -128,7 +144,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	default:
 		// Assume the remote peer is speaking HTTP 1.x + TLS.
 		rt.cachedTransports[addr] = &http.Transport{DialTLSContext: rt.dialTLS}
-		
+
 	}
 
 	// Stash the connection just established for use servicing the
@@ -152,13 +168,13 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 
 func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
 	if len(dialer) > 0 {
-	
+
 		return &roundTripper{
 			dialer: dialer[0],
 
-			JA3: browser.JA3,
-			UserAgent: browser.UserAgent,
-
+			JA3:               browser.JA3,
+			UserAgent:         browser.UserAgent,
+			Cookies:           browser.Cookies,
 			cachedTransports:  make(map[string]http.RoundTripper),
 			cachedConnections: make(map[string]net.Conn),
 		}
@@ -167,14 +183,15 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		return &roundTripper{
 			dialer: proxy.Direct,
 
-			JA3: browser.JA3,
-			UserAgent: browser.UserAgent,
-
+			JA3:               browser.JA3,
+			UserAgent:         browser.UserAgent,
+			Cookies:           browser.Cookies,
 			cachedTransports:  make(map[string]http.RoundTripper),
 			cachedConnections: make(map[string]net.Conn),
 		}
 	}
 }
+
 ///////////////////////// test code
 // stringToSpec creates a ClientHelloSpec based on a JA3 string
 func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
@@ -251,7 +268,6 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	}, nil
 }
 
-
 func genMap() (extMap map[string]utls.TLSExtension) {
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
@@ -297,6 +313,6 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},
 	}
-	return	
+	return
 
 }

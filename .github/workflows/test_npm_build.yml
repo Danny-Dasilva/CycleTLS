@@ -1,8 +1,6 @@
-name: "🚀 Npm Publish"
+name: "🚨 Npm Test publish"
 
-on:
-    push:
-      branches: [ main ]
+on: [push, pull_request]
 
 jobs:
     release:
@@ -18,12 +16,9 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
-        - name: Bump Version
-          run: npm version patch
+        - name: Add type definitions
+          run: npm i --save-dev @types/node
           working-directory: ./
-
-        - name: 🚀 Publish
-          run: npm publish
+        - name: 🚀 publish
+          run: npm publish --dry-run
           working-directory: ./
-          env:
-              NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
