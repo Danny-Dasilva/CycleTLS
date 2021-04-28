@@ -50,7 +50,7 @@ type Options struct {
 // Time wraps time.Time overriddin the json marshal/unmarshal to pass
 // timestamp as integer
 type Time struct {
-	time.Time
+	Time time.Time
 }
 
 // UnmarshalJSON implements json.Unmarshaler inferface.
@@ -73,23 +73,29 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	if str == "null" || str == "" {
 		return nil
 	}
+	
+	fmt.Println(buf, "test")
 	// Try to manually parse the data
 	tt, err := ParseDateString(str)
 	if err != nil {
 		return err
 	}
+	fmt.Println(tt)
 	t.Time = tt
 	return nil
 }
 
 
+type TLS struct {
+	Time Time `json:"time"`
+}
 
 // ParseDateString takes a string and passes it through Approxidate
 // Parses into a time.Time
 func ParseDateString(dt string) (time.Time, error) {
 	
 	const layout = "Mon, 02-Jan-2006 15:04:05 MST"
-  
+	fmt.Println(layout, dt, "end")
 	return time.Parse(layout, dt)
 }
 

@@ -3,16 +3,13 @@ package cycletls
 import (
 	"golang.org/x/net/proxy"
 	"net/http"
-
 )
+
 type Browser struct {
 	JA3       string
 	UserAgent string
 	Cookies   []Cookie
 }
-
-
-
 
 func NewClient(browser Browser, proxyUrl ...string) (http.Client, error) {
 	//fix check PR

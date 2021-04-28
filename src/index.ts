@@ -6,7 +6,7 @@ export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
   };
-  cookies: {
+  cookies?: {
     [key: string]: any;
   };
   body?: string;
