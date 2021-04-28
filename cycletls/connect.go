@@ -88,10 +88,10 @@ func newConnectDialer(proxyUrlStr string) (proxy.ContextDialer, error) {
 			// password, _ := proxyUrl.User.Password()
 			// client.DefaultHeader.Set("Proxy-Authorization", "Basic "+
 			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
-			
+
 			username := proxyUrl.User.Username()
 			password, _ := proxyUrl.User.Password()
-		
+
 			// client.DefaultHeader.SetBasicAuth(username, password)
 			auth := username + ":" + password
 			basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
