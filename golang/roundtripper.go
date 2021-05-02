@@ -302,7 +302,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 			utls.VersionTLS13,
 			utls.VersionTLS12,
 			utls.VersionTLS11,
-			utls.VersionTLS10}},
+			utls.VersionTLS10,}},
 		"44": &utls.CookieExtension{},
 		"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
 			utls.PskModeDHE,
