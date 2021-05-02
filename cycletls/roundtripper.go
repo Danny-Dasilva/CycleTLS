@@ -1,4 +1,4 @@
-package cycletls
+package main
 
 import (
 	"context"
@@ -40,7 +40,7 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// This is dumb but whatever
+	// set cookies
 	for _, properties := range rt.Cookies {
 		req.AddCookie(&http.Cookie{Name: properties.Name,
 			Value:      properties.Value,
@@ -55,8 +55,8 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Raw:        properties.Raw,
 			Unparsed:   properties.Unparsed,
 		})
-		fmt.Println(properties.Raw)
 	}
+	//set user agent 
 	req.Header.Set("User-Agent", rt.UserAgent)
 	addr := rt.getDialTLSAddr(req)
 	if _, ok := rt.cachedTransports[addr]; !ok {
@@ -129,6 +129,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err
 	}
+
+	if err = conn.Handshake(); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+
 
 	//////////
 	if rt.cachedTransports[addr] != nil {

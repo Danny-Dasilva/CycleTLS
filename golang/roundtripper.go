@@ -130,6 +130,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
+	if err = conn.Handshake(); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+
+
 	//////////
 	if rt.cachedTransports[addr] != nil {
 		return conn, nil
