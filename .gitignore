@@ -3,3 +3,4 @@ node_modules
 dist
 ignore
 .env
+golang/go.sum
