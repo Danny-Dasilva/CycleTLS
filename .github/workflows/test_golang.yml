@@ -28,6 +28,9 @@ jobs:
       working-directory: ./cycletls
       run: go test -v ./...
 
-    - name: Integration Test
+    - name: Build Integration Tests
+      working-directory: ./integration_tests
+      run: go build -v ./...
+    - name: Integration Tests
       working-directory: ./integration_tests
       run: go test -v -tags=integration ./...
