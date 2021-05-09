@@ -22,8 +22,11 @@ jobs:
           with:
             go-version: ${{ matrix.go-version }}
 
+        # - name: Add type definitions
+        #   run: npm i --save-dev
+        #   working-directory: ./
         - name: Add type definitions
-          run: npm i --save-dev @types/node
+          run: npm i --save-dev
           working-directory: ./
 
         - name: Install golang dependencies

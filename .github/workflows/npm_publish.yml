@@ -23,9 +23,9 @@ jobs:
             token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 
 
-        - name: Add type definitions
-          run: npm i --save-dev @types/node
-          working-directory: ./
+        # - name: Add type definitions
+        #   run: npm i --save-dev @types/node
+        #   working-directory: ./
 
         - name: Install golang dependencies
           run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
