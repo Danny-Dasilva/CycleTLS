@@ -1,4 +1,4 @@
-name: "🚨 Npm Test publish"
+name: "🚨 🟢 Npm Test publish"
 
 on: [push, pull_request]
 
@@ -20,9 +20,9 @@ jobs:
           uses: actions/setup-go@v2
           with:
             go-version: ${{ matrix.go-version }}
-        # - name: Add type definitions
-        #   run: npm i --save-dev @types/node
-        #   working-directory: ./
+        - name: Add type definitions
+          run: npm i --save-dev @types/node
+          working-directory: ./
         - name: 🚀 publish
           run: npm publish --dry-run
           working-directory: ./

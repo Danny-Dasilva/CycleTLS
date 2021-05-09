@@ -1,4 +1,4 @@
-name: 🚨 Go Tests
+name: 🚨 🐹 Go Tests
 
 
 on: [push, pull_request]
