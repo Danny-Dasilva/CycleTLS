@@ -6,7 +6,7 @@ on:
 
 jobs:
     release:
-        name: 🚀 publish
+        name: 🚀 Npm Publish
         runs-on: ubuntu-latest
         strategy: 
           matrix:
