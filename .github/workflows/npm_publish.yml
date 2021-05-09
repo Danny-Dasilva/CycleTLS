@@ -43,9 +43,7 @@ jobs:
           run: git config --global user.email 'secrets.EMAIL'
         - name: bump version
           run: npm version patch -m "Release"
-          working-directory: ./my-package
         - name: Push git
-          working-directory: ./my-package
           run: git commit -a -m "Release" && git push
 
 
