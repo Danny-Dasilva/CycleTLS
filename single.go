@@ -43,7 +43,7 @@ func main() {
 			},
 			
 		},
-	}, "GET");
+	}, "POST");
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
