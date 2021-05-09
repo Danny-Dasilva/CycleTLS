@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	// "log"
 	"net"
 	"net/http"
 	"strconv"
@@ -109,19 +110,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if host, _, err = net.SplitHostPort(addr); err != nil {
 		host = addr
 	}
-
-	// conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, rt.clientHelloId)
-	// if err = conn.Handshake(); err != nil {
-	// 	_ = conn.Close()
-	// 	return nil, err
-	// }
-
-	//////////////////test code inserted
+	//////////////////
 
 	spec, err := stringToSpec(rt.JA3)
 	if err != nil {
 		return nil, err
 	}
+
 
 	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS12, // Default is TLS13
@@ -132,7 +127,8 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
-		return nil, err
+
+		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
 	}
 
 	//////////
@@ -262,10 +258,10 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		suites = append(suites, uint16(cid))
 	}
-
+	_= vid
 	return &utls.ClientHelloSpec{
-		TLSVersMin:         vid,
-		TLSVersMax:         vid,
+		// TLSVersMin:         vid,
+		// TLSVersMax:         vid,
 		CipherSuites:       suites,
 		CompressionMethods: []byte{0},
 		Extensions:         exts,
@@ -283,13 +279,15 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"13": &utls.SignatureAlgorithmsExtension{
 			SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				utls.ECDSAWithP256AndSHA256,
-				utls.PSSWithSHA256,
-				utls.PKCS1WithSHA256,
 				utls.ECDSAWithP384AndSHA384,
+				utls.ECDSAWithP521AndSHA512,
+				utls.PSSWithSHA256,
 				utls.PSSWithSHA384,
-				utls.PKCS1WithSHA384,
 				utls.PSSWithSHA512,
+				utls.PKCS1WithSHA256,
+				utls.PKCS1WithSHA384,
 				utls.PKCS1WithSHA512,
+				utls.ECDSAWithSHA1,
 				utls.PKCS1WithSHA1,
 			},
 		},
@@ -312,7 +310,8 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
 			utls.PskModeDHE,
 		}},
-		"51":    &utls.KeyShareExtension{[]utls.KeyShare{}},
+		"51":    &utls.KeyShareExtension{[]utls.KeyShare{{Group: utls.X25519},
+		{Group: utls.CurveP256},}},
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
@@ -321,3 +320,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 	return
 
 }
+
+
+//investigate cypher suites
+//test what removing the utls.CurveID does to the ja3 string
