@@ -8,6 +8,7 @@ jobs:
     release:
         name: 🚀 Npm Publish
         runs-on: ubuntu-latest
+        if: "startsWith(github.event.head_commit.message, 'Publish')"
         strategy: 
           matrix:
             node-version: [15.x]
@@ -19,9 +20,13 @@ jobs:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
 
-        - name: Add type definitions
-          run: npm i --save-dev @types/node
-          working-directory: ./
+            token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+
+
+        # - name: Add type definitions
+        #   run: npm i --save-dev @types/node
+        #   working-directory: ./
+
 
         - name: Install golang dependencies
           run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
@@ -29,11 +34,23 @@ jobs:
         
         - name: Install deps
           run: npm install --unsafe-perm
+
+
           working-directory: ./
-        
-        - name: Bump Version
-          run: npm version patch
+
+        - name: List changes
+          run: git status --verbose
           working-directory: ./
+
+        - name: set name
+          run: git config --global user.name 'Danny-Dasilva'
+        - name: set email
+          run: git config --global user.email 'secrets.EMAIL'
+        - name: bump version
+          run: npm version patch -m "Release"
+        - name: Push git
+          run: git push
+
 
         - name: 🚀 Publish
           run: npm publish

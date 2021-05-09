@@ -22,13 +22,21 @@ jobs:
           with:
             go-version: ${{ matrix.go-version }}
 
-        - name: Add type definitions
-          run: npm i --save-dev @types/node
-          working-directory: ./
 
+        # - name: Add type definitions
+        #   run: npm i --save-dev
+        #   working-directory: ./
         - name: Install golang dependencies
           run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
           working-directory: ./
+
+
+        - name: Add type definitions
+          run: npm i
+          working-directory: ./
+
+
+
 
         - name: 🚀 publish
           run: npm publish --dry-run
