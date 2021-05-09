@@ -23,6 +23,6 @@ jobs:
         # - name: Add type definitions
         #   run: npm i --save-dev @types/node
         #   working-directory: ./
-        # - name: 🚀 publish
-        #   run: npm publish --dry-run
-        #   working-directory: ./
+        - name: 🚀 publish
+          run: npm publish --dry-run
+          working-directory: ./
