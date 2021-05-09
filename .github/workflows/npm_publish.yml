@@ -30,7 +30,7 @@ jobs:
         - name: Install deps
           run: npm install --unsafe-perm
           working-directory: ./
-
+        
         - name: Bump Version
           run: npm version patch
           working-directory: ./

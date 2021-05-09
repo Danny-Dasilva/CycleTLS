@@ -321,6 +321,3 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 
 }
 
-
-//investigate cypher suites
-//test what removing the utls.CurveID does to the ja3 string
