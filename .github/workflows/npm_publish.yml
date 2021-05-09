@@ -19,6 +19,7 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
+
             token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 
 
@@ -26,12 +27,15 @@ jobs:
         #   run: npm i --save-dev @types/node
         #   working-directory: ./
 
+
         - name: Install golang dependencies
           run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
           working-directory: ./
         
         - name: Install deps
           run: npm install --unsafe-perm
+
+
           working-directory: ./
 
         - name: List changes
