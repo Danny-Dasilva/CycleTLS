@@ -8,7 +8,9 @@ jobs:
     release:
         name: 🚀 Npm Publish
         runs-on: ubuntu-latest
+
         if: "startsWith(github.event.head_commit.message, '🚀')"
+
         strategy: 
           matrix:
             node-version: [15.x]
@@ -21,6 +23,7 @@ jobs:
             registry-url: 'https://registry.npmjs.org'
 
             token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+
 
         - name: Install golang dependencies
           run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
