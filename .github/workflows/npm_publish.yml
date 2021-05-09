@@ -42,7 +42,7 @@ jobs:
           run: cat package.json
           working-directory: ./
         - name: List file2
-          run: cat cat package-lock.json
+          run: cat package-lock.json
           working-directory: ./
         - name: set name
           run: git config --global user.name 'Danny-Dasilva'

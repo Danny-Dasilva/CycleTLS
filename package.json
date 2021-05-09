@@ -30,8 +30,8 @@
   },
   "homepage": "https://github.com/Danny-Dasilva/CycleTLS#readme",
   "dependencies": {
-    "ws": "^7.3.1",
-    "@types/node": "^15.0.2"
+    "@types/node": "^15.0.2",
+	  "ws": "^7.3.1"
   },
   "devDependencies": {
     "@types/ws": "^7.2.6",
