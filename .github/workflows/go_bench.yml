@@ -1,17 +1,14 @@
 name: 🚨 Go Tests
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+
+on: [push, pull_request]
 
 jobs:
 
   test:
     strategy:
       matrix:
-        go-version: [1.14, 1.15, 1.16]
+        go-version: [1.14]
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
 
