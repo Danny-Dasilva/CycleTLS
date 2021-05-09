@@ -8,7 +8,7 @@ import (
 	"log"
 	"testing"
 
-	cycletls "../cycletls"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 type CycleTLSOptions struct {
