@@ -35,7 +35,9 @@ jobs:
           run: npm install --unsafe-perm
           working-directory: ./
 
-        
+        - name: List changes
+          run: git status --verbose
+          working-directory: ./
 
         - name: set name
           run: git config --global user.name 'Danny-Dasilva'
