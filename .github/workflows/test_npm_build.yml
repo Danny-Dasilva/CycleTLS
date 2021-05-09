@@ -1,10 +1,10 @@
-name: "🚨 Npm Test publish"
+name: "🚨 🟢 Npm Test publish"
 
 on: [push, pull_request]
 
 jobs:
     release:
-        name: 🚀 publish
+        name: test npm publish
         runs-on: ubuntu-latest
         strategy: 
           matrix:
@@ -16,9 +16,20 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             registry-url: 'https://registry.npmjs.org'
+
+        - name: Set up Go
+          uses: actions/setup-go@v2
+          with:
+            go-version: ${{ matrix.go-version }}
+
         - name: Add type definitions
           run: npm i --save-dev @types/node
           working-directory: ./
+
+        - name: Install golang dependencies
+          run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
+          working-directory: ./
+
         - name: 🚀 publish
           run: npm publish --dry-run
           working-directory: ./
