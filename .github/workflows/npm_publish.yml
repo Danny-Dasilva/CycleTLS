@@ -38,7 +38,12 @@ jobs:
         - name: List changes
           run: git status --verbose
           working-directory: ./
-
+        - name: List file1
+          run: cat package.json
+          working-directory: ./
+        - name: List file2
+          run: cat cat package-lock.json
+          working-directory: ./
         - name: set name
           run: git config --global user.name 'Danny-Dasilva'
         - name: set email
