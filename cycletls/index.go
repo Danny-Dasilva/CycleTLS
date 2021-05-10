@@ -149,7 +149,7 @@ func (client cycleTLS) Do(URL string, options Options, Method string) (response 
 		return response, err
 	}
 
-	return response, nil 
+	return response, nil
 }
 
 func Init(workers ...bool) *cycleTLS {
@@ -187,7 +187,7 @@ func worker(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
 		response, err := dispatcher(res)
 		if err != nil {
 			log.Print("Request Failed: " + err.Error())
-		}	
+		}
 		respChan <- response
 	}
 }

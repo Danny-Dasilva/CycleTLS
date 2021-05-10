@@ -19,28 +19,23 @@ import (
 	"time"
 )
 
-
-
-
 type myTLSRequest struct {
 	RequestID string `json:"requestId"`
 	Options   struct {
-		URL     string            `json:"url"`
-		Method  string            `json:"method"`
-		Headers map[string]string `json:"headers"`
-		Body    string            `json:"body"`
-		Ja3     string            `json:"ja3"`
-		UserAgent     string       `json:"userAgent"`
-		ID     int            		`json:"id"`
-		Proxy   string            `json:"proxy"`
+		URL       string            `json:"url"`
+		Method    string            `json:"method"`
+		Headers   map[string]string `json:"headers"`
+		Body      string            `json:"body"`
+		Ja3       string            `json:"ja3"`
+		UserAgent string            `json:"userAgent"`
+		ID        int               `json:"id"`
+		Proxy     string            `json:"proxy"`
 	} `json:"options"`
 }
 
-
-
 type Result struct {
-    req *http.Request
-    client http.Client
+	req          *http.Request
+	client       http.Client
 	mytlsrequest myTLSRequest
 }
 
@@ -71,11 +66,9 @@ func getWebsocketAddr() string {
 	return u.String()
 }
 
-
-
 // Dispatcher
 func Process(ch chan Result, message []byte) {
-   
+
 	mytlsrequest := new(myTLSRequest)
 	err := json.Unmarshal(message, &mytlsrequest)
 	if err != nil {
@@ -83,12 +76,10 @@ func Process(ch chan Result, message []byte) {
 		return
 	}
 
-
 	var Default = Browser{
 		JA3:       mytlsrequest.Options.Ja3,
-		UserAgent:  mytlsrequest.Options.UserAgent,
+		UserAgent: mytlsrequest.Options.UserAgent,
 	}
-	
 
 	client, err := NewClient(Default, mytlsrequest.Options.Proxy)
 	if err != nil {
@@ -106,23 +97,20 @@ func Process(ch chan Result, message []byte) {
 			req.Header.Set(k, v)
 		}
 	}
-	
-	
-	ch <- Result{req: req, client: client, mytlsrequest: *mytlsrequest}
-    
-}
 
+	ch <- Result{req: req, client: client, mytlsrequest: *mytlsrequest}
+
+}
 
 // Dispatcher
 func dispatcher(ch chan Result, socket *websocket.Conn) {
-    // defer close(ch)
-    for {
+	// defer close(ch)
+	for {
 		_, message, err := socket.ReadMessage()
 		if err != nil {
 			log.Print(err)
 			continue
 		}
-		
 
 		mytlsrequest := new(myTLSRequest)
 		e := json.Unmarshal(message, &mytlsrequest)
@@ -131,12 +119,10 @@ func dispatcher(ch chan Result, socket *websocket.Conn) {
 			continue
 		}
 
-
 		var Default = Browser{
 			JA3:       mytlsrequest.Options.Ja3,
-			UserAgent:  mytlsrequest.Options.UserAgent,
+			UserAgent: mytlsrequest.Options.UserAgent,
 		}
-		
 
 		client, err := NewClient(Default, mytlsrequest.Options.Proxy)
 		if err != nil {
@@ -154,32 +140,23 @@ func dispatcher(ch chan Result, socket *websocket.Conn) {
 				req.Header.Set(k, v)
 			}
 		}
-		
-		
-        ch <- Result{req: req, client: client, mytlsrequest: *mytlsrequest}
-    }
+
+		ch <- Result{req: req, client: client, mytlsrequest: *mytlsrequest}
+	}
 }
-
-
 
 // Worker Pool
 func workerPool(reqChan chan Result, respChan chan []byte) {
 	//MAX
-    for i := 0; i < 100; i++ {
-        go worker(reqChan, respChan)
-    }
+	for i := 0; i < 100; i++ {
+		go worker(reqChan, respChan)
+	}
 }
-
-
-
-
-
-
 
 // Worker
 func worker(reqChan chan Result, respChan chan []byte) {
-    for res := range reqChan {
-        resp, err := res.client.Do(res.req)
+	for res := range reqChan {
+		resp, err := res.client.Do(res.req)
 		if err != nil {
 			log.Print("Request_Id_On_The_Left" + err.Error())
 			continue
@@ -193,7 +170,7 @@ func worker(reqChan chan Result, respChan chan []byte) {
 		}
 
 		headers := make(map[string]string)
-		
+
 		for name, values := range resp.Header {
 			fmt.Println(name, values)
 			if name == "Set-Cookie" {
@@ -215,18 +192,15 @@ func worker(reqChan chan Result, respChan chan []byte) {
 			continue
 		}
 
-
-
-        respChan <- data
-    }
+		respChan <- data
+	}
 }
 
 func main() {
 	start := time.Now()
-    defer func() {
-        fmt.Println("Execution Time: ", time.Since(start))
-    }()
-
+	defer func() {
+		fmt.Println("Execution Time: ", time.Since(start))
+	}()
 
 	websocketAddress := getWebsocketAddr()
 
@@ -236,15 +210,12 @@ func main() {
 		return
 	}
 
-	
-    runtime.GOMAXPROCS(runtime.NumCPU())
-    
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	// runtime.GOMAXPROCS(1)
 	reqChan := make(chan Result)
-    respChan := make(chan []byte)
-    go workerPool(reqChan, respChan)
-    
-
+	respChan := make(chan []byte)
+	go workerPool(reqChan, respChan)
 
 	ch := make(chan Result)
 
@@ -261,30 +232,25 @@ func main() {
 
 	for {
 
-
-	
 		select {
-        case stdin := <-ch:
+		case stdin := <-ch:
 			reqChan <- stdin
-           
-        default:
-            // Do something when there is nothing read from stdin
-        }
-		
+
+		default:
+			// Do something when there is nothing read from stdin
+		}
+
 		select {
-        case message := <-respChan:
+		case message := <-respChan:
 			err = c.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				log.Print("Request_Id_On_The_Left" )
-				
+				log.Print("Request_Id_On_The_Left")
+
 			}
-        default:
-			
-        }
+		default:
+
+		}
 		// log.Println("running")
-	
+
 	}
 }
-
-
-

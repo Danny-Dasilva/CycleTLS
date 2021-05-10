@@ -16,6 +16,7 @@ type Time struct {
 type data struct {
 	Time Time `json:"time"`
 }
+
 // A Cookie represents an HTTP cookie as sent in the Set-Cookie header of an
 // HTTP response or the Cookie header of an HTTP request.
 //
@@ -25,11 +26,11 @@ type Cookie struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 
-	Path       string    `json:"path"`       // optional
-	Domain     string    `json:"domain"`     // optional
-	Expires    time.Time 
-	JsonExpires       Time        `json:"expires"` 	  // optional
-	RawExpires string    `json:"rawExpires"` // for reading cookies only
+	Path        string `json:"path"`   // optional
+	Domain      string `json:"domain"` // optional
+	Expires     time.Time
+	JsonExpires Time   `json:"expires"`    // optional
+	RawExpires  string `json:"rawExpires"` // for reading cookies only
 
 	// MaxAge=0 means no 'Max-Age' attribute specified.
 	// MaxAge<0 means delete cookie now, equivalently 'Max-Age: 0'

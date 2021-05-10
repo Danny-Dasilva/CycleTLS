@@ -117,7 +117,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-
 	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS12, // Default is TLS13
 		utls.HelloCustom)
@@ -258,7 +257,7 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		suites = append(suites, uint16(cid))
 	}
-	_= vid
+	_ = vid
 	return &utls.ClientHelloSpec{
 		// TLSVersMin:         vid,
 		// TLSVersMax:         vid,
@@ -310,8 +309,8 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
 			utls.PskModeDHE,
 		}},
-		"51":    &utls.KeyShareExtension{[]utls.KeyShare{{Group: utls.X25519},
-		{Group: utls.CurveP256},}},
+		"51": &utls.KeyShareExtension{[]utls.KeyShare{{Group: utls.X25519},
+			{Group: utls.CurveP256}}},
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
@@ -320,4 +319,3 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 	return
 
 }
-
