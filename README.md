@@ -2,6 +2,11 @@
 
 Currently in Active development see Projects Tab
 
+[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
+[![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
+ <!-- [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.com/Danny-Dasilva/CycleTLS/cycletls)  -->
+
 ## Installation
 
 ```bash
@@ -85,3 +90,22 @@ if linux
 if mac
 
 `npm run build:mac:`
+
+
+
+### GPL3 LICENSE SYNOPSIS
+
+**_TL;DR_*** Here's what the GPL3 license entails:
+
+```markdown
+1. Anyone can copy, modify and distribute this software.
+2. You have to include the license and copyright notice with each and every distribution.
+3. You can use this software privately.
+4. You can use this software for commercial purposes.
+5. Source code MUST be made available when the software is distributed.
+6. Any modifications of this code base MUST be distributed with the same license, GPLv3.
+7. This software is provided without warranty.
+8. The software author or license can not be held liable for any damages inflicted by the software.
+```
+
+More information on about the [LICENSE can be found here](http://choosealicense.com/licenses/gpl-3.0/)
