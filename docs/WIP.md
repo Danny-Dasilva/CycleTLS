@@ -6,10 +6,7 @@
 	<img src="docs/media/Banner.svg" alt="CycleTLS"/>
 	<br>
 	
-Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info 
-
-
-More documentation coming soon
+Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info
 
 	
 	
@@ -21,14 +18,15 @@ More documentation coming soon
 [![npm version](https://img.shields.io/npm/v/axios.svg?style=flat-square)](https://www.npmjs.org/package/cycletls)
 </div>
 
-<!-- [![install size](https://packagephobia.now.sh/badge?p=cycletls)](https://packagephobia.now.sh/result?p=cycletls) -->
- <!-- [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.com/Danny-Dasilva/CycleTLS/cycletls)  -->
-
-
-
-
 If you have a API change or feature request feel free to open an Issue
 
+
+
+# 🚀 Features
+
+- [High-performance](#-performance) event-loop under networking model of multiple threads/goroutines
+-  Built-in goroutine pool powered by the library [ants](https://github.com/panjf2000/ants)
+OR instead do an introduction or something
 
 ## Dependencies
 
@@ -37,11 +35,36 @@ node ^v8.0
 golang ^v1.14
 ```
 
+
+
 ## Installation
 
 ```bash
 $ npm install cycletls
 ```
+
+Table of contents
+=================
+
+
+* [gh-md-toc](#gh-md-toc)
+* [Table of contents](#table-of-contents)
+* [Installation](#installation)
+* [Usage](#usage)
+	* [STDIN](#stdin)
+	* [Local files](#local-files)
+	* [Remote files](#remote-files)
+	* [Multiple files](#multiple-files)
+	* [Combo](#combo)
+	* [Auto insert and update TOC](#auto-insert-and-update-toc)
+	* [GitHub token](#github-token)
+	* [TOC generation with Github Actions](#toc-generation-with-github-actions)
+* [Tests](#tests)
+* [Dependency](#dependency)
+* [Docker](#docker)
+	* [Local](#local)
+	* [Public](#public)
+
 
 
 # Example for TS/JS
@@ -104,7 +127,23 @@ func main() {
 
 
 ### Dev Setup
+```
+docker build -t my_first_image .
 
+docker run --name test my_first_image
+
+docker exec -it my_first_image
+
+docker run --name testing \
+--rm -it --privileged -p 6006:6006 \
+my_first_image
+
+docker run --name testing \
+--rm -it --privileged -p 6006:6006 \
+--mount type=bind,src=${DETECT_DIR},dst=/models/research/object_detection/images \
+my_first_image
+
+```
 `npm install --dev`
 
 `npm run build`
@@ -122,3 +161,20 @@ if mac
 `npm run build:mac:`
 
 
+
+### GPL3 LICENSE SYNOPSIS
+
+**_TL;DR_*** Here's what the GPL3 license entails:
+
+```markdown
+1. Anyone can copy, modify and distribute this software.
+2. You have to include the license and copyright notice with each and every distribution.
+3. You can use this software privately.
+4. You can use this software for commercial purposes.
+5. Source code MUST be made available when the software is distributed.
+6. Any modifications of this code base MUST be distributed with the same license, GPLv3.
+7. This software is provided without warranty.
+8. The software author or license can not be held liable for any damages inflicted by the software.
+```
+
+More information on about the [LICENSE can be found here](http://choosealicense.com/licenses/gpl-3.0/)
