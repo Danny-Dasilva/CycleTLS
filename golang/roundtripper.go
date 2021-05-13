@@ -21,9 +21,9 @@ import (
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
-type ErrExtensionNotExist string
+type errExtensionNotExist string
 
-func (e ErrExtensionNotExist) Error() string {
+func (e errExtensionNotExist) Error() string {
 	return fmt.Sprintf("Extension does not exist: %s\n", e)
 }
 
@@ -47,10 +47,10 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Value:      properties.Value,
 			Path:       properties.Path,
 			Domain:     properties.Domain,
-			Expires:    properties.JsonExpires.Time, //TODO: scuffed af
+			Expires:    properties.JSONExpires.Time, //TODO: scuffed af
 			RawExpires: properties.RawExpires,
 			MaxAge:     properties.MaxAge,
-			HttpOnly:   properties.HttpOnly,
+			HttpOnly:   properties.HTTPOnly,
 			Secure:     properties.Secure,
 			SameSite:   properties.SameSite,
 			Raw:        properties.Raw,
@@ -166,7 +166,7 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 	return net.JoinHostPort(req.URL.Host, "443") // we can assume port is 443 at this point
 }
 
-func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
+func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundTripper {
 	if len(dialer) > 0 {
 
 		return &roundTripper{
@@ -178,17 +178,16 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 			cachedTransports:  make(map[string]http.RoundTripper),
 			cachedConnections: make(map[string]net.Conn),
 		}
-	} else {
+	}
 
-		return &roundTripper{
-			dialer: proxy.Direct,
+	return &roundTripper{
+		dialer: proxy.Direct,
 
-			JA3:               browser.JA3,
-			UserAgent:         browser.UserAgent,
-			Cookies:           browser.Cookies,
-			cachedTransports:  make(map[string]http.RoundTripper),
-			cachedConnections: make(map[string]net.Conn),
-		}
+		JA3:               browser.JA3,
+		UserAgent:         browser.UserAgent,
+		Cookies:           browser.Cookies,
+		cachedTransports:  make(map[string]http.RoundTripper),
+		cachedConnections: make(map[string]net.Conn),
 	}
 }
 
@@ -237,7 +236,7 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	for _, e := range extensions {
 		te, ok := extMap[e]
 		if !ok {
-			return nil, ErrExtensionNotExist(e)
+			return nil, errExtensionNotExist(e)
 		}
 		exts = append(exts, te)
 	}

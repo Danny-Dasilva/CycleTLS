@@ -1,11 +1,39 @@
 # CycleTLS
 
-Currently in Active development see Projects Tab
 
+
+<div align="center">
+	<img src="docs/media/Banner.svg" alt="CycleTLS"/>
+	<br>
+	
+Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info
+
+	
+	
+
+![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/test_golang.yml/badge.svg)
 [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
 [![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
+[![npm version](https://img.shields.io/npm/v/axios.svg?style=flat-square)](https://www.npmjs.org/package/cycletls)
+</div>
+
+<!-- [![install size](https://packagephobia.now.sh/badge?p=cycletls)](https://packagephobia.now.sh/result?p=cycletls) -->
  <!-- [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.com/Danny-Dasilva/CycleTLS/cycletls)  -->
+
+
+
+
+If you have a API change or feature request feel free to open an Issue
+
+## Dependencies
+
+```
+node ^v8.0
+golang ^v1.14
+```
+
+
 
 ## Installation
 
@@ -74,7 +102,23 @@ func main() {
 
 
 ### Dev Setup
+```
+docker build -t my_first_image .
 
+docker run --name test my_first_image
+
+docker exec -it my_first_image
+
+docker run --name testing \
+--rm -it --privileged -p 6006:6006 \
+my_first_image
+
+docker run --name testing \
+--rm -it --privileged -p 6006:6006 \
+--mount type=bind,src=${DETECT_DIR},dst=/models/research/object_detection/images \
+my_first_image
+
+```
 `npm install --dev`
 
 `npm run build`

@@ -29,7 +29,7 @@ type Cookie struct {
 	Path        string `json:"path"`   // optional
 	Domain      string `json:"domain"` // optional
 	Expires     time.Time
-	JsonExpires Time   `json:"expires"`    // optional
+	JSONExpires Time   `json:"expires"`    // optional
 	RawExpires  string `json:"rawExpires"` // for reading cookies only
 
 	// MaxAge=0 means no 'Max-Age' attribute specified.
@@ -37,7 +37,7 @@ type Cookie struct {
 	// MaxAge>0 means Max-Age attribute present and given in seconds
 	MaxAge   int           `json:"maxAge"`
 	Secure   bool          `json:"secure"`
-	HttpOnly bool          `json:"httpOnly"`
+	HTTPOnly bool          `json:"httpOnly"`
 	SameSite http.SameSite `json:"sameSite"`
 	Raw      string
 	Unparsed []string `json:"unparsed"` // Raw text of unparsed attribute-value pairs

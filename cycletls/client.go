@@ -12,7 +12,7 @@ type browser struct {
 	Cookies   []Cookie
 }
 
-// New Client
+// newClient creates a new http client
 func newClient(browser browser, proxyURL ...string) (http.Client, error) {
 	//fix check PR
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
