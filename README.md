@@ -11,10 +11,10 @@ More documentation coming soon
 	
 
 <!-- ![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/test_golang.yml/badge.svg) -->
-[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
-[![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
-[![npm version](https://img.shields.io/npm/v/cycletls.svg?style=flat-square)](https://www.npmjs.org/package/cycletls)
+[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
+[![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg?)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls?)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
+[![npm version](https://img.shields.io/npm/v/cycletls.svg?style=flat-square?)](https://www.npmjs.org/package/cycletls)
 </div>
 
 <!-- [![install size](https://packagephobia.now.sh/badge?p=cycletls)](https://packagephobia.now.sh/result?p=cycletls) -->
