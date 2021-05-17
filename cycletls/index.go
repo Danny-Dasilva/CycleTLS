@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// Options sets CycleTLS client options
 type Options struct {
 	URL       string            `json:"url"`
 	Method    string            `json:"method"`
@@ -38,19 +39,23 @@ type fullRequest struct {
 	options cycleTLSRequest
 }
 
-type Response struct {
+//TODO: rename this reponse struct
+type respData struct {
 	Status  int
 	Body    string
 	Headers map[string]string
 }
 
-type cycleTLSResponse struct {
+//Response contains Cycletls response data
+type Response struct {
 	RequestID string
-	Response  Response
+	Response  respData
 }
-type cycleTLS struct {
+
+//CycleTLS creates full request and response
+type CycleTLS struct {
 	ReqChan  chan fullRequest
-	RespChan chan cycleTLSResponse
+	RespChan chan Response
 }
 
 func getWebsocketAddr() string {
@@ -71,13 +76,13 @@ func getWebsocketAddr() string {
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
 
-	var browser = Browser{
+	var browser = browser{
 		JA3:       request.Options.Ja3,
 		UserAgent: request.Options.UserAgent,
 		Cookies:   request.Options.Cookies,
 	}
 
-	client, err := NewClient(browser, request.Options.Proxy)
+	client, err := newClient(browser, request.Options.Proxy)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -95,7 +100,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 }
 
-func dispatcher(res fullRequest) (response cycleTLSResponse, err error) {
+func dispatcher(res fullRequest) (response Response, err error) {
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
@@ -121,22 +126,24 @@ func dispatcher(res fullRequest) (response cycleTLSResponse, err error) {
 		}
 	}
 
-	Response := Response{resp.StatusCode, string(bodyBytes), headers}
+	respData := respData{resp.StatusCode, string(bodyBytes), headers}
 
-	return cycleTLSResponse{res.options.RequestID, Response}, nil
+	return Response{res.options.RequestID, respData}, nil
 
 }
 
-func (client cycleTLS) Queue(URL string, options Options, Method string) {
+// Queue queues request in worker pool
+func (client CycleTLS) Queue(URL string, options Options, Method string) {
 
 	options.URL = URL
-
+	//TODO add timestamp to request
 	opt := cycleTLSRequest{"n", options}
 	response := processRequest(opt)
 	client.ReqChan <- response
 }
 
-func (client cycleTLS) Do(URL string, options Options, Method string) (response cycleTLSResponse, err error) {
+// Do creates a single request
+func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
 
 	options.URL = URL
 
@@ -149,32 +156,35 @@ func (client cycleTLS) Do(URL string, options Options, Method string) (response 
 		return response, err
 	}
 
-	return response, nil 
+	return response, nil
 }
 
-func Init(workers ...bool) *cycleTLS {
+//TODO rename this
+
+// Init starts the worker pool or returns a empty cycletls struct
+func Init(workers ...bool) CycleTLS {
 
 	if len(workers) > 0 && workers[0] {
 		reqChan := make(chan fullRequest)
-		respChan := make(chan cycleTLSResponse)
+		respChan := make(chan Response)
 		go workerPool(reqChan, respChan)
 		log.Println("Worker Pool Started")
 
-		return &cycleTLS{ReqChan: reqChan, RespChan: respChan}
-	} else {
-		return &cycleTLS{}
+		return CycleTLS{ReqChan: reqChan, RespChan: respChan}
 	}
+	return CycleTLS{}
 
 }
 
-func (client cycleTLS) Close() {
+// Close closes channels
+func (client CycleTLS) Close() {
 	close(client.ReqChan)
 	close(client.RespChan)
 
 }
 
 // Worker Pool
-func workerPool(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
+func workerPool(reqChan chan fullRequest, respChan chan Response) {
 	//MAX
 	for i := 0; i < 100; i++ {
 		go worker(reqChan, respChan)
@@ -182,12 +192,12 @@ func workerPool(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
 }
 
 // Worker
-func worker(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
+func worker(reqChan chan fullRequest, respChan chan Response) {
 	for res := range reqChan {
 		response, err := dispatcher(res)
 		if err != nil {
 			log.Print("Request Failed: " + err.Error())
-		}	
+		}
 		respChan <- response
 	}
 }
@@ -213,7 +223,7 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 	}
 }
 
-func writeSocket(respChan chan cycleTLSResponse, c *websocket.Conn) {
+func writeSocket(respChan chan Response, c *websocket.Conn) {
 	for {
 		select {
 		case r := <-respChan:
@@ -251,7 +261,7 @@ func main() {
 	}
 
 	reqChan := make(chan fullRequest)
-	respChan := make(chan cycleTLSResponse)
+	respChan := make(chan Response)
 	go workerPool(reqChan, respChan)
 
 	go readSocket(reqChan, c)

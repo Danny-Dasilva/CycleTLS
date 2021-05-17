@@ -1,32 +1,30 @@
 // Golang program to show how to
 // use structs as map keys
 package main
-  
+
 // importing required packages
 import (
-	"fmt"
 	"encoding/json"
-	"time"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-
-	
-)  
+	"time"
+)
 
 // A Cookie represents an HTTP cookie as sent in the Set-Cookie header of an
 // HTTP response or the Cookie header of an HTTP request.
 //
 // See https://tools.ietf.org/html/rfc6265 for details.
-//Stolen from Net/http/cookies 
+//Stolen from Net/http/cookies
 type Cookie struct {
-	Name  string           `json:"name"` 
-	Value string		   `json:"value"` 
+	Name  string `json:"name"`
+	Value string `json:"value"`
 
-	Path       string      `json:"path"` // optional
-	Domain     string      `json:"domain"` // optional
-	Expires    time.Time   `json:"expires"` // optional
-	RawExpires string      `json:"rawExpires"`// for reading cookies only
+	Path       string    `json:"path"`       // optional
+	Domain     string    `json:"domain"`     // optional
+	Expires    time.Time `json:"expires"`    // optional
+	RawExpires string    `json:"rawExpires"` // for reading cookies only
 
 	// MaxAge=0 means no 'Max-Age' attribute specified.
 	// MaxAge<0 means delete cookie now, equivalently 'Max-Age: 0'
@@ -36,15 +34,13 @@ type Cookie struct {
 	HttpOnly bool          `json:"httpOnly"`
 	SameSite http.SameSite `json:"sameSite"`
 	Raw      string
-	Unparsed []string      `json:"unparsed"` // Raw text of unparsed attribute-value pairs
-	Time Time `json:"time"`
+	Unparsed []string `json:"unparsed"` // Raw text of unparsed attribute-value pairs
+	Time     Time     `json:"time"`
 }
 
-
 type Options struct {
-	Cookies []Cookie 
-	name string
-
+	Cookies []Cookie
+	name    string
 }
 
 // Time wraps time.Time overriddin the json marshal/unmarshal to pass
@@ -73,7 +69,7 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	if str == "null" || str == "" {
 		return nil
 	}
-	
+
 	fmt.Println(buf, "test")
 	// Try to manually parse the data
 	tt, err := ParseDateString(str)
@@ -85,7 +81,6 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
-
 type TLS struct {
 	Time Time `json:"time"`
 }
@@ -93,15 +88,13 @@ type TLS struct {
 // ParseDateString takes a string and passes it through Approxidate
 // Parses into a time.Time
 func ParseDateString(dt string) (time.Time, error) {
-	
+
 	const layout = "Mon, 02-Jan-2006 15:04:05 MST"
 	fmt.Println(layout, dt, "end")
 	return time.Parse(layout, dt)
 }
 
-
 func main() {
-    
 
 	jsonData := []byte(`[
 	{
@@ -110,40 +103,37 @@ func main() {
 		"time" : "Mon, 02-Jan-2006 15:04:05 MST"
 	}]`)
 
-
-	var basenameOpts = []Cookie{ 
-		Cookie {
-			Name: "test1", 
-			Value: "arr", 
+	var basenameOpts = []Cookie{
+		Cookie{
+			Name:    "test1",
+			Value:   "arr",
 			Expires: time.Now(),
 		},
-		Cookie {
-			Name: "test2", 
-			Value: "b-option", 
+		Cookie{
+			Name:    "test2",
+			Value:   "b-option",
 			Expires: time.Now(),
 		},
 	}
-
-
 
 	var d Time
 	jStr := `{"time":"Mon, 02-Jan-2006 15:04:05 MST"}`
 	_ = json.Unmarshal([]byte(jStr), &d)
 
 	fmt.Println(d.Time)
-	
-	fmt.Println(Options{Cookies: []Cookie{ 
-		Cookie {
-			Name: "test1", 
-			Value: "arr", 
+
+	fmt.Println(Options{Cookies: []Cookie{
+		Cookie{
+			Name:    "test1",
+			Value:   "arr",
 			Expires: time.Now(),
 		},
-		Cookie {
-			Name: "test2", 
-			Value: "b-option", 
+		Cookie{
+			Name:    "test2",
+			Value:   "b-option",
 			Expires: time.Now(),
 		},
-	},})
+	}})
 	var appointment []Cookie
 	err := json.Unmarshal(jsonData, &appointment)
 	if err != nil {
@@ -151,6 +141,5 @@ func main() {
 	}
 	fmt.Println(basenameOpts, "\n")
 	fmt.Println(appointment[0].Time)
-
 
 }

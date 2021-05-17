@@ -19,28 +19,23 @@ import (
 	"time"
 )
 
-
-
-
 type myTLSRequest struct {
 	RequestID string `json:"requestId"`
 	Options   struct {
-		URL     string            `json:"url"`
-		Method  string            `json:"method"`
-		Headers map[string]string `json:"headers"`
-		Body    string            `json:"body"`
-		Ja3     string            `json:"ja3"`
-		UserAgent     string       `json:"userAgent"`
-		ID     int            		`json:"id"`
-		Proxy   string            `json:"proxy"`
+		URL       string            `json:"url"`
+		Method    string            `json:"method"`
+		Headers   map[string]string `json:"headers"`
+		Body      string            `json:"body"`
+		Ja3       string            `json:"ja3"`
+		UserAgent string            `json:"userAgent"`
+		ID        int               `json:"id"`
+		Proxy     string            `json:"proxy"`
 	} `json:"options"`
 }
 
-
-
 type Result struct {
-    req *http.Request
-    client http.Client
+	req          *http.Request
+	client       http.Client
 	mytlsrequest myTLSRequest
 }
 
@@ -71,20 +66,15 @@ func getWebsocketAddr() string {
 	return u.String()
 }
 
-
-
-
-
 // Dispatcher
 func dispatcher(reqChan chan Result, socket *websocket.Conn) {
-    defer close(reqChan)
-    for {
+	defer close(reqChan)
+	for {
 		_, message, err := socket.ReadMessage()
 		if err != nil {
 			log.Print(err)
 			continue
 		}
-		
 
 		mytlsrequest := new(myTLSRequest)
 		e := json.Unmarshal(message, &mytlsrequest)
@@ -93,22 +83,16 @@ func dispatcher(reqChan chan Result, socket *websocket.Conn) {
 			continue
 		}
 
-
 		var Default = Browser{
 			JA3:       mytlsrequest.Options.Ja3,
-			UserAgent:  mytlsrequest.Options.UserAgent,
+			UserAgent: mytlsrequest.Options.UserAgent,
 		}
-		
-
-
 
 		client, err := NewClient(Default, mytlsrequest.Options.Proxy)
 		// client, err := cclient.NewClient(tls.HelloChrome_Auto)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		
 
 		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
 		if err != nil {
@@ -121,33 +105,30 @@ func dispatcher(reqChan chan Result, socket *websocket.Conn) {
 				req.Header.Set(k, v)
 			}
 		}
-		
+
 		fmt.Println(mytlsrequest)
 		res := new(Result)
-        res.client = client
-        res.req = req
+		res.client = client
+		res.req = req
 		res.mytlsrequest = *mytlsrequest
-        reqChan <- *res
-    }
+		reqChan <- *res
+	}
 }
 
-
-
 var greeting *websocket.Conn
-
 
 // Worker Pool
 func workerPool(reqChan chan Result, respChan chan []byte) {
 	//MAX
-    for i := 0; i < 100; i++ {
-        go worker(reqChan, respChan)
-    }
+	for i := 0; i < 100; i++ {
+		go worker(reqChan, respChan)
+	}
 }
 
 // Worker
 func worker(reqChan chan Result, respChan chan []byte) {
-    for res := range reqChan {
-        resp, err := res.client.Do(res.req)
+	for res := range reqChan {
+		resp, err := res.client.Do(res.req)
 		if err != nil {
 			log.Print("Request_Id_On_The_Left" + err.Error())
 			continue
@@ -182,20 +163,15 @@ func worker(reqChan chan Result, respChan chan []byte) {
 			continue
 		}
 
-
-
-        respChan <- data
-    }
+		respChan <- data
+	}
 }
 
 func main() {
 	start := time.Now()
-    defer func() {
-        fmt.Println("Execution Time: ", time.Since(start))
-    }()
-
-
-    
+	defer func() {
+		fmt.Println("Execution Time: ", time.Since(start))
+	}()
 
 	websocketAddress := getWebsocketAddr()
 
@@ -204,108 +180,88 @@ func main() {
 		log.Print(err)
 		return
 	}
-	
 
-	
-    runtime.GOMAXPROCS(runtime.NumCPU())
-    
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	// runtime.GOMAXPROCS(1)
 	reqChan := make(chan Result)
-    respChan := make(chan []byte)
-    // go dispatcher(reqChan)
-    go workerPool(reqChan, respChan)
-    
-    // go dispatcher(reqChan, c)
+	respChan := make(chan []byte)
+	// go dispatcher(reqChan)
+	go workerPool(reqChan, respChan)
 
+	// go dispatcher(reqChan, c)
 
 	ch := make(chan Result)
 	go func(ch chan Result) {
-	for {
-		_, message, err := c.ReadMessage()
-		if err != nil {
-			log.Print(err)
-			continue
+		for {
+			_, message, err := c.ReadMessage()
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+
+			mytlsrequest := new(myTLSRequest)
+			e := json.Unmarshal(message, &mytlsrequest)
+			if e != nil {
+				log.Print(err)
+				continue
+			}
+
+			var Default = Browser{
+				JA3:       mytlsrequest.Options.Ja3,
+				UserAgent: mytlsrequest.Options.UserAgent,
+			}
+
+			client, err := NewClient(Default, mytlsrequest.Options.Proxy)
+			// client, err := cclient.NewClient(tls.HelloChrome_Auto)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
+			if err != nil {
+				log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
+				continue
+			}
+
+			for k, v := range mytlsrequest.Options.Headers {
+				if k != "host" {
+					req.Header.Set(k, v)
+				}
+			}
+
+			res := new(Result)
+			res.client = client
+			res.req = req
+			res.mytlsrequest = *mytlsrequest
+			ch <- *res
 		}
-		
+	}(ch)
+	go func() {
+		for {
+			select {
+			case stdin := <-ch:
+				reqChan <- stdin
 
-		mytlsrequest := new(myTLSRequest)
-		e := json.Unmarshal(message, &mytlsrequest)
-		if e != nil {
-			log.Print(err)
-			continue
-		}
-
-
-		var Default = Browser{
-			JA3:       mytlsrequest.Options.Ja3,
-			UserAgent:  mytlsrequest.Options.UserAgent,
-		}
-		
-
-
-
-		client, err := NewClient(Default, mytlsrequest.Options.Proxy)
-		// client, err := cclient.NewClient(tls.HelloChrome_Auto)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		
-
-		req, err := http.NewRequest(strings.ToUpper(mytlsrequest.Options.Method), mytlsrequest.Options.URL, strings.NewReader(mytlsrequest.Options.Body))
-		if err != nil {
-			log.Print(mytlsrequest.RequestID + "Request_Id_On_The_Left" + err.Error())
-			continue
-		}
-
-		for k, v := range mytlsrequest.Options.Headers {
-			if k != "host" {
-				req.Header.Set(k, v)
+			default:
+				// Do something when there is nothing read from stdin
 			}
 		}
-		
 
-		res := new(Result)
-        res.client = client
-        res.req = req
-		res.mytlsrequest = *mytlsrequest
-        ch <- *res
-    }
-	}(ch)
-    go func () {
-        for {
-            select {
-            case stdin := <-ch:
-                reqChan <- stdin
-               
-            default:
-                // Do something when there is nothing read from stdin
-            }
-        }
-       
-
-    }()
+	}()
 
 	for {
 
-
-	
-	
-		
 		select {
-        case message := <-respChan:
+		case message := <-respChan:
 			err = c.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				log.Print("Request_Id_On_The_Left" )
-				
-			}
-        default:
-			
-        }
+				log.Print("Request_Id_On_The_Left")
 
-	
+			}
+		default:
+
+		}
+
 	}
 }
-
-
-

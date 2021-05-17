@@ -5,25 +5,27 @@ import (
 	"net/http"
 )
 
-type Browser struct {
+type browser struct {
+	// Return a greeting that embeds the name in a message.
 	JA3       string
 	UserAgent string
 	Cookies   []Cookie
 }
 
-func NewClient(browser Browser, proxyUrl ...string) (http.Client, error) {
+// newClient creates a new http client
+func newClient(browser browser, proxyURL ...string) (http.Client, error) {
 	//fix check PR
-	if len(proxyUrl) > 0 && len(proxyUrl[0]) > 0 {
-		dialer, err := newConnectDialer(proxyUrl[0])
+	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
+		dialer, err := newConnectDialer(proxyURL[0])
 		if err != nil {
 			return http.Client{}, err
 		}
 		return http.Client{
 			Transport: newRoundTripper(browser, dialer),
 		}, nil
-	} else {
-		return http.Client{
-			Transport: newRoundTripper(browser, proxy.Direct),
-		}, nil
 	}
+	return http.Client{
+		Transport: newRoundTripper(browser, proxy.Direct),
+	}, nil
+
 }
