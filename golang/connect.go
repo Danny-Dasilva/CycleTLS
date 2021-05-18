@@ -14,9 +14,7 @@
 
 // stolen from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
 
-
 package main
-
 
 import (
 	"bufio"

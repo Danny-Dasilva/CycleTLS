@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 )
@@ -40,7 +40,7 @@ type fullRequest struct {
 	options cycleTLSRequest
 }
 
-//TODO: rename this reponse struct
+//TODO: rename this response struct
 type respData struct {
 	Status  int
 	Body    string
@@ -58,8 +58,9 @@ type CycleTLS struct {
 	ReqChan  chan fullRequest
 	RespChan chan Response
 }
+
 func lastString(ss []string) string {
-    return ss[len(ss)-1]
+	return ss[len(ss)-1]
 }
 func getWebsocketAddr() string {
 	port, exists := os.LookupEnv("WS_PORT")
@@ -103,22 +104,20 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 }
 
-
-func dispatcher(res fullRequest) (response cycleTLSResponse, err error) {
+func dispatcher(res fullRequest) (response Response, err error) {
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 		httpError := string(err.Error())
 		status := lastString(strings.Split(httpError, "StatusCode:"))
-		StatusCode,err := strconv.Atoi(status)
+		StatusCode, _ := strconv.Atoi(status)
 		if strings.Contains(httpError, "connection timed out") {
 			StatusCode = 408
 		}
 		headers := make(map[string]string)
-		Response := Response{StatusCode, httpError, headers}
-		
-		return cycleTLSResponse{res.options.RequestID, Response}, nil //normally return error here
-		return response, err
-		
+		respData := respData{StatusCode, httpError, headers}
+
+		return Response{res.options.RequestID, respData}, nil //normally return error here
+		// return response, err
 
 	}
 	defer resp.Body.Close()
@@ -143,9 +142,7 @@ func dispatcher(res fullRequest) (response cycleTLSResponse, err error) {
 
 	respData := respData{resp.StatusCode, string(bodyBytes), headers}
 
-
-	return cycleTLSResponse{res.options.RequestID, Response}, nil
-
+	return Response{res.options.RequestID, respData}, nil
 
 }
 
@@ -159,9 +156,8 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 	client.ReqChan <- response
 }
 
-
-func (client cycleTLS) Do(URL string, options Options, Method string) (response cycleTLSResponse, err error) {
-
+// Do creates a single request
+func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
 
 	options.URL = URL
 
@@ -174,9 +170,7 @@ func (client cycleTLS) Do(URL string, options Options, Method string) (response 
 		return response, err
 	}
 
-
-	return response, nil 
-
+	return response, nil
 }
 
 //TODO rename this
@@ -217,9 +211,7 @@ func worker(reqChan chan fullRequest, respChan chan Response) {
 		response, err := dispatcher(res)
 		if err != nil {
 			log.Print("Request Failed: " + err.Error())
-
-		}	
-
+		}
 		respChan <- response
 	}
 }

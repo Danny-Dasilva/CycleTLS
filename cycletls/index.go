@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 )
@@ -40,7 +40,7 @@ type fullRequest struct {
 	options cycleTLSRequest
 }
 
-//TODO: rename this reponse struct
+//TODO: rename this response struct
 type respData struct {
 	Status  int
 	Body    string
@@ -58,8 +58,9 @@ type CycleTLS struct {
 	ReqChan  chan fullRequest
 	RespChan chan Response
 }
+
 func lastString(ss []string) string {
-    return ss[len(ss)-1]
+	return ss[len(ss)-1]
 }
 func getWebsocketAddr() string {
 	port, exists := os.LookupEnv("WS_PORT")
@@ -108,16 +109,16 @@ func dispatcher(res fullRequest) (response Response, err error) {
 	if err != nil {
 		httpError := string(err.Error())
 		status := lastString(strings.Split(httpError, "StatusCode:"))
-		StatusCode,err := strconv.Atoi(status)
+		StatusCode, _ := strconv.Atoi(status)
 		if strings.Contains(httpError, "connection timed out") {
 			StatusCode = 408
 		}
 		headers := make(map[string]string)
-		Response := Response{StatusCode, httpError, headers}
-		
-		return cycleTLSResponse{res.options.RequestID, Response}, nil //normally return error here
-		return response, err
-		
+		respData := respData{StatusCode, httpError, headers}
+
+		return Response{res.options.RequestID, respData}, nil //normally return error here
+		// return response, err
+
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
