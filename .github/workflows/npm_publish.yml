@@ -30,7 +30,7 @@ jobs:
           working-directory: ./
         
         - name: Install deps
-          run: npm install --unsafe-perm
+          run: npm ci --unsafe-perm
 
 
           working-directory: ./

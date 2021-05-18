@@ -13,7 +13,10 @@
 // limitations under the License.
 
 // stolen from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
-package cycletls
+
+
+package main
+
 
 import (
 	"bufio"
@@ -34,7 +37,7 @@ import (
 
 // connectDialer allows to configure one-time use HTTP CONNECT client
 type connectDialer struct {
-	ProxyUrl      url.URL
+	ProxyURL      url.URL
 	DefaultHeader http.Header
 
 	Dialer net.Dialer // overridden dialer allow to control establishment of TCP connection
@@ -52,46 +55,46 @@ type connectDialer struct {
 // newConnectDialer creates a dialer to issue CONNECT requests and tunnel traffic via HTTP/S proxy.
 // proxyUrlStr must provide Scheme and Host, may provide credentials and port.
 // Example: https://username:password@golang.org:443
-func newConnectDialer(proxyUrlStr string) (proxy.ContextDialer, error) {
-	proxyUrl, err := url.Parse(proxyUrlStr)
+func newConnectDialer(proxyURLStr string) (proxy.ContextDialer, error) {
+	proxyURL, err := url.Parse(proxyURLStr)
 	if err != nil {
 		return nil, err
 	}
 
-	if proxyUrl.Host == "" {
-		return nil, errors.New("invalid url `" + proxyUrlStr +
+	if proxyURL.Host == "" {
+		return nil, errors.New("invalid url `" + proxyURLStr +
 			"`, make sure to specify full url like https://username:password@hostname.com:443/")
 	}
 
-	switch proxyUrl.Scheme {
+	switch proxyURL.Scheme {
 	case "http":
-		if proxyUrl.Port() == "" {
-			proxyUrl.Host = net.JoinHostPort(proxyUrl.Host, "80")
+		if proxyURL.Port() == "" {
+			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "80")
 		}
 	case "https":
-		if proxyUrl.Port() == "" {
-			proxyUrl.Host = net.JoinHostPort(proxyUrl.Host, "443")
+		if proxyURL.Port() == "" {
+			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "443")
 		}
 	case "":
 		return nil, errors.New("specify scheme explicitly (https://)")
 	default:
-		return nil, errors.New("scheme " + proxyUrl.Scheme + " is not supported")
+		return nil, errors.New("scheme " + proxyURL.Scheme + " is not supported")
 	}
 
 	client := &connectDialer{
-		ProxyUrl:          *proxyUrl,
+		ProxyURL:          *proxyURL,
 		DefaultHeader:     make(http.Header),
 		EnableH2ConnReuse: true,
 	}
 
-	if proxyUrl.User != nil {
-		if proxyUrl.User.Username() != "" {
+	if proxyURL.User != nil {
+		if proxyURL.User.Username() != "" {
 			// password, _ := proxyUrl.User.Password()
 			// client.DefaultHeader.Set("Proxy-Authorization", "Basic "+
 			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
 
-			username := proxyUrl.User.Username()
-			password, _ := proxyUrl.User.Password()
+			username := proxyURL.User.Username()
+			password, _ := proxyURL.User.Password()
 
 			// client.DefaultHeader.SetBasicAuth(username, password)
 			auth := username + ":" + password
@@ -107,7 +110,7 @@ func (c *connectDialer) Dial(network, address string) (net.Conn, error) {
 	return c.DialContext(context.Background(), network, address)
 }
 
-// Users of context.WithValue should define their own types for keys
+// ContextKeyHeader Users of context.WithValue should define their own types for keys
 type ContextKeyHeader struct{}
 
 // ctx.Value will be inspected for optional ContextKeyHeader{} key, with `http.Header` value,
@@ -127,7 +130,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			req.Header[k] = v
 		}
 	}
-	connectHttp2 := func(rawConn net.Conn, h2clientConn *http2.ClientConn) (net.Conn, error) {
+	connectHTTP2 := func(rawConn net.Conn, h2clientConn *http2.ClientConn) (net.Conn, error) {
 		req.Proto = "HTTP/2.0"
 		req.ProtoMajor = 2
 		req.ProtoMinor = 0
@@ -144,10 +147,10 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			_ = rawConn.Close()
 			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status + "StatusCode:" + strconv.Itoa(resp.StatusCode))
 		}
-		return newHttp2Conn(rawConn, pw, resp.Body), nil
+		return newHTTP2Conn(rawConn, pw, resp.Body), nil
 	}
 
-	connectHttp1 := func(rawConn net.Conn) (net.Conn, error) {
+	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
 		req.Proto = "HTTP/1.1"
 		req.ProtoMajor = 1
 		req.ProtoMinor = 1
@@ -180,7 +183,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 				cc := c.cachedH2ClientConn
 				c.cacheH2Mu.Unlock()
 				unlocked = true
-				proxyConn, err := connectHttp2(rc, cc)
+				proxyConn, err := connectHTTP2(rc, cc)
 				if err == nil {
 					return proxyConn, err
 				}
@@ -195,24 +198,24 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 	var err error
 	var rawConn net.Conn
 	negotiatedProtocol := ""
-	switch c.ProxyUrl.Scheme {
+	switch c.ProxyURL.Scheme {
 	case "http":
-		rawConn, err = c.Dialer.DialContext(ctx, network, c.ProxyUrl.Host)
+		rawConn, err = c.Dialer.DialContext(ctx, network, c.ProxyURL.Host)
 		if err != nil {
 			return nil, err
 		}
 	case "https":
 		if c.DialTLS != nil {
-			rawConn, negotiatedProtocol, err = c.DialTLS(network, c.ProxyUrl.Host)
+			rawConn, negotiatedProtocol, err = c.DialTLS(network, c.ProxyURL.Host)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			tlsConf := tls.Config{
 				NextProtos: []string{"h2", "http/1.1"},
-				ServerName: c.ProxyUrl.Hostname(),
+				ServerName: c.ProxyURL.Hostname(),
 			}
-			tlsConn, err := tls.Dial(network, c.ProxyUrl.Host, &tlsConf)
+			tlsConn, err := tls.Dial(network, c.ProxyURL.Host, &tlsConf)
 			if err != nil {
 				return nil, err
 			}
@@ -224,14 +227,14 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			rawConn = tlsConn
 		}
 	default:
-		return nil, errors.New("scheme " + c.ProxyUrl.Scheme + " is not supported")
+		return nil, errors.New("scheme " + c.ProxyURL.Scheme + " is not supported")
 	}
 
 	switch negotiatedProtocol {
 	case "":
 		fallthrough
 	case "http/1.1":
-		return connectHttp1(rawConn)
+		return connectHTTP1(rawConn)
 	case "h2":
 		t := http2.Transport{}
 		h2clientConn, err := t.NewClientConn(rawConn)
@@ -240,7 +243,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			return nil, err
 		}
 
-		proxyConn, err := connectHttp2(rawConn, h2clientConn)
+		proxyConn, err := connectHTTP2(rawConn, h2clientConn)
 		if err != nil {
 			_ = rawConn.Close()
 			return nil, err
@@ -259,7 +262,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 	}
 }
 
-func newHttp2Conn(c net.Conn, pipedReqBody *io.PipeWriter, respBody io.ReadCloser) net.Conn {
+func newHTTP2Conn(c net.Conn, pipedReqBody *io.PipeWriter, respBody io.ReadCloser) net.Conn {
 	return &http2Conn{Conn: c, in: pipedReqBody, out: respBody}
 }
 
