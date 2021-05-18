@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // stolen from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
-package main
+package cycletls
 
 import (
 	"bufio"
@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 
 	"golang.org/x/net/http2"
@@ -141,7 +142,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 
 		if resp.StatusCode != http.StatusOK {
 			_ = rawConn.Close()
-			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status)
+			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status + "StatusCode:" + strconv.Itoa(resp.StatusCode))
 		}
 		return newHttp2Conn(rawConn, pw, resp.Body), nil
 	}
@@ -165,7 +166,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 
 		if resp.StatusCode != http.StatusOK {
 			_ = rawConn.Close()
-			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status)
+			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status + " StatusCode:" + strconv.Itoa(resp.StatusCode))
 		}
 		return rawConn, nil
 	}

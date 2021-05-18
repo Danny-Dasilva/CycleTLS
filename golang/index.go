@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 )
@@ -52,7 +53,9 @@ type cycleTLS struct {
 	ReqChan  chan fullRequest
 	RespChan chan cycleTLSResponse
 }
-
+func lastString(ss []string) string {
+    return ss[len(ss)-1]
+}
 func getWebsocketAddr() string {
 	port, exists := os.LookupEnv("WS_PORT")
 
@@ -95,15 +98,27 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 }
 
-func dispatcher(res fullRequest) (response cycleTLSResponse) {
+func dispatcher(res fullRequest) (response cycleTLSResponse, err error) {
 	resp, err := res.client.Do(res.req)
 	if err != nil {
-		log.Print("Request Failed: " + err.Error())
+		httpError := string(err.Error())
+		status := lastString(strings.Split(httpError, "StatusCode:"))
+		StatusCode,err := strconv.Atoi(status)
+		if strings.Contains(httpError, "connection timed out") {
+			StatusCode = 408
+		}
+		headers := make(map[string]string)
+		Response := Response{StatusCode, httpError, headers}
+		
+		return cycleTLSResponse{res.options.RequestID, Response}, nil //normally return error here
+		return response, err
+		
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("Parse Bytes" + err.Error())
+		return response, err
 	}
 
 	headers := make(map[string]string)
@@ -111,6 +126,7 @@ func dispatcher(res fullRequest) (response cycleTLSResponse) {
 	for name, values := range resp.Header {
 		if name == "Set-Cookie" {
 			headers[name] = strings.Join(values, "/,/")
+			log.Println(strings.Join(values, "/,/"))
 		} else {
 			for _, value := range values {
 				headers[name] = value
@@ -120,7 +136,7 @@ func dispatcher(res fullRequest) (response cycleTLSResponse) {
 
 	Response := Response{resp.StatusCode, string(bodyBytes), headers}
 
-	return cycleTLSResponse{res.options.RequestID, Response}
+	return cycleTLSResponse{res.options.RequestID, Response}, nil
 
 }
 
@@ -133,16 +149,20 @@ func (client cycleTLS) Queue(URL string, options Options, Method string) {
 	client.ReqChan <- response
 }
 
-func (client cycleTLS) Do(URL string, options Options, Method string) (response cycleTLSResponse) {
+func (client cycleTLS) Do(URL string, options Options, Method string) (response cycleTLSResponse, err error) {
 
 	options.URL = URL
 
 	opt := cycleTLSRequest{"n", options}
 
 	res := processRequest(opt)
-	response = dispatcher(res)
+	response, err = dispatcher(res)
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+		return response, err
+	}
 
-	return
+	return response, nil 
 }
 
 func Init(workers ...bool) *cycleTLS {
@@ -177,7 +197,10 @@ func workerPool(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
 // Worker
 func worker(reqChan chan fullRequest, respChan chan cycleTLSResponse) {
 	for res := range reqChan {
-		response := dispatcher(res)
+		response, err := dispatcher(res)
+		if err != nil {
+			log.Print("Request Failed: " + err.Error())
+		}	
 		respChan <- response
 	}
 }
