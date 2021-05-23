@@ -132,7 +132,6 @@ func dispatcher(res fullRequest) (response Response, err error) {
 	for name, values := range resp.Header {
 		if name == "Set-Cookie" {
 			headers[name] = strings.Join(values, "/,/")
-			log.Println(strings.Join(values, "/,/"))
 		} else {
 			for _, value := range values {
 				headers[name] = value

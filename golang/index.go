@@ -132,7 +132,6 @@ func dispatcher(res fullRequest) (response Response, err error) {
 	for name, values := range resp.Header {
 		if name == "Set-Cookie" {
 			headers[name] = strings.Join(values, "/,/")
-			log.Println(strings.Join(values, "/,/"))
 		} else {
 			for _, value := range values {
 				headers[name] = value
@@ -220,14 +219,14 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 	for {
 		_, message, err := c.ReadMessage()
 		if err != nil {
-			log.Print(err)
+			log.Print("Socket Error",err)
 			continue
 		}
 		request := new(cycleTLSRequest)
 
 		err = json.Unmarshal(message, &request)
 		if err != nil {
-			log.Print(err)
+			log.Print("Unmarshal Error:",err)
 			return
 		}
 
@@ -270,7 +269,7 @@ func main() {
 	websocketAddress := getWebsocketAddr()
 	c, _, err := websocket.DefaultDialer.Dial(websocketAddress, nil)
 	if err != nil {
-		log.Print(err)
+		log.Println("Create Socket Error: ", err)
 		return
 	}
 
