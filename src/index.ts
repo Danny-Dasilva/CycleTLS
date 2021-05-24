@@ -65,10 +65,10 @@ class Golang extends EventEmitter {
         const [requestId, error] = splitRequestIdAndError;
         this.emit(requestId, { error: new Error(error) });
       } else {
-        console.log(stderr.toString())
         debug
           ? cleanExit(new Error(stderr))
-          : cleanExit(new Error('Invalid JA3 hash. Exiting... (Golang wrapper exception)'));
+          //TODO add Correct error logging url request/ response/ 
+          : cleanExit(new Error('Error Exiting ... (Golang wrapper exception)'));
       }
     });
 
@@ -119,7 +119,7 @@ const initCycleTLS = async (
     let { port, debug } = initOptions;
 
     if (!port) port = 9119;
-    if (!debug) debug = false;
+    if (!debug) debug = true;
 
     const instance = new Golang(port, debug);
 
