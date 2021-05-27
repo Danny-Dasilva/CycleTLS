@@ -1,6 +1,9 @@
 #!/bin/bash
-shopt -s nocasematch
-echo -n "Enter test file
-Input:"
-read account 
-tsc examples/$account.ts && node examples/$account.js
+while getopts f: flag
+do
+    case "${flag}" in
+        f) filename=${OPTARG};;
+    esac
+done
+
+tsc examples/$filename.ts && node examples/$filename.js
