@@ -59,7 +59,7 @@ func newConnectDialer(proxyURLStr string) (proxy.ContextDialer, error) {
 		return nil, err
 	}
 
-	if proxyURL.Host == "" {
+	if proxyURL.Host == "" || proxyURL.Host == "undefined" {
 		return nil, errors.New("invalid url `" + proxyURLStr +
 			"`, make sure to specify full url like https://username:password@hostname.com:443/")
 	}
