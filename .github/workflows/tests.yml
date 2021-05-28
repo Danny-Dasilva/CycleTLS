@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
     release:
-        name: test npm publish
+        name: Run general NPM unit and itegration tests
         runs-on: ubuntu-latest
         strategy: 
           matrix:
@@ -27,12 +27,9 @@ jobs:
           working-directory: ./
 
 
-        - name: Add type definitions
+        - name: Install npm depencencies
           run: npm ci
           working-directory: ./
-
-
-
 
         - name: Run Tests
           run: npm test

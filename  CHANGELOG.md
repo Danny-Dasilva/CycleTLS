@@ -14,6 +14,7 @@ New Jest CI Tests and general bugfixes
 - Add Jest integration tests
 - Add Github actions for the above integration test
 - Add Cycletls exit api once requests are finished
+- CI fixes
 - Add Changelog 
 
 ## 0.0.8 - (06-24-2020)
