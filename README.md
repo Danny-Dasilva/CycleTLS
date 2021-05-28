@@ -64,6 +64,8 @@ const initCycleTLS = require('cycletls');
     response.then((out) => {
       console.log(out)
     })
+	
+	cycleTLS.exit()
 
 })();
 
