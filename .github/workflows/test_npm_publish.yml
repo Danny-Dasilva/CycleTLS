@@ -27,7 +27,7 @@ jobs:
           working-directory: ./
 
 
-        - name: Add type definitions
+        - name: Install npm depencencies
           run: npm ci
           working-directory: ./
 
