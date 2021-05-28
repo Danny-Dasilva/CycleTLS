@@ -1,6 +1,5 @@
 
-import initCycleTLS  from '../dist/index.js'
-import {killProcess}  from '../dist/index.js'
+import initCycleTLS from '../dist/index.js'
 
 const { performance } = require('perf_hooks');
 
@@ -79,9 +78,9 @@ const myRequests: Request[] = [
 ];
 
 
-test('Should Return 200 for all responses' ,async () => {
+test('Should Return 200 for all responses', async () => {
     const cycleTLS = await initCycleTLS();
-    
+
     for (let request of myRequests) {
         const response = await cycleTLS(request.url, {
             body: request.body,
@@ -91,15 +90,10 @@ test('Should Return 200 for all responses' ,async () => {
             cookies: request.cookies
         }, request.method);
 
-     
 
-            // console.log(request.url, response)
         expect(response.status).toBe(200)
-
-        
-
     }
     cycleTLS.exit()
-   
+
 });
 
