@@ -113,6 +113,9 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		if strings.Contains(httpError, "connection timed out") {
 			StatusCode = 408
 		}
+		if strings.Contains(httpError, "connection refused") {
+			StatusCode = 407
+		}
 		headers := make(map[string]string)
 		respData := respData{StatusCode, httpError, headers}
 

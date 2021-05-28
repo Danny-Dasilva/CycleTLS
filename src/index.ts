@@ -26,9 +26,13 @@ export interface CycleTLSResponse {
 let child: ChildProcessWithoutNullStreams;
 
 const cleanExit = (message?: string | Error) => {
-  if (message) console.log(message);
-  child.kill();
+  if (message) {
+    console.log(message);
+  }
+ 
+  process.kill(-child.pid)
   process.exit();
+      
 };
 process.on('SIGINT', () => cleanExit());
 process.on('SIGTERM', () => cleanExit());
@@ -52,23 +56,23 @@ class Golang extends EventEmitter {
       cleanExit(new Error('Operating system not supported'));
     }
 
-    child = spawn(path.join(__dirname, executableFilename), {
+    child = spawn(path.join(`"${__dirname}"`, executableFilename), {
       env: { WS_PORT: port.toString() },
       shell: true,
       windowsHide: true,
+      detached: true,
     });
 
     child.stderr.on('data', (stderr) => {
-      
       if (stderr.toString().includes('Request_Id_On_The_Left')) {
         const splitRequestIdAndError = stderr.toString().split('Request_Id_On_The_Left');
         const [requestId, error] = splitRequestIdAndError;
         this.emit(requestId, { error: new Error(error) });
       } else {
-        console.log(stderr.toString())
         debug
           ? cleanExit(new Error(stderr))
-          : cleanExit(new Error('Invalid JA3 hash. Exiting... (Golang wrapper exception)'));
+          //TODO add Correct error logging url request/ response/ 
+          : cleanExit(new Error('Error Exiting ... (Golang wrapper exception)'));
       }
     });
 
@@ -77,7 +81,7 @@ class Golang extends EventEmitter {
       
 
       ws.on('message', (data: string) => {
-        
+
         const message = JSON.parse(data);
         this.emit(message.RequestID, message.Response);
       });
@@ -91,6 +95,10 @@ class Golang extends EventEmitter {
     }
   ) {
     [...this.server.clients][0].send(JSON.stringify({ requestId, options }));
+  }
+
+  exit() {
+    this.server.close()
   }
 }
 
@@ -114,15 +122,15 @@ const initCycleTLS = async (
   options(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   connect(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   patch(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  exit():undefined;
 }> => {
   return new Promise((resolveReady) => {
     let { port, debug } = initOptions;
 
     if (!port) port = 9119;
-    if (!debug) debug = false;
+    if (!debug) debug = true;
 
     const instance = new Golang(port, debug);
-
     instance.on('ready', () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
@@ -196,6 +204,11 @@ const initCycleTLS = async (
         CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, 'patch');
         };
+        CycleTLS.exit = (): undefined => {
+          process.kill(-child.pid)
+          instance.exit()
+          return
+        };
 
         return CycleTLS;
       })();
@@ -207,6 +220,8 @@ const initCycleTLS = async (
 export default initCycleTLS;
 
 // CommonJS support for default export
-module.exports = initCycleTLS;
+module.exports = {
+  initCycleTLS: initCycleTLS,
+}
 module.exports.default = initCycleTLS;
 module.exports.__esModule = true;
