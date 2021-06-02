@@ -10,7 +10,7 @@ More documentation coming soon
 	
 	
 
-![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/test.yml/badge.svg)
+![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/tests.yml/badge.svg)
 [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
 [![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg?)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls?)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
@@ -65,7 +65,7 @@ const initCycleTLS = require('cycletls');
       console.log(out)
     })
 	
-	cycleTLS.exit()
+    cycleTLS.exit()
 
 })();
 
