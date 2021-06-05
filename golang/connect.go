@@ -113,7 +113,7 @@ type ContextKeyHeader struct{}
 
 // ctx.Value will be inspected for optional ContextKeyHeader{} key, with `http.Header` value,
 // which will be added to outgoing request headers, overriding any colliding c.DefaultHeader
-func (c *connectDialer) DialContext(ctx context.Context, network, address string) (net.Conn, 	) {
+func (c *connectDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	req := (&http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Host: address},
