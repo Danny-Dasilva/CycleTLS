@@ -4,7 +4,7 @@
 ### Release Highlights
 New Error Handling and bufixes
 ### Bug Fixes
-- Address Ticket [initCycleTLS is not a function](https://github.com/Danny-Dasilva/CycleTLS/issues/26) 
+- Address Ticket [initCycleTLS is not a function](https://github.com/Danny-Dasilva/CycleTLS/issues/26) with added unit test
 - Add type hints in TLS transport map
 
 ### Enhancements
