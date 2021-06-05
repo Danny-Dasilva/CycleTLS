@@ -23,8 +23,8 @@ var errProtocolNegotiated = errors.New("protocol negotiated")
 
 type errExtensionNotExist string
 
-func (e errExtensionNotExist) Error() string {
-	return fmt.Sprintf("Extension does not exist: %s\n", e)
+func (err errExtensionNotExist) Error() string {
+	return fmt.Sprintf("Extension does not exist: %s\n", err)
 }
 
 type roundTripper struct {
@@ -218,7 +218,7 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		targetCurves = append(targetCurves, utls.CurveID(cid))
 	}
-	extMap["10"] = &utls.SupportedCurvesExtension{targetCurves}
+	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
 
 	// parse point formats
 	var targetPointFormats []byte
@@ -298,17 +298,17 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"27": &utls.FakeCertCompressionAlgsExtension{},
 		"28": &utls.FakeRecordSizeLimitExtension{},
 		"35": &utls.SessionTicketExtension{},
-		"43": &utls.SupportedVersionsExtension{[]uint16{
+		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
 			utls.GREASE_PLACEHOLDER,
 			utls.VersionTLS13,
 			utls.VersionTLS12,
 			utls.VersionTLS11,
 			utls.VersionTLS10}},
 		"44": &utls.CookieExtension{},
-		"45": &utls.PSKKeyExchangeModesExtension{[]uint8{
+		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 			utls.PskModeDHE,
 		}},
-		"51": &utls.KeyShareExtension{[]utls.KeyShare{{Group: utls.X25519},
+		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{{Group: utls.X25519},
 			{Group: utls.CurveP256}}},
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{

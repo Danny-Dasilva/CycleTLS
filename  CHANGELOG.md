@@ -1,7 +1,17 @@
 # CycleTLS Changelog
 
+## 0.0.10 - (06-4-2020)
+### Release Highlights
+New Error Handling and bufixes
+### Bug Fixes
+- Address Ticket [initCycleTLS is not a function](https://github.com/Danny-Dasilva/CycleTLS/issues/26) with added unit test
+- Add type hints in TLS transport map
 
-## 0.0.9 - (06-28-2020)
+### Enhancements
+- New Errors file for checking proxy errors
+- Timeout now hard coded to 6 seconds
+
+## 0.0.9 - (05-28-2020)
 ### Release Highlights
 New Jest CI Tests and general bugfixes
 
@@ -17,7 +27,7 @@ New Jest CI Tests and general bugfixes
 - CI fixes
 - Add Changelog 
 
-## 0.0.8 - (06-24-2020)
+## 0.0.8 - (05-24-2020)
 ### Release Highlights
 add fix for crashing js instance
 
@@ -25,17 +35,10 @@ add fix for crashing js instance
 - Fmt or Log printing in golang was causing crashing issues
 
 
-## 0.0.7 - (06-18-2020)
+## 0.0.7 - (05-18-2020)
 ### Release Highlights
 New error logging addition
 
 ### Bug Fixes
 - Failed timeout requests will now return a 408 instead of crashing the instance, this will help CycleTLS run through Proxy Lists without crashing
 
-
-## 0.0.7 - (06-18-2020)
-### Release Highlights
-New error logging addition
-
-### Bug Fixes
-- Failed timeout requests will now return a 408 instead of crashing the instance, this will help CycleTLS run through Proxy Lists without crashing
