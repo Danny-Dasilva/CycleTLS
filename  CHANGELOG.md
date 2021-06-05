@@ -8,7 +8,7 @@ New Error Handling and bufixes
 - Add type hints in TLS transport map
 
 ### Enhancements
-- New Errors file for checking proxy error
+- New Errors file for checking proxy errors
 - Timeout now hard coded to 6 seconds
 
 ## 0.0.9 - (05-28-2020)

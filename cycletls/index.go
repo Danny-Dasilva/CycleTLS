@@ -212,14 +212,14 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 	for {
 		_, message, err := c.ReadMessage()
 		if err != nil {
-			log.Print("Socket Error",err)
+			log.Print("Socket Error", err)
 			continue
 		}
 		request := new(cycleTLSRequest)
 
 		err = json.Unmarshal(message, &request)
 		if err != nil {
-			log.Print("Unmarshal Error",err)
+			log.Print("Unmarshal Error", err)
 			return
 		}
 

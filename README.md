@@ -5,7 +5,7 @@
 Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info 
 
 
-More documentation coming soon
+![Changelog](https://github.com/Danny-Dasilva/CycleTLS/blob/main/%20CHANGELOG.md) More documentation coming soon
 
 	
 	
