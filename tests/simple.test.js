@@ -1,9 +1,9 @@
 
-const initCycleTLS = require('cycletls');
+const initCycleTLS = require('../dist/index.js');
 
 
 test('Should Return 200', async () => {
-    const cycleTLS = await initCycleTLS();
+    const cycleTLS = await initCycleTLS({port: 9118});
 
     const response = cycleTLS.get('https://ja3er.com/json', {
       body: '',
@@ -12,7 +12,7 @@ test('Should Return 200', async () => {
     });
 
     response.then((out) => {
-      console.log(out)
+      expect(out.status).toBe(200); //Process request
     })
 	
     cycleTLS.exit()

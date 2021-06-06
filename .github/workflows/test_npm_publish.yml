@@ -1,39 +1,35 @@
 name: "🚨 🟢 Npm Test publish"
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
-    release:
-        name: test npm publish
-        runs-on: ubuntu-latest
-        strategy: 
-          matrix:
-            node-version: [15.x]
-        steps:
-        - uses: actions/checkout@v2
-        - name: 🟢 Use Node.js ${{ matrix.node-version }}
-          uses: actions/setup-node@v1
-          with:
-            node-version: ${{ matrix.node-version }}
-            registry-url: 'https://registry.npmjs.org'
+  release:
+    name: test npm publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [15.x]
+    steps:
+      - uses: actions/checkout@v2
+      - name: 🟢 Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: "https://registry.npmjs.org"
 
-        - name: Set up Go
-          uses: actions/setup-go@v2
-          with:
-            go-version: ${{ matrix.go-version }}
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
 
-        - name: Install golang dependencies
-          run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
-          working-directory: ./
+      - name: Install golang dependencies
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
+        working-directory: ./
 
+      - name: Install npm depencencies
+        run: npm ci
+        working-directory: ./
 
-        - name: Install npm depencencies
-          run: npm ci
-          working-directory: ./
-
-
-
-
-        - name: 🚀 publish
-          run: npm publish --dry-run
-          working-directory: ./
+      - name: 🚀 publish
+        run: npm publish --dry-run
+        working-directory: ./

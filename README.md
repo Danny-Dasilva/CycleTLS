@@ -39,13 +39,11 @@ $ npm install cycletls
 ```
 
 
-# Example for TS/JS
+# Single Request Example for TS/JS
 
-this is in tests/main.ts
+this is in `tests/simple.test.ts`
 
-see run.sh script for local testing
-
-```ts
+```js
 
 const initCycleTLS = require('cycletls');
 // Typescript: import initCycleTLS from 'cycletls';
@@ -53,21 +51,81 @@ const initCycleTLS = require('cycletls');
 (async () => {
   const cycleTLS = await initCycleTLS();
 
-    const response = cycleTLS('https://ja3er.com/json', {
+    const response = await cycleTLS('https://ja3er.com/json', {
       body: '',
       ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
       userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
       proxy: 'http://username:password@hostname.com:443'
     }, 'get');
 
-    response.then((out) => {
-      console.log(out)
-    })
-	
-    cycleTLS.exit()
+    console.log(response);
+
+  	cycleTLS.exit();
 
 })();
 
+```
+
+# Multiple Requests Example for TS/JS
+
+The Golang process executes all CycleTLS calls from the Typescript side `concurrrently` in a Worker Pool. This means objects are returned as soon as they are processed.
+
+The below example shows how to cleanly exit on multiple calls, You can ignore the `promises` object if you wish to run this without cleanly exiting. Keep in mind `cycleTLS.exit()` will kill any running requests and cleanly exit. 
+
+```js
+const initCycleTLS = require("cycletls");
+// Typescript: import initCycleTLS from 'cycletls';
+
+let ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0";
+let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36";
+var requestDict = { //three urls used as an examle
+  "https://httpbin.org/user-agent": {
+    ja3: ja3,
+    userAgent: userAgent,
+  },
+  "http://httpbin.org/post": {
+    body: '{"field":"POST-VAL"}',
+    method: "POST",
+  },
+  "http://httpbin.org/cookies": {
+    cookies: [
+      {
+        name: "example1",
+        value: "aaaaaaa",
+        expires: "Mon, 02-Jan-2022 15:04:05 EST",
+      },
+    ],
+  },
+};
+
+const promises = [];
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  for (const url in requestDict) {
+    const params = requestDict[url]; //get request params
+
+    const response = cycleTLS(
+      url, {
+        body: params.body ?? "", //?? is just setting defaults in this case
+        ja3: params.ja3 ?? ja3,
+        userAgent: params.userAgent ?? userAgent,
+        headers: params.headers,
+        cookies: params.cookies,
+      }, params.method ?? "GET");
+
+    response.then((out) => {
+      console.log(url, out); //Process request
+    });
+
+    promises.push(response); //Add request to promises array
+  }
+
+  Promise.all(promises).then(() => {
+    cycleTLS.exit();
+  }); //Check for all requests to process then exit
+})();
 ```
 
 
