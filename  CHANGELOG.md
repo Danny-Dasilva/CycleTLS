@@ -1,5 +1,17 @@
 # CycleTLS Changelog
 
+## 0.0.11 - (06-6-2020)
+### Release Highlights
+Memory leak fixes and Clean Exit 
+### Bug Fixes
+- Address Ticket [Memory Leak on Exit ](https://github.com/Danny-Dasilva/CycleTLS/issues/28) with added unit test
+- General Linting on yaml files
+
+### Enhancements
+- CI/CD changes for js tests
+- New Jest test for clean exit 
+- Update ReadMe
+
 ## 0.0.10 - (06-4-2020)
 ### Release Highlights
 New Error Handling and bufixes
