@@ -205,14 +205,21 @@ const initCycleTLS = async (
           return CycleTLS(url, options, 'patch');
         };
         CycleTLS.exit = (): undefined => {
-          if (process.platform == 'win32') {
-            exec('taskkill /pid ' + child.pid + ' /T /F')
-          } else { //linux/darwin os
-            process.kill(-child.pid);
+          try {
+
+            if (process.platform == 'win32') {
+              exec('taskkill /pid ' + child.pid + ' /T /F')
+            } else { //linux/darwin os
+              process.kill(-child.pid);
+            }
+            process.kill(-child.pid)
+            instance.exit()
+            return
+
+          } catch (e) {
+            console.log("Error terminating socket/golang instance:", e)
           }
-          process.kill(-child.pid)
-          instance.exit()
-          return
+          
         };
 
         return CycleTLS;
