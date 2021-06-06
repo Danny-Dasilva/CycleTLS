@@ -27,7 +27,7 @@ const promises = [];
 
 test("Multiple Request example", async () => {
 
-    const cycleTLS = await initCycleTLS(9117);
+    const cycleTLS = await initCycleTLS({port: 9117});
 
     for (const url in requestDict) {
       const params = requestDict[url]; //get request params
