@@ -12,7 +12,7 @@ test('Should Return 200', async () => {
     });
 
     response.then((out) => {
-      console.log(out)
+      expect(out.status).toBe(200); //Process request
     })
 	
     cycleTLS.exit()

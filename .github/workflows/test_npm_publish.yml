@@ -1,6 +1,6 @@
 name: "🚨 🟢 Npm Test publish"
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   release:
