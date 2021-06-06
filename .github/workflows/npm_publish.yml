@@ -1,56 +1,53 @@
 name: "🚀 🟢 Npm Publish"
 
 on:
-    push:
-      branches: [ main ]
+  push:
+    branches: [main]
 
 jobs:
-    release:
-        name: 🚀 Npm Publish
-        runs-on: ubuntu-latest
+  release:
+    name: 🚀 Npm Publish
+    runs-on: ubuntu-latest
 
-        if: "startsWith(github.event.head_commit.message, '🚀')"
+    if: "startsWith(github.event.head_commit.message, '🚀')"
 
-        strategy: 
-          matrix:
-            node-version: [15.x]
-        steps:
-        - uses: actions/checkout@v2
-        - name: 🟢 Use Node.js ${{ matrix.node-version }}
-          uses: actions/setup-node@v1
-          with:
-            node-version: ${{ matrix.node-version }}
-            registry-url: 'https://registry.npmjs.org'
+    strategy:
+      matrix:
+        node-version: [15.x]
+    steps:
+      - uses: actions/checkout@v2
+      - name: 🟢 Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: "https://registry.npmjs.org"
 
-            token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 
+      - name: Install golang dependencies
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
+        working-directory: ./
 
-        - name: Install golang dependencies
-          run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
-          working-directory: ./
-        
-        - name: Install deps
-          run: npm ci --unsafe-perm
+      - name: Install deps
+        run: npm ci --unsafe-perm
 
+        working-directory: ./
 
-          working-directory: ./
+      - name: List changes
+        run: git status --verbose
+        working-directory: ./
 
-        - name: List changes
-          run: git status --verbose
-          working-directory: ./
+      - name: set name
+        run: git config --global user.name 'Danny-Dasilva'
+      - name: set email
+        run: git config --global user.email 'secrets.EMAIL'
+      - name: bump version
+        run: npm version patch -m "Release"
+      - name: Push git
+        run: git push
 
-        - name: set name
-          run: git config --global user.name 'Danny-Dasilva'
-        - name: set email
-          run: git config --global user.email 'secrets.EMAIL'
-        - name: bump version
-          run: npm version patch -m "Release"
-        - name: Push git
-          run: git push
-
-
-        - name: 🚀 Publish
-          run: npm publish
-          working-directory: ./
-          env:
-              NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+      - name: 🚀 Publish
+        run: npm publish
+        working-directory: ./
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
