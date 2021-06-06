@@ -212,7 +212,6 @@ const initCycleTLS = async (
             } else { //linux/darwin os
               process.kill(-child.pid);
             }
-            process.kill(-child.pid)
             instance.exit()
             return
 
