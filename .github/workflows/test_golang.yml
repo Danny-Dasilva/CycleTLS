@@ -1,10 +1,8 @@
 name: 🚨 🐹 Go Tests
 
-
 on: [push, pull_request]
 
 jobs:
-
   test:
     strategy:
       matrix:
@@ -13,21 +11,21 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ matrix.go-version }}
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
 
-    - name: Build
-      working-directory: ./cycletls
-      run: go build -v ./...
+      - name: Build
+        working-directory: ./cycletls
+        run: go build -v ./...
 
-    - name: Unit Test
-      working-directory: ./cycletls
-      run: go test --race -v ./...
+      - name: Unit Test
+        working-directory: ./cycletls
+        run: go test --race -v ./...
 
-    - name: Integration Tests
-      working-directory: ./cycletls
-      run: go test --race -v -tags=integration ./...
+      - name: Integration Tests
+        working-directory: ./cycletls
+        run: go test --race -v -tags=integration ./...
