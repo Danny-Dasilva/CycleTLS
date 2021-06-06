@@ -1,5 +1,5 @@
 
-const initCycleTLS = require('cycletls');
+const initCycleTLS = require('../dist/index.js');
 
 
 test('Should Return 200', async () => {
