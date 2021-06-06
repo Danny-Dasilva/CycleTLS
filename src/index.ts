@@ -1,4 +1,4 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, exec, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { Server } from 'ws';
@@ -29,10 +29,10 @@ const cleanExit = (message?: string | Error) => {
   if (message) {
     console.log(message);
   }
- 
+
   process.kill(-child.pid)
   process.exit();
-      
+
 };
 process.on('SIGINT', () => cleanExit());
 process.on('SIGTERM', () => cleanExit());
@@ -78,7 +78,7 @@ class Golang extends EventEmitter {
 
     this.server.on('connection', (ws) => {
       this.emit('ready');
-      
+
 
       ws.on('message', (data: string) => {
 
@@ -122,7 +122,7 @@ const initCycleTLS = async (
   options(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   connect(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   patch(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
-  exit():undefined;
+  exit(): undefined;
 }> => {
   return new Promise((resolveReady) => {
     let { port, debug } = initOptions;
@@ -205,6 +205,11 @@ const initCycleTLS = async (
           return CycleTLS(url, options, 'patch');
         };
         CycleTLS.exit = (): undefined => {
+          if (process.platform == 'win32') {
+            exec('taskkill /pid ' + child.pid + ' /T /F')
+          } else { //linux/darwin os
+            process.kill(-child.pid);
+          }
           process.kill(-child.pid)
           instance.exit()
           return
