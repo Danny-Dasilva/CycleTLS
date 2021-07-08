@@ -1,18 +1,30 @@
 package main
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
+	// "runtime"
 	"strings"
-	"time"
+	// "time"
+	// "io"
+	"google.golang.org/grpc"
 
-	"github.com/gorilla/websocket"
+
+	"fmt"
+
+
+	"net"
+
+
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/examples/data"
+	// "github.com/gorilla/websocket"
+	pb "github.com/Danny-Dasilva/gRPC-Tests/bidirectional/js-test/cycletlsproto"
 )
 
 // Options sets CycleTLS client options
@@ -24,7 +36,7 @@ type Options struct {
 	Ja3       string            `json:"ja3"`
 	UserAgent string            `json:"userAgent"`
 	Proxy     string            `json:"proxy"`
-	Cookies   []Cookie          `json:"cookies"`
+	Cookies   string        	`json:"cookies"`
 }
 
 type cycleTLSRequest struct {
@@ -36,7 +48,7 @@ type cycleTLSRequest struct {
 type fullRequest struct {
 	req     *http.Request
 	client  http.Client
-	options cycleTLSRequest
+	options pb.Options
 }
 
 //TODO: rename this response struct
@@ -74,7 +86,7 @@ func getWebsocketAddr() string {
 }
 
 // ready Request
-func processRequest(request cycleTLSRequest) (result fullRequest) {
+func processRequest(request pb.CycleTLSRequest) (result fullRequest) {
 
 	var browser = browser{
 		JA3:       request.Options.Ja3,
@@ -91,25 +103,25 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		log.Print(request.RequestID + "Request_Id_On_The_Left" + err.Error())
 		return
 	}
-	for k, v := range request.Options.Headers {
-		if k != "host" {
-			req.Header.Set(k, v)
-		}
-	}
-	return fullRequest{req: req, client: client, options: request}
+	// for k, v := range request.Options.Headers {
+	// 	if k != "host" {
+	// 		req.Header.Set(k, v)
+	// 	}
+	// } TODO fix this
+	return fullRequest{req: req, client: client, options: *request.Options}
 
 }
 
-func dispatcher(res fullRequest) (response Response, err error) {
+func dispatcher(res fullRequest) (response pb.Response, err error) {
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		respData := respData{parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}
-
-		return Response{res.options.RequestID, respData}, nil //normally return error here
+		//TODO fix RequestID
+		response := pb.Response{Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers}
+		return response, err
 		// return response, err
 
 	}
@@ -132,55 +144,54 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		}
 	}
 
-	respData := respData{resp.StatusCode, string(bodyBytes), headers}
-
-	return Response{res.options.RequestID, respData}, nil
-
-}
-
-// Queue queues request in worker pool
-func (client CycleTLS) Queue(URL string, options Options, Method string) {
-
-	options.URL = URL
-	//TODO add timestamp to request
-	opt := cycleTLSRequest{"n", options}
-	response := processRequest(opt)
-	client.ReqChan <- response
-}
-
-// Do creates a single request
-func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
-
-	options.URL = URL
-
-	opt := cycleTLSRequest{"n", options}
-
-	res := processRequest(opt)
-	response, err = dispatcher(res)
-	if err != nil {
-		log.Print("Request Failed: " + err.Error())
-		return response, err
-	}
-
+	response = pb.Response{Status: int32(resp.StatusCode), Body: string(bodyBytes), Headers: headers}
 	return response, nil
+
 }
+
+// Queue queues request in worker pool TODO fix this
+// func (client CycleTLS) Queue(URL string, options Options, Method string) {
+
+// 	options.URL = URL
+// 	//TODO add timestamp to request
+// 	opt := cycleTLSRequest{"n", options}
+// 	response := processRequest(opt)
+// 	client.ReqChan <- response
+// }
+
+// // Do creates a single request //TODO fix this
+// func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
+
+// 	options.URL = URL
+
+// 	opt := cycleTLSRequest{"n", options}
+
+// 	res := processRequest(opt)
+// 	response, err = dispatcher(res)
+// 	if err != nil {
+// 		log.Print("Request Failed: " + err.Error())
+// 		return response, err
+// 	}
+
+// 	return response, nil
+// }
 
 //TODO rename this
 
-// Init starts the worker pool or returns a empty cycletls struct
-func Init(workers ...bool) CycleTLS {
+// Init starts the worker pool or returns a empty cycletls struct TODO fix this
+// func Init(workers ...bool) CycleTLS {
 
-	if len(workers) > 0 && workers[0] {
-		reqChan := make(chan fullRequest)
-		respChan := make(chan Response)
-		go workerPool(reqChan, respChan)
-		log.Println("Worker Pool Started")
+// 	if len(workers) > 0 && workers[0] {
+// 		reqChan := make(chan fullRequest)
+// 		respChan := make(chan Response)
+// 		go workerPool(reqChan, respChan)
+// 		log.Println("Worker Pool Started")
 
-		return CycleTLS{ReqChan: reqChan, RespChan: respChan}
-	}
-	return CycleTLS{}
+// 		return CycleTLS{ReqChan: reqChan, RespChan: respChan}
+// 	}
+// 	return CycleTLS{}
 
-}
+// }
 
 // Close closes channels
 func (client CycleTLS) Close() {
@@ -190,7 +201,7 @@ func (client CycleTLS) Close() {
 }
 
 // Worker Pool
-func workerPool(reqChan chan fullRequest, respChan chan Response) {
+func workerPool(reqChan chan fullRequest, respChan chan pb.Response) {
 	//MAX
 	for i := 0; i < 100; i++ {
 		go worker(reqChan, respChan)
@@ -198,7 +209,7 @@ func workerPool(reqChan chan fullRequest, respChan chan Response) {
 }
 
 // Worker
-func worker(reqChan chan fullRequest, respChan chan Response) {
+func worker(reqChan chan fullRequest, respChan chan pb.Response) {
 	for res := range reqChan {
 		response, err := dispatcher(res)
 		if err != nil {
@@ -208,70 +219,120 @@ func worker(reqChan chan fullRequest, respChan chan Response) {
 	}
 }
 
-func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
-	for {
-		_, message, err := c.ReadMessage()
-		if err != nil {
-			log.Print("Socket Error", err)
-			continue
-		}
-		request := new(cycleTLSRequest)
 
-		err = json.Unmarshal(message, &request)
-		if err != nil {
-			log.Print("Unmarshal Error", err)
-			return
-		}
+var (
+	reqChan = make(chan fullRequest)
+    respChan = make(chan pb.Response)
+	usetls        = flag.Bool("tls", false, "Connection uses TLS if true, else plain TCP")
+	certFile   = flag.String("cert_file", "", "The TLS cert file")
+	keyFile    = flag.String("key_file", "", "The TLS key file")
+	port       = flag.Int("port", 10000, "The server port")
 
-		reply := processRequest(*request)
+)
 
-		reqChan <- reply
-	}
+type routeGuideServer struct {
+	pb.UnimplementedCycleStreamServer
 }
 
-func writeSocket(respChan chan Response, c *websocket.Conn) {
-	for {
-		select {
-		case r := <-respChan:
-			message, err := json.Marshal(r)
-			if err != nil {
-				log.Print("Marshal Json Failed" + err.Error())
-				continue
-			}
-			err = c.WriteMessage(websocket.TextMessage, message)
-			if err != nil {
-				log.Print("Socket WriteMessage Failed" + err.Error())
-				continue
-			}
 
-		default:
+func (s *routeGuideServer) Stream(stream pb.CycleStream_StreamServer) error {
+
+	go func () {
+		for {
+			in, _ := stream.Recv()
+		
+			var request = in 
+			// rn := pb.CycleTLSRequest{RequestID: request.RequestID, Options: &pb.Options{URL: request.Options.URL, Method: request.Options.Method, Headers: request.Options.Headers, Body: request.Options.Body, Ja3: request.Options.Ja3, Proxy: request.Options.Proxy, Cookies: request.Options.Cookies}}
+			if request != nil {
+				rn := pb.CycleTLSRequest{RequestID: "1", Options: &pb.Options{URL: "http://localhost:8081", Method: "GET", Headers: "", Body: "", Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0", Proxy: "", Cookies: ""}}
+				reply := processRequest(rn)
+				reqChan <- reply
+
+			}
+			
+
 		}
+		
 
+	}()
+	for {
+
+		
+
+        headers := make(map[string]string)
+		select {
+			case r := <-respChan:
+				response := &pb.Response{RequestID: "1", Status: 200, Body: "someshit", Headers: headers}
+				_=response
+				if err := stream.Send(&r); err != nil {
+					return err
+				}
+				_=r
+			default:
+			}
+
+		
 	}
+	//run as main thread
+	
+
+	// for {
+	// 	select {
+	// 	case r := <-respChan:
+	// 		if err := stream.Send(&r); err != nil {
+	// 			log.Println(err)
+	// 			return err
+	// 		}
+	// 	default:
+	// 	}
+
+	// }
+
+}
+
+func newServer() *routeGuideServer {
+	s := &routeGuideServer{}
+	return s
 }
 
 func main() {
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	// runtime.GOMAXPROCS(runtime.NumCPU())
 
-	start := time.Now()
-	defer func() {
-		log.Println("Execution Time: ", time.Since(start))
-	}()
+	// start := time.Now()
+	// defer func() {
+	// 	log.Println("Execution Time: ", time.Since(start))
+	// }()
 
-	websocketAddress := getWebsocketAddr()
-	c, _, err := websocket.DefaultDialer.Dial(websocketAddress, nil)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-
-	reqChan := make(chan fullRequest)
-	respChan := make(chan Response)
+	
+	// flag.Parse()
+	
 	go workerPool(reqChan, respChan)
 
-	go readSocket(reqChan, c)
-	//run as main thread
-	writeSocket(respChan, c)
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	var opts []grpc.ServerOption
+	if *usetls {
+		if *certFile == "" {
+			*certFile = data.Path("x509/server_cert.pem")
+		}
+		if *keyFile == "" {
+			*keyFile = data.Path("x509/server_key.pem")
+		}
+		creds, err := credentials.NewServerTLSFromFile(*certFile, *keyFile)
+		if err != nil {
+			log.Fatalf("Failed to generate credentials %v", err)
+		}
+		opts = []grpc.ServerOption{grpc.Creds(creds)}
+	}
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterCycleStreamServer(grpcServer, newServer())
+	grpcServer.Serve(lis)
+	
+	
+
+	
 
 }

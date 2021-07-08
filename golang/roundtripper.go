@@ -33,7 +33,7 @@ type roundTripper struct {
 	JA3       string
 	UserAgent string
 
-	Cookies           []Cookie
+	Cookies           []http.Cookie
 	cachedConnections map[string]net.Conn
 	cachedTransports  map[string]http.RoundTripper
 
@@ -41,23 +41,23 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// This is dumb but whatever
-	for _, properties := range rt.Cookies {
-		req.AddCookie(&http.Cookie{Name: properties.Name,
-			Value:      properties.Value,
-			Path:       properties.Path,
-			Domain:     properties.Domain,
-			Expires:    properties.JSONExpires.Time, //TODO: scuffed af
-			RawExpires: properties.RawExpires,
-			MaxAge:     properties.MaxAge,
-			HttpOnly:   properties.HTTPOnly,
-			Secure:     properties.Secure,
-			SameSite:   properties.SameSite,
-			Raw:        properties.Raw,
-			Unparsed:   properties.Unparsed,
-		})
-		fmt.Println(properties.Raw)
-	}
+	// Fix this later
+	// for _, properties := range rt.Cookies {
+	// 	req.AddCookie(&http.Cookie{Name: properties.Name,
+	// 		Value:      properties.Value,
+	// 		Path:       properties.Path,
+	// 		Domain:     properties.Domain,
+	// 		Expires:    properties.JSONExpires.Time, //TODO: scuffed af
+	// 		RawExpires: properties.RawExpires,
+	// 		MaxAge:     properties.MaxAge,
+	// 		HttpOnly:   properties.HTTPOnly,
+	// 		Secure:     properties.Secure,
+	// 		SameSite:   properties.SameSite,
+	// 		Raw:        properties.Raw,
+	// 		Unparsed:   properties.Unparsed,
+	// 	})
+	// 	fmt.Println(properties.Raw)
+	// }
 	req.Header.Set("User-Agent", rt.UserAgent)
 	addr := rt.getDialTLSAddr(req)
 	if _, ok := rt.cachedTransports[addr]; !ok {
@@ -174,7 +174,7 @@ func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundT
 
 			JA3:               browser.JA3,
 			UserAgent:         browser.UserAgent,
-			Cookies:           browser.Cookies,
+			// Cookies:           browser.Cookies, //TODO fix this
 			cachedTransports:  make(map[string]http.RoundTripper),
 			cachedConnections: make(map[string]net.Conn),
 		}
@@ -185,7 +185,7 @@ func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundT
 
 		JA3:               browser.JA3,
 		UserAgent:         browser.UserAgent,
-		Cookies:           browser.Cookies,
+		// Cookies:           browser.Cookies, //TODO fix this
 		cachedTransports:  make(map[string]http.RoundTripper),
 		cachedConnections: make(map[string]net.Conn),
 	}

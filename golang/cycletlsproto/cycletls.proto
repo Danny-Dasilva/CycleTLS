@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.routeguide";
+option java_outer_classname = "RouteGuideProto";
+option objc_class_prefix = "RTG";
+
+package cyclestream;
+
+// Interface exported by the server.
+service CycleStream {
+  // A Bidirectional streaming RPC.
+  //
+  // Accepts a stream of RouteNotes sent while a route is being traversed,
+  // while receiving other RouteNotes (e.g. from other users).
+  rpc Stream(stream cycleTLSRequest) returns (stream Response) {}
+}
+
+
+message Options {
+  string URL = 1;
+  string Method = 2;
+  string Headers = 3;
+  string Body = 4;
+  string Ja3 = 5;
+  string UserAgent = 6;
+  string Proxy = 7;
+  string Cookies = 8;
+}
+// Flatten this
+message cycleTLSRequest {
+  string RequestID = 1;
+  Options Options = 2;
+
+}
+
+message Response {
+  string RequestID  = 1;
+  int Status = 2;
+  string Body = 3;
+  map<string, string> Headers = 4;
+
+}

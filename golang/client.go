@@ -10,7 +10,7 @@ type browser struct {
 	// Return a greeting that embeds the name in a message.
 	JA3       string
 	UserAgent string
-	Cookies   []Cookie
+	Cookies   string //TODO fix this
 }
 
 // newClient creates a new http client

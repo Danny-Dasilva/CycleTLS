@@ -10,7 +10,7 @@ import (
 )
 
 type errorMessage struct {
-	StatusCode int
+	StatusCode int32
 	debugger   string
 	ErrorMsg   string
 	Op         string
@@ -27,7 +27,11 @@ func parseError(err error) (errormessage errorMessage) {
 
 	httpError := string(err.Error())
 	status := lastString(strings.Split(httpError, "StatusCode:"))
-	StatusCode, _ := strconv.Atoi(status)
+
+	i64, err := strconv.ParseInt(status, 10, 32)
+
+	StatusCode := int32(i64)
+
 	if StatusCode != 0 {
 		msg = fmt.Sprintf("Request error")
 		debugger = fmt.Sprintf("%#v\n", err)
