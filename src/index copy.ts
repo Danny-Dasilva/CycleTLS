@@ -2,9 +2,6 @@ import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
 import { Server } from "ws";
-import * as grpc from '@grpc/grpc-js';
-import { CycleStreamClient } from './proto/cycletls_grpc_pb';
-import { CycleTLSRequest, Response } from './proto/cycletls_pb';
 export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
@@ -27,35 +24,6 @@ export interface CycleTLSResponse {
 }
 
 let child: ChildProcessWithoutNullStreams;
-
-function doBidirectionalStreamingCall(client: CycleStreamClient) {
-  const stream = client.stream();
-  console.log("bidirectional streaming call")
-  // Server stream
-  stream.on('data', (serverMessage: Response) => {
-    console.log(
-      `(client) Got server message: ${serverMessage.getRequestid()}`
-    );
-  });
-
-
-      // const cycleTLSRequest = new CycleTLSRequest();
-      // cycleTLSRequest.setRequestid('Message from client');
-      // cycleTLSRequest.setUrl("http://localhost:8081");
-      // cycleTLSRequest.setMethod( "GET");
-      // cycleTLSRequest.setHeaders("");
-      // cycleTLSRequest.setBody("");
-      // cycleTLSRequest.setJa3('771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0');
-
-      // cycleTLSRequest.setProxy("");
-      // cycleTLSRequest.setCookies("");  
-
-      // stream.write(cycleTLSRequest);
-
-  
-}
-
-
 
 const cleanExit = async (message?: string | Error) => {
   if (message) {
@@ -87,16 +55,12 @@ process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
 
 class Golang extends EventEmitter {
-  server: CycleStreamClient;
+  server: Server;
   constructor(port: number, debug: boolean) {
     super();
 
-    // this.server = new Server({ port });
+    this.server = new Server({ port });
 
-    const host = '0.0.0.0:10000';
-    const deadline = new Date();
-    deadline.setSeconds(deadline.getSeconds() + 5);
-    this.server = new CycleStreamClient(host, grpc.credentials.createInsecure());
     let executableFilename;
 
     if (process.platform == "win32") {
@@ -108,47 +72,35 @@ class Golang extends EventEmitter {
     } else {
       cleanExit(new Error("Operating system not supported"));
     }
-    console.log("aaa")
-    // child = spawn(path.join(`"${__dirname}"`, executableFilename), {
-    //   env: { WS_PORT: port.toString() },
-    //   shell: true,
-    //   windowsHide: true,
-    //   detached: true,
-    // });
 
-    // child.stderr.on("data", (stderr) => {
-    //   if (stderr.toString().includes("Request_Id_On_The_Left")) {
-    //     const splitRequestIdAndError = stderr.toString().split("Request_Id_On_The_Left");
-    //     const [requestId, error] = splitRequestIdAndError;
-    //     this.emit(requestId, { error: new Error(error) });
-    //   } else {
-    //     debug
-    //       ? cleanExit(new Error(stderr))
-    //       //TODO add Correct error logging url request/ response/ 
-    //       : cleanExit(new Error("Error Exiting ... (Golang wrapper exception)"));
-    //   }
-    // });
+    child = spawn(path.join(`"${__dirname}"`, executableFilename), {
+      env: { WS_PORT: port.toString() },
+      shell: true,
+      windowsHide: true,
+      detached: true,
+    });
 
-
-    this.server.waitForReady(deadline, (error?: Error) => {
-      if (error) {
-        console.log(`Client connect error: ${error.message}`);
+    child.stderr.on("data", (stderr) => {
+      if (stderr.toString().includes("Request_Id_On_The_Left")) {
+        const splitRequestIdAndError = stderr.toString().split("Request_Id_On_The_Left");
+        const [requestId, error] = splitRequestIdAndError;
+        this.emit(requestId, { error: new Error(error) });
       } else {
-        this.emit("ready");
-        doBidirectionalStreamingCall(this.server);
+        debug
+          ? cleanExit(new Error(stderr))
+          //TODO add Correct error logging url request/ response/ 
+          : cleanExit(new Error("Error Exiting ... (Golang wrapper exception)"));
       }
     });
 
+    this.server.on("connection", (ws) => {
+      this.emit("ready");
 
-    // this.server.on("connection", (ws) => {
-    //   this.emit("ready");
-
-    //   ws.on("message", (data: string) => {
-    //     const message = JSON.parse(data);
-    //     this.emit(message.RequestID, message.Response);
-    //   });
-      
-    // });
+      ws.on("message", (data: string) => {
+        const message = JSON.parse(data);
+        this.emit(message.RequestID, message.Response);
+      });
+    });
   }
 
   request(
@@ -157,29 +109,13 @@ class Golang extends EventEmitter {
       [key: string]: any;
     }
   ) {
-     // Client stream
-     console.log("request called")
-     const stream = this.server.stream();
-      const cycleTLSRequest = new CycleTLSRequest();
-      cycleTLSRequest.setRequestid('Message from client');
-      cycleTLSRequest.setUrl("http://localhost:8081");
-      cycleTLSRequest.setMethod( "GET");
-      cycleTLSRequest.setHeaders("");
-      cycleTLSRequest.setBody("");
-      cycleTLSRequest.setJa3('771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0');
-
-      cycleTLSRequest.setProxy("");
-      cycleTLSRequest.setCookies("");  
-
-      stream.write(cycleTLSRequest);
+    [...this.server.clients][0].send(JSON.stringify({ requestId, options }));
   }
 
   exit() {
     this.server.close();
   }
 }
-
-
 
 const initCycleTLS = async (
   initOptions: {

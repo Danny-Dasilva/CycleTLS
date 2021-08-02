@@ -4,7 +4,9 @@ import initCycleTLS from '../dist/index.js'
 // Typescript: import initCycleTLS from 'cycletls';
 
 (async () => {
+  console.log("before")
   const cycleTLS = await initCycleTLS();
+  console.log("adter")
 
     const response = cycleTLS('https://www.google.com/', {
       body: '',
@@ -12,7 +14,7 @@ import initCycleTLS from '../dist/index.js'
       userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
       proxy: ''
     });
-
+    console.log("here")
     response.then((out) => {
       console.log(out)
     })

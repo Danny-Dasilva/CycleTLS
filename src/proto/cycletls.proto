@@ -11,9 +11,9 @@ package cyclestream;
 service CycleStream {
   // A Bidirectional streaming RPC.
   //
-  // Accepts a stream of cycleTLSRequest 
-  //Returns a Stream of Response
-  rpc Stream(stream cycleTLSRequest) returns (stream Response) {}
+  // Accepts a stream of RouteNotes sent while a route is being traversed,
+  // while receiving other RouteNotes (e.g. from other users).
+  rpc Stream(stream CycleTLSRequest) returns (stream Response) {}
 }
 
 
@@ -22,7 +22,7 @@ message CycleTLSRequest {
   string RequestID = 1;
   string URL = 2;
   string Method = 3;
-  map<string, string> Headers = 4;
+  string Headers = 4;
   string Body = 5;
   string Ja3 = 6;
   string UserAgent = 7;
@@ -36,4 +36,5 @@ message Response {
   int32 Status = 2;
   string Body = 3;
   map<string, string> Headers = 4;
+
 }

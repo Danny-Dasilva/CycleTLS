@@ -8,47 +8,24 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	// "runtime"
+	"runtime"
 	"strings"
 	// "time"
 	// "io"
 	"google.golang.org/grpc"
-
-
 	"fmt"
-
-
 	"net"
-
-
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/examples/data"
 	// "github.com/gorilla/websocket"
 	pb "github.com/Danny-Dasilva/gRPC-Tests/bidirectional/js-test/cycletlsproto"
 )
 
-// Options sets CycleTLS client options
-type Options struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Headers   map[string]string `json:"headers"`
-	Body      string            `json:"body"`
-	Ja3       string            `json:"ja3"`
-	UserAgent string            `json:"userAgent"`
-	Proxy     string            `json:"proxy"`
-	Cookies   string        	`json:"cookies"`
-}
-
-type cycleTLSRequest struct {
-	RequestID string  `json:"requestId"`
-	Options   Options `json:"options"`
-}
-
 //rename to request+client+options
 type fullRequest struct {
 	req     *http.Request
 	client  http.Client
-	options pb.Options
+	options pb.CycleTLSRequest
 }
 
 //TODO: rename this response struct
@@ -89,26 +66,26 @@ func getWebsocketAddr() string {
 func processRequest(request pb.CycleTLSRequest) (result fullRequest) {
 
 	var browser = browser{
-		JA3:       request.Options.Ja3,
-		UserAgent: request.Options.UserAgent,
-		Cookies:   request.Options.Cookies,
+		JA3:       request.Ja3,
+		UserAgent: request.UserAgent,
+		Cookies:   request.Cookies,
 	}
 
-	client, err := newClient(browser, request.Options.Proxy)
+	client, err := newClient(browser, request.Proxy)
 	if err != nil {
 		log.Fatal(err)
 	}
-	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	req, err := http.NewRequest(strings.ToUpper(request.Method), request.URL, strings.NewReader(request.Body))
 	if err != nil {
 		log.Print(request.RequestID + "Request_Id_On_The_Left" + err.Error())
 		return
 	}
-	// for k, v := range request.Options.Headers {
+	// for k, v := range request.Headers {
 	// 	if k != "host" {
 	// 		req.Header.Set(k, v)
 	// 	}
 	// } TODO fix this
-	return fullRequest{req: req, client: client, options: *request.Options}
+	return fullRequest{req: req, client: client, options: request}
 
 }
 
@@ -240,38 +217,33 @@ func (s *routeGuideServer) Stream(stream pb.CycleStream_StreamServer) error {
 	go func () {
 		for {
 			in, _ := stream.Recv()
-		
-			var request = in 
+			
+			var req = in 
 			// rn := pb.CycleTLSRequest{RequestID: request.RequestID, Options: &pb.Options{URL: request.Options.URL, Method: request.Options.Method, Headers: request.Options.Headers, Body: request.Options.Body, Ja3: request.Options.Ja3, Proxy: request.Options.Proxy, Cookies: request.Options.Cookies}}
-			if request != nil {
-				rn := pb.CycleTLSRequest{RequestID: "1", Options: &pb.Options{URL: "http://localhost:8081", Method: "GET", Headers: "", Body: "", Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0", Proxy: "", Cookies: ""}}
+			if req != nil {
+				log.Println(req.URL)
+				rn := pb.CycleTLSRequest{RequestID: req.RequestID, URL: req.URL, Method: req.Method, Headers: req.Headers, Body: req.Body, Ja3: req.Ja3, Proxy: req.Proxy, Cookies: req.Cookies}
 				reply := processRequest(rn)
 				reqChan <- reply
-
 			}
-			
-
 		}
 		
 
 	}()
 	for {
-
-		
-
         headers := make(map[string]string)
 		select {
 			case r := <-respChan:
 				response := &pb.Response{RequestID: "1", Status: 200, Body: "someshit", Headers: headers}
 				_=response
+				log.Println("1")
 				if err := stream.Send(&r); err != nil {
+					log.Println(err)
 					return err
 				}
 				_=r
 			default:
-			}
-
-		
+			}	
 	}
 	//run as main thread
 	
@@ -297,7 +269,7 @@ func newServer() *routeGuideServer {
 
 func main() {
 
-	// runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// start := time.Now()
 	// defer func() {
@@ -330,9 +302,5 @@ func main() {
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterCycleStreamServer(grpcServer, newServer())
 	grpcServer.Serve(lis)
-	
-	
-
-	
 
 }
