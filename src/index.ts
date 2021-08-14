@@ -79,6 +79,7 @@ class Golang extends EventEmitter {
       env: { WS_PORT: port.toString() },
       shell: true,
       windowsHide: true,
+      detached: process.platform !== "win32"
     });
 
     child.stderr.on("data", (stderr) => {

@@ -7,24 +7,16 @@ let userAgent = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101
 test('Should return a 301 redirect', async () => {
     const cycleTLS = await initCycleTLS({ port: 9114 });
 
-    const response = await cycleTLS("https://google.com", {
+    const redirectResponse = await cycleTLS("https://google.com", {
         body: "",
         ja3: ja3,
         userAgent: userAgent,
         disableRedirect: true,
 
     }, "get");
-    expect(response.status).toBe(301)
+    expect(redirectResponse.status).toBe(301)
 
-    cycleTLS.exit()
-
-});
-
-
-test('Should return a 200 response with no redirect', async () => {
-    const cycleTLS = await initCycleTLS({ port: 9113 });
-
-    const response = await cycleTLS("https://google.com", {
+    const normalResponse = await cycleTLS("https://google.com", {
         body: "",
         ja3: ja3,
         userAgent: userAgent,
@@ -32,7 +24,7 @@ test('Should return a 200 response with no redirect', async () => {
 
     }, "get");
 
-    expect(response.status).toBe(200)
+    expect(normalResponse.status).toBe(200)
 
     cycleTLS.exit()
 

@@ -8,7 +8,7 @@ let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 test('Should return a timeout error', async () => {
     const cycleTLS = await initCycleTLS({ port: 9116 });
 
-    const response = await cycleTLS("http://httpbin.org/delay/2", {
+    const timeoutResponse = await cycleTLS("http://httpbin.org/delay/2", {
         body: "",
         ja3: ja3,
         userAgent: userAgent,
@@ -16,17 +16,10 @@ test('Should return a timeout error', async () => {
 
     }, "get");
 
-    expect(response.status).toBe(408)
-
-    cycleTLS.exit()
-
-});
+    expect(timeoutResponse.status).toBe(408)
 
 
-test('Should return a 200 response', async () => {
-    const cycleTLS = await initCycleTLS({ port: 9115 });
-
-    const response = await cycleTLS("http://httpbin.org/delay/1", {
+    const normalResponse = await cycleTLS("http://httpbin.org/delay/1", {
         body: "",
         ja3: ja3,
         userAgent: userAgent,
@@ -34,7 +27,7 @@ test('Should return a 200 response', async () => {
 
     }, "get");
 
-    expect(response.status).toBe(200)
+    expect(normalResponse.status).toBe(200)
 
     cycleTLS.exit()
 
