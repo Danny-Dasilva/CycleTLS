@@ -13,6 +13,8 @@ export interface CycleTLSRequestOptions {
   ja3?: string;
   userAgent?: string;
   proxy?: string;
+  timeout?: number;
+  disableRedirect?: boolean;
 }
 
 export interface CycleTLSResponse {
@@ -77,7 +79,7 @@ class Golang extends EventEmitter {
       env: { WS_PORT: port.toString() },
       shell: true,
       windowsHide: true,
-      detached: true,
+      detached: process.platform !== "win32"
     });
 
     child.stderr.on("data", (stderr) => {
@@ -116,13 +118,7 @@ class Golang extends EventEmitter {
     this.server.close();
   }
 }
-
-const initCycleTLS = async (
-  initOptions: {
-    port?: number;
-    debug?: boolean;
-  } = {}
-): Promise<{
+export interface CycleTLSClient {
   (
     url: string,
     options: CycleTLSRequestOptions,
@@ -138,7 +134,13 @@ const initCycleTLS = async (
   connect(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   patch(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   exit(): Promise<undefined>;
-}> => {
+}
+const initCycleTLS = async (
+  initOptions: {
+    port?: number;
+    debug?: boolean;
+  } = {}
+): Promise<CycleTLSClient> => {
   return new Promise((resolveReady) => {
     let { port, debug } = initOptions;
 
