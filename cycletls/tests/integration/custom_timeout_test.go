@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	cycletls "../../../cycletls"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func TestTimeoutSuccess(t *testing.T) {

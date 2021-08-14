@@ -24,7 +24,7 @@ test('Should return a timeout error', async () => {
 
 
 test('Should return a 200 response', async () => {
-    const cycleTLS = await initCycleTLS({ port: 9116 });
+    const cycleTLS = await initCycleTLS({ port: 9115 });
 
     const response = await cycleTLS("http://httpbin.org/delay/1", {
         body: "",

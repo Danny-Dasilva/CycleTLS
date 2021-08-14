@@ -5,7 +5,7 @@ let ja3 = '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49
 let userAgent = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0'
 
 test('Should return a 301 redirect', async () => {
-    const cycleTLS = await initCycleTLS({ port: 9115 });
+    const cycleTLS = await initCycleTLS({ port: 9114 });
 
     const response = await cycleTLS("https://google.com", {
         body: "",
@@ -22,7 +22,7 @@ test('Should return a 301 redirect', async () => {
 
 
 test('Should return a 200 response with no redirect', async () => {
-    const cycleTLS = await initCycleTLS({ port: 9115 });
+    const cycleTLS = await initCycleTLS({ port: 9113 });
 
     const response = await cycleTLS("https://google.com", {
         body: "",
