@@ -17,14 +17,16 @@ import (
 
 // Options sets CycleTLS client options
 type Options struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Headers   map[string]string `json:"headers"`
-	Body      string            `json:"body"`
-	Ja3       string            `json:"ja3"`
-	UserAgent string            `json:"userAgent"`
-	Proxy     string            `json:"proxy"`
-	Cookies   []Cookie          `json:"cookies"`
+	URL           string            `json:"url"`
+	Method        string            `json:"method"`
+	Headers       map[string]string `json:"headers"`
+	Body          string            `json:"body"`
+	Ja3           string            `json:"ja3"`
+	UserAgent     string            `json:"userAgent"`
+	Proxy         string            `json:"proxy"`
+	Cookies       []Cookie          `json:"cookies"`
+	Timeout       int               `json:"timeout"`
+	DisableRedirect bool              `json:"disableRedirect"`
 }
 
 type cycleTLSRequest struct {
@@ -82,7 +84,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		Cookies:   request.Options.Cookies,
 	}
 
-	client, err := newClient(browser, request.Options.Proxy)
+	client, err := newClient(
+		browser,
+		request.Options.Timeout,
+		request.Options.DisableRedirect,
+		request.Options.Proxy,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -142,6 +149,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 func (client CycleTLS) Queue(URL string, options Options, Method string) {
 
 	options.URL = URL
+	options.Method = Method
 	//TODO add timestamp to request
 	opt := cycleTLSRequest{"n", options}
 	response := processRequest(opt)
@@ -152,8 +160,8 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
 
 	options.URL = URL
-
-	opt := cycleTLSRequest{"n", options}
+	options.Method = Method
+	opt := cycleTLSRequest{"cycleTLSRequest", options}
 
 	res := processRequest(opt)
 	response, err = dispatcher(res)
