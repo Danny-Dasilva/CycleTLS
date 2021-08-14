@@ -66,6 +66,32 @@ const initCycleTLS = require('cycletls');
 
 ```
 
+
+# CycleTLS API example
+
+fields that are available in CycleTLS
+
+```js
+
+initCycleTLS({ port: 9114 });
+
+cycleTLS('https://example.com',{
+    headers: [{"Authorization": 'Bearer'},],
+    Cookies: [{'Test': 'Cookie'},],
+    body: '',
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    proxy: 'http://username:password@hostname.com:443', //must be in this format
+    timeout: 2, //Number of Seconds before request times out (Default -> 7 seconds)
+    disableRedirect: true, //if set to true CycleTLS will NOT follow redirects
+  },
+  "get" // "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
+);
+
+```
+
+
+
 # Multiple Requests Example for TS/JS
 
 The Golang process executes all CycleTLS calls from the Typescript side `concurrrently` in a Worker Pool. This means objects are returned as soon as they are processed.
