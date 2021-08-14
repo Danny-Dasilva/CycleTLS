@@ -1,7 +1,6 @@
 package cycletls
 
 import (
-	"log"
 	"net/http"
 	"time"
 
