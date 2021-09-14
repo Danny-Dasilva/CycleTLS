@@ -13,8 +13,9 @@ export class CycleTLSRequest extends jspb.Message {
     setUrl(value: string): CycleTLSRequest;
     getMethod(): string;
     setMethod(value: string): CycleTLSRequest;
-    getHeaders(): string;
-    setHeaders(value: string): CycleTLSRequest;
+
+    getHeadersMap(): jspb.Map<string, string>;
+    clearHeadersMap(): void;
     getBody(): string;
     setBody(value: string): CycleTLSRequest;
     getJa3(): string;
@@ -23,8 +24,13 @@ export class CycleTLSRequest extends jspb.Message {
     setUseragent(value: string): CycleTLSRequest;
     getProxy(): string;
     setProxy(value: string): CycleTLSRequest;
-    getCookies(): string;
-    setCookies(value: string): CycleTLSRequest;
+
+    getCookiesMap(): jspb.Map<string, string>;
+    clearCookiesMap(): void;
+    getTimeout(): number;
+    setTimeout(value: number): CycleTLSRequest;
+    getDisableredirect(): boolean;
+    setDisableredirect(value: boolean): CycleTLSRequest;
 
     serializeBinary(): Uint8Array;
     toObject(includeInstance?: boolean): CycleTLSRequest.AsObject;
@@ -41,12 +47,16 @@ export namespace CycleTLSRequest {
         requestid: string,
         url: string,
         method: string,
-        headers: string,
+
+        headersMap: Array<[string, string]>,
         body: string,
         ja3: string,
         useragent: string,
         proxy: string,
-        cookies: string,
+
+        cookiesMap: Array<[string, string]>,
+        timeout: number,
+        disableredirect: boolean,
     }
 }
 

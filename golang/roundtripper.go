@@ -50,10 +50,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// 		Expires:    properties.JSONExpires.Time, //TODO: scuffed af
 	// 		RawExpires: properties.RawExpires,
 	// 		MaxAge:     properties.MaxAge,
-	// 		HttpOnly:   properties.HTTPOnly,
-	// 		Secure:     properties.Secure,
-	// 		SameSite:   properties.SameSite,
-	// 		Raw:        properties.Raw,
+	// 		HttpOnly:   properties.HTTPOnly,browser
 	// 		Unparsed:   properties.Unparsed,
 	// 	})
 	// 	fmt.Println(properties.Raw)

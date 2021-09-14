@@ -94,12 +94,14 @@ proto.cyclestream.CycleTLSRequest.toObject = function(includeInstance, msg) {
     requestid: jspb.Message.getFieldWithDefault(msg, 1, ""),
     url: jspb.Message.getFieldWithDefault(msg, 2, ""),
     method: jspb.Message.getFieldWithDefault(msg, 3, ""),
-    headers: jspb.Message.getFieldWithDefault(msg, 4, ""),
+    headersMap: (f = msg.getHeadersMap()) ? f.toObject(includeInstance, undefined) : [],
     body: jspb.Message.getFieldWithDefault(msg, 5, ""),
     ja3: jspb.Message.getFieldWithDefault(msg, 6, ""),
     useragent: jspb.Message.getFieldWithDefault(msg, 7, ""),
     proxy: jspb.Message.getFieldWithDefault(msg, 8, ""),
-    cookies: jspb.Message.getFieldWithDefault(msg, 9, "")
+    cookiesMap: (f = msg.getCookiesMap()) ? f.toObject(includeInstance, undefined) : [],
+    timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 10, 0.0),
+    disableredirect: jspb.Message.getBooleanFieldWithDefault(msg, 11, false)
   };
 
   if (includeInstance) {
@@ -149,8 +151,10 @@ proto.cyclestream.CycleTLSRequest.deserializeBinaryFromReader = function(msg, re
       msg.setMethod(value);
       break;
     case 4:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setHeaders(value);
+      var value = msg.getHeadersMap();
+      reader.readMessage(value, function(message, reader) {
+        jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
+         });
       break;
     case 5:
       var value = /** @type {string} */ (reader.readString());
@@ -169,8 +173,18 @@ proto.cyclestream.CycleTLSRequest.deserializeBinaryFromReader = function(msg, re
       msg.setProxy(value);
       break;
     case 9:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setCookies(value);
+      var value = msg.getCookiesMap();
+      reader.readMessage(value, function(message, reader) {
+        jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
+         });
+      break;
+    case 10:
+      var value = /** @type {number} */ (reader.readFloat());
+      msg.setTimeout(value);
+      break;
+    case 11:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setDisableredirect(value);
       break;
     default:
       reader.skipField();
@@ -222,12 +236,9 @@ proto.cyclestream.CycleTLSRequest.serializeBinaryToWriter = function(message, wr
       f
     );
   }
-  f = message.getHeaders();
-  if (f.length > 0) {
-    writer.writeString(
-      4,
-      f
-    );
+  f = message.getHeadersMap(true);
+  if (f && f.getLength() > 0) {
+    f.serializeBinary(4, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
   }
   f = message.getBody();
   if (f.length > 0) {
@@ -257,10 +268,21 @@ proto.cyclestream.CycleTLSRequest.serializeBinaryToWriter = function(message, wr
       f
     );
   }
-  f = message.getCookies();
-  if (f.length > 0) {
-    writer.writeString(
-      9,
+  f = message.getCookiesMap(true);
+  if (f && f.getLength() > 0) {
+    f.serializeBinary(9, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
+  }
+  f = message.getTimeout();
+  if (f !== 0.0) {
+    writer.writeFloat(
+      10,
+      f
+    );
+  }
+  f = message.getDisableredirect();
+  if (f) {
+    writer.writeBool(
+      11,
       f
     );
   }
@@ -322,21 +344,25 @@ proto.cyclestream.CycleTLSRequest.prototype.setMethod = function(value) {
 
 
 /**
- * optional string Headers = 4;
- * @return {string}
+ * map<string, string> Headers = 4;
+ * @param {boolean=} opt_noLazyCreate Do not create the map if
+ * empty, instead returning `undefined`
+ * @return {!jspb.Map<string,string>}
  */
-proto.cyclestream.CycleTLSRequest.prototype.getHeaders = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+proto.cyclestream.CycleTLSRequest.prototype.getHeadersMap = function(opt_noLazyCreate) {
+  return /** @type {!jspb.Map<string,string>} */ (
+      jspb.Message.getMapField(this, 4, opt_noLazyCreate,
+      null));
 };
 
 
 /**
- * @param {string} value
+ * Clears values from the map. The map will be non-null.
  * @return {!proto.cyclestream.CycleTLSRequest} returns this
  */
-proto.cyclestream.CycleTLSRequest.prototype.setHeaders = function(value) {
-  return jspb.Message.setProto3StringField(this, 4, value);
-};
+proto.cyclestream.CycleTLSRequest.prototype.clearHeadersMap = function() {
+  this.getHeadersMap().clear();
+  return this;};
 
 
 /**
@@ -412,20 +438,60 @@ proto.cyclestream.CycleTLSRequest.prototype.setProxy = function(value) {
 
 
 /**
- * optional string Cookies = 9;
- * @return {string}
+ * map<string, string> Cookies = 9;
+ * @param {boolean=} opt_noLazyCreate Do not create the map if
+ * empty, instead returning `undefined`
+ * @return {!jspb.Map<string,string>}
  */
-proto.cyclestream.CycleTLSRequest.prototype.getCookies = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 9, ""));
+proto.cyclestream.CycleTLSRequest.prototype.getCookiesMap = function(opt_noLazyCreate) {
+  return /** @type {!jspb.Map<string,string>} */ (
+      jspb.Message.getMapField(this, 9, opt_noLazyCreate,
+      null));
 };
 
 
 /**
- * @param {string} value
+ * Clears values from the map. The map will be non-null.
  * @return {!proto.cyclestream.CycleTLSRequest} returns this
  */
-proto.cyclestream.CycleTLSRequest.prototype.setCookies = function(value) {
-  return jspb.Message.setProto3StringField(this, 9, value);
+proto.cyclestream.CycleTLSRequest.prototype.clearCookiesMap = function() {
+  this.getCookiesMap().clear();
+  return this;};
+
+
+/**
+ * optional float Timeout = 10;
+ * @return {number}
+ */
+proto.cyclestream.CycleTLSRequest.prototype.getTimeout = function() {
+  return /** @type {number} */ (jspb.Message.getFloatingPointFieldWithDefault(this, 10, 0.0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.cyclestream.CycleTLSRequest} returns this
+ */
+proto.cyclestream.CycleTLSRequest.prototype.setTimeout = function(value) {
+  return jspb.Message.setProto3FloatField(this, 10, value);
+};
+
+
+/**
+ * optional bool DisableRedirect = 11;
+ * @return {boolean}
+ */
+proto.cyclestream.CycleTLSRequest.prototype.getDisableredirect = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 11, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.cyclestream.CycleTLSRequest} returns this
+ */
+proto.cyclestream.CycleTLSRequest.prototype.setDisableredirect = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 11, value);
 };
 
 

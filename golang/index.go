@@ -16,16 +16,15 @@ import (
 	"fmt"
 	"net"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/examples/data"
 	// "github.com/gorilla/websocket"
-	pb "github.com/Danny-Dasilva/gRPC-Tests/bidirectional/js-test/cycletlsproto"
+	"google.golang.org/grpc/examples/data"
 )
 
 //rename to request+client+options
 type fullRequest struct {
 	req     *http.Request
 	client  http.Client
-	options pb.CycleTLSRequest
+	options CycleTLSRequest
 }
 
 //TODO: rename this response struct
@@ -35,11 +34,6 @@ type respData struct {
 	Headers map[string]string
 }
 
-//Response contains Cycletls response data
-type Response struct {
-	RequestID string
-	Response  respData
-}
 
 //CycleTLS creates full request and response
 type CycleTLS struct {
@@ -63,45 +57,46 @@ func getWebsocketAddr() string {
 }
 
 // ready Request
-func processRequest(request pb.CycleTLSRequest) (result fullRequest) {
+func processRequest(request CycleTLSRequest) (result fullRequest) {
 
 	var browser = browser{
 		JA3:       request.Ja3,
 		UserAgent: request.UserAgent,
-		Cookies:   request.Cookies,
+		// Cookies:   request.Cookies,
 	}
-
-	client, err := newClient(browser, request.Proxy)
+	client, err := newClient(browser, request.Timeout, request.DisableRedirect, request.Proxy)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err, "client create fail")
 	}
 	req, err := http.NewRequest(strings.ToUpper(request.Method), request.URL, strings.NewReader(request.Body))
 	if err != nil {
 		log.Print(request.RequestID + "Request_Id_On_The_Left" + err.Error())
 		return
 	}
-	// for k, v := range request.Headers {
-	// 	if k != "host" {
-	// 		req.Header.Set(k, v)
-	// 	}
-	// } TODO fix this
+	
+	for k, v := range request.Headers {
+		if k != "host" {
+			req.Header.Set(k, v)
+		}
+	}// TODO fix this
 	return fullRequest{req: req, client: client, options: request}
 
 }
 
-func dispatcher(res fullRequest) (response pb.Response, err error) {
+func dispatcher(res fullRequest) (response Response, err error) {
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		//TODO fix RequestID
-		response := pb.Response{Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers}
-		return response, err
+		// parsedError.ErrorMsg + "-> \n" + string(err.Error())
+		log.Println(parsedError.StatusCode)
+		return Response{RequestID: res.options.RequestID, Status: int32(parsedError.StatusCode), Body: "failure", Headers: headers}, nil //normally return error here
 		// return response, err
 
 	}
+	log.Println("here")
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -121,7 +116,7 @@ func dispatcher(res fullRequest) (response pb.Response, err error) {
 		}
 	}
 
-	response = pb.Response{Status: int32(resp.StatusCode), Body: string(bodyBytes), Headers: headers}
+	response = Response{RequestID: res.options.RequestID, Status: int32(resp.StatusCode), Body: string(bodyBytes), Headers: headers}
 	return response, nil
 
 }
@@ -178,7 +173,7 @@ func (client CycleTLS) Close() {
 }
 
 // Worker Pool
-func workerPool(reqChan chan fullRequest, respChan chan pb.Response) {
+func workerPool(reqChan chan fullRequest, respChan chan Response) {
 	//MAX
 	for i := 0; i < 100; i++ {
 		go worker(reqChan, respChan)
@@ -186,7 +181,7 @@ func workerPool(reqChan chan fullRequest, respChan chan pb.Response) {
 }
 
 // Worker
-func worker(reqChan chan fullRequest, respChan chan pb.Response) {
+func worker(reqChan chan fullRequest, respChan chan Response) {
 	for res := range reqChan {
 		response, err := dispatcher(res)
 		if err != nil {
@@ -199,7 +194,7 @@ func worker(reqChan chan fullRequest, respChan chan pb.Response) {
 
 var (
 	reqChan = make(chan fullRequest)
-    respChan = make(chan pb.Response)
+    respChan = make(chan Response)
 	usetls        = flag.Bool("tls", false, "Connection uses TLS if true, else plain TCP")
 	certFile   = flag.String("cert_file", "", "The TLS cert file")
 	keyFile    = flag.String("key_file", "", "The TLS key file")
@@ -208,11 +203,11 @@ var (
 )
 
 type routeGuideServer struct {
-	pb.UnimplementedCycleStreamServer
+	UnimplementedCycleStreamServer
 }
 
 
-func (s *routeGuideServer) Stream(stream pb.CycleStream_StreamServer) error {
+func (s *routeGuideServer) Stream(stream CycleStream_StreamServer) error {
 
 	go func () {
 		for {
@@ -221,8 +216,19 @@ func (s *routeGuideServer) Stream(stream pb.CycleStream_StreamServer) error {
 			var req = in 
 			// rn := pb.CycleTLSRequest{RequestID: request.RequestID, Options: &pb.Options{URL: request.Options.URL, Method: request.Options.Method, Headers: request.Options.Headers, Body: request.Options.Body, Ja3: request.Options.Ja3, Proxy: request.Options.Proxy, Cookies: request.Options.Cookies}}
 			if req != nil {
-				log.Println(req.URL)
-				rn := pb.CycleTLSRequest{RequestID: req.RequestID, URL: req.URL, Method: req.Method, Headers: req.Headers, Body: req.Body, Ja3: req.Ja3, Proxy: req.Proxy, Cookies: req.Cookies}
+				log.Println(req.Ja3, "url")
+				rn := CycleTLSRequest{RequestID: req.RequestID, 
+					URL: req.URL, 
+					Method: req.Method, 
+					Headers: req.Headers, 
+					Body: req.Body, 
+					Ja3: req.Ja3, 
+					UserAgent: req.UserAgent,
+					Proxy: req.Proxy,
+					Timeout: req.Timeout,
+					DisableRedirect: req.DisableRedirect,
+
+				}
 				reply := processRequest(rn)
 				reqChan <- reply
 			}
@@ -231,13 +237,14 @@ func (s *routeGuideServer) Stream(stream pb.CycleStream_StreamServer) error {
 
 	}()
 	for {
-        headers := make(map[string]string)
+        
 		select {
 			case r := <-respChan:
-				response := &pb.Response{RequestID: "1", Status: 200, Body: "someshit", Headers: headers}
-				_=response
-				log.Println("1")
-				if err := stream.Send(&r); err != nil {
+				headers := make(map[string]string)
+				response := &Response{RequestID: r.RequestID, Status: r.Status, Body: r.Body, Headers: headers}
+				
+				log.Println(r.RequestID, "aaaaaaaa")
+				if err := stream.Send(response); err != nil {
 					log.Println(err)
 					return err
 				}
@@ -279,7 +286,7 @@ func main() {
 	
 	// flag.Parse()
 	
-	go workerPool(reqChan, respChan)
+	// go workerPool(reqChan, respChan)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", *port))
 	if err != nil {
@@ -300,7 +307,8 @@ func main() {
 		opts = []grpc.ServerOption{grpc.Creds(creds)}
 	}
 	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterCycleStreamServer(grpcServer, newServer())
+	
+	RegisterCycleStreamServer(grpcServer, newServer())
 	grpcServer.Serve(lis)
 
 }

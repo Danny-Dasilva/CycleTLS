@@ -13,6 +13,7 @@
     "build:windows": "cross-env GOOS=windows go build -o ./dist/index.exe ./golang",
     "build:linux": "cross-env GOOS=linux go build -o ./dist/index ./golang && chmod +x ./dist/index",
     "build:mac": "cross-env GOOS=darwin go build -o ./dist/index-mac ./golang && chmod +x ./dist/index-mac",
+    "build:proto": "./src/proto/compile_proto.sh",
     "prepare": "npm run build && npm run build:windows && npm run build:linux && npm run build:mac",
     "test": "jest"
   },

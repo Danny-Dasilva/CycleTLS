@@ -31,8 +31,8 @@ function deserialize_cyclestream_Response(buffer_arg) {
 var CycleStreamService = exports.CycleStreamService = {
   // A Bidirectional streaming RPC.
 //
-// Accepts a stream of RouteNotes sent while a route is being traversed,
-// while receiving other RouteNotes (e.g. from other users).
+// Accepts a stream of cycleTLSRequest 
+// Returns a Stream of Response
 stream: {
     path: '/cyclestream.CycleStream/Stream',
     requestStream: true,

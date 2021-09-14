@@ -5,7 +5,7 @@ option java_package = "io.grpc.examples.routeguide";
 option java_outer_classname = "RouteGuideProto";
 option objc_class_prefix = "RTG";
 
-package cyclestream;
+package main;
 
 // Interface exported by the server.
 service CycleStream {
@@ -13,7 +13,7 @@ service CycleStream {
   //
   // Accepts a stream of cycleTLSRequest 
   //Returns a Stream of Response
-  rpc Stream(stream cycleTLSRequest) returns (stream Response) {}
+  rpc Stream(stream CycleTLSRequest) returns (stream Response) {}
 }
 
 
@@ -27,8 +27,9 @@ message CycleTLSRequest {
   string Ja3 = 6;
   string UserAgent = 7;
   string Proxy = 8;
-  string Cookies = 9;
-
+  map<string, string> Cookies = 9;
+  float Timeout = 10;
+  bool DisableRedirect = 11;
 }
 
 message Response {
