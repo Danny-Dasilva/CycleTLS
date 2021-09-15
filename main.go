@@ -16,10 +16,10 @@ func main() {
 		log.Println("Execution Time: ", time.Since(start))
 	}()
 	client := cycletls.Init()
-	response, err := client.Do("https://example.com", cycletls.Options{
+	response, err := client.Do("https://ja3er.com/json", cycletls.Options{
 		Body:      "",
-		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-11-51-45-43-10-27-21,29-23-24,0",
-		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Ja3:       "771,4865,0-23-65281-10-11-35-16-5-51-43,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
 		// Headers: map[string]string{"Cookie": "valu=5"},
 
 	}, "GET")

@@ -211,7 +211,7 @@ If URL is not passed, one must be specified in the config.
 If CycleTLS is being used by in a JavaScript environment, CycleTLS will spawn a Golang process to handle requests. This Golang process handles requests `concurrently` in a worker pool. Due to this, CycleTLS returns response objects as soon as they are made available 
 (in other terms, CycleTLS processes requests as they are received, but responses are returned asynchronously so they will NOT be returned in the order requested)
 
-If you are using CycleTLS in JavaScript, it is necessary to exit out of the instance to prevent zombie processes. The example below shows one way to approach cleanly exiting CycleTLS if you need to process multiple requests (note: keep in mind that calling the `exit()` function will kill any requests in progress). If your workflow requires requests running the entire time the process runs, modules such as exit-hook (https://www.npmjs.com/package/exit-hook) could serve as an alternative solution to cleanly exiting CycleTLS.
+If you are using CycleTLS in JavaScript, it is necessary to exit out of the instance to prevent zombie processes. The example below shows one way to approach cleanly exiting CycleTLS if you need to process multiple requests (note: keep in mind that calling the `exit()` function will kill any requests in progress). If your workflow requires requests running the entire time the process runs, modules such as [exit-hook](https://www.npmjs.com/package/exit-hook) could serve as an alternative solution to cleanly exiting CycleTLS.
 
 ```js
 const initCycleTLS = require("cycletls");
@@ -283,7 +283,7 @@ const promises = [];
 
 If you would like to compile CycleTLS on your own, use the following commands:
 
-`npm install --dev`
+`npm install`
 
 `npm run prepare`
 
