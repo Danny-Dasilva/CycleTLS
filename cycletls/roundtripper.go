@@ -231,6 +231,18 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	}
 	extMap["11"] = &utls.SupportedPointsExtension{SupportedPoints: targetPointFormats}
 
+	// set extension 43
+	vid64, err := strconv.ParseUint(version, 10, 16)
+	if err != nil {
+	   return nil, err
+	}
+	extMap["43"] = &utls.SupportedVersionsExtension{
+		Versions:
+	   []uint16{
+		  uint16(vid64),
+	   },
+	}
+
 	// build extenions list
 	var exts []utls.TLSExtension
 	for _, e := range extensions {
@@ -241,10 +253,10 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		exts = append(exts, te)
 	}
 	// build SSLVersion
-	vid64, err := strconv.ParseUint(version, 10, 16)
-	if err != nil {
-		return nil, err
-	}
+	// vid64, err := strconv.ParseUint(version, 10, 16)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	vid := uint16(vid64)
 
 	// build CipherSuites
@@ -256,10 +268,10 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		suites = append(suites, uint16(cid))
 	}
-	_ = vid
+	// _ = vid
 	return &utls.ClientHelloSpec{
-		// TLSVersMin:         vid,
-		// TLSVersMax:         vid,
+		TLSVersMin:         vid,
+		TLSVersMax:         vid,
 		CipherSuites:       suites,
 		CompressionMethods: []byte{0},
 		Extensions:         exts,
@@ -298,12 +310,12 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"27": &utls.FakeCertCompressionAlgsExtension{},
 		"28": &utls.FakeRecordSizeLimitExtension{},
 		"35": &utls.SessionTicketExtension{},
-		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
-			utls.GREASE_PLACEHOLDER,
-			utls.VersionTLS13,
-			utls.VersionTLS12,
-			utls.VersionTLS11,
-			utls.VersionTLS10}},
+		// "43": &utls.SupportedVersionsExtension{Versions: []uint16{
+		// 	utls.GREASE_PLACEHOLDER,
+		// 	utls.VersionTLS13,
+		// 	utls.VersionTLS12,
+		// 	utls.VersionTLS11,
+		// 	utls.VersionTLS10}},
 		"44": &utls.CookieExtension{},
 		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 			utls.PskModeDHE,

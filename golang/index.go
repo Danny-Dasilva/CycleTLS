@@ -252,7 +252,6 @@ func writeSocket(respChan chan Response, c *websocket.Conn) {
 				continue
 			}
 
-		default:
 		}
 
 	}
