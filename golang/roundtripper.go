@@ -306,20 +306,17 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		},
 		"18": &utls.SCTExtension{},
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
+		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
 		"27": &utls.FakeCertCompressionAlgsExtension{},
 		"28": &utls.FakeRecordSizeLimitExtension{},
 		"35": &utls.SessionTicketExtension{},
-		// "43": &utls.SupportedVersionsExtension{Versions: []uint16{
-		// 	utls.GREASE_PLACEHOLDER,
-		// 	utls.VersionTLS13,
-		// 	utls.VersionTLS12,
-		// 	utls.VersionTLS11,
-		// 	utls.VersionTLS10}},
 		"44": &utls.CookieExtension{},
 		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 			utls.PskModeDHE,
 		}},
+		"49": &utls.GenericExtension{Id: 49}, // post_handshake_auth
+		"50": &utls.GenericExtension{Id: 50}, // signature_algorithms_cert
 		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{{Group: utls.X25519},
 			{Group: utls.CurveP256}}},
 		"13172": &utls.NPNExtension{},

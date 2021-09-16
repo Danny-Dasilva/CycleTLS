@@ -1,5 +1,16 @@
 # CycleTLS Changelog
 
+## 0.0.13 - (09-16-2020)
+### Release Highlights
+Performance improvements and Better Ja3 Token Parsing 
+### Bug Fixes
+- Fix Performance issue relating to worker pool [Related Ticket](https://github.com/Danny-Dasilva/CycleTLS/issues/41)
+- Address Ticket (fix extension 43) [error: tls: server selected unsupported group](https://github.com/Danny-Dasilva/CycleTLS/issues/43)
+- Address Ticket [ fatal error: stack overflow (added support for extensions 22 50) ](https://github.com/Danny-Dasilva/CycleTLS/issues/42)
+### Enhancements
+- Updated Documentation
+- Updated Integration tests for new token fixes
+
 ## 0.0.12 - (08-14-2020)
 ### Release Highlights
 Timeout and Disable redirect integration
