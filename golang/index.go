@@ -17,15 +17,15 @@ import (
 
 // Options sets CycleTLS client options
 type Options struct {
-	URL           string            `json:"url"`
-	Method        string            `json:"method"`
-	Headers       map[string]string `json:"headers"`
-	Body          string            `json:"body"`
-	Ja3           string            `json:"ja3"`
-	UserAgent     string            `json:"userAgent"`
-	Proxy         string            `json:"proxy"`
-	Cookies       []Cookie          `json:"cookies"`
-	Timeout       int               `json:"timeout"`
+	URL             string            `json:"url"`
+	Method          string            `json:"method"`
+	Headers         map[string]string `json:"headers"`
+	Body            string            `json:"body"`
+	Ja3             string            `json:"ja3"`
+	UserAgent       string            `json:"userAgent"`
+	Proxy           string            `json:"proxy"`
+	Cookies         []Cookie          `json:"cookies"`
+	Timeout         int               `json:"timeout"`
 	DisableRedirect bool              `json:"disableRedirect"`
 }
 
@@ -252,7 +252,6 @@ func writeSocket(respChan chan Response, c *websocket.Conn) {
 				continue
 			}
 
-		default:
 		}
 
 	}
