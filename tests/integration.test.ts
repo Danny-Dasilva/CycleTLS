@@ -74,6 +74,7 @@ const myRequests: Request[] = [
     { url: "http://httpbin.org/ip" },  //log ip 
     { url: "http://httpbin.org/response-headers?ExampleResponseHeader=HeaderisPickedUpByServer" },  //log response headers
     { url: "http://httpbin.org/html" }, //log html
+    { url: "https://example.com" }, //Test extension 43
 
 ];
 
