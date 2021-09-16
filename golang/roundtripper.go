@@ -236,10 +236,11 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	if err != nil {
 	   return nil, err
 	}
+	vid := uint16(vid64)
 	extMap["43"] = &utls.SupportedVersionsExtension{
 		Versions:
 	   []uint16{
-		  uint16(vid64),
+		vid,
 	   },
 	}
 
@@ -257,7 +258,6 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	// if err != nil {
 	// 	return nil, err
 	// }
-	vid := uint16(vid64)
 
 	// build CipherSuites
 	var suites []uint16
