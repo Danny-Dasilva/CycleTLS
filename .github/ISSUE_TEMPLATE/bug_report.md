@@ -22,5 +22,3 @@ happen.
 -   Operating System information (e.g. Ubuntu 18.04):
 -   Node version:
 -   Golang version:
-
-<!-- 🎉🎉🎉 Thank you for an opening an issue !!! 🎉🎉🎉 We are doing our best to get to this. -->
