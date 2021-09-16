@@ -10,6 +10,7 @@ Performance improvements and Better Ja3 Token Parsing
 ### Enhancements
 - Updated Documentation
 - Updated Integration tests for new token fixes
+- Add new issue template
 
 ## 0.0.12 - (08-14-2020)
 ### Release Highlights
