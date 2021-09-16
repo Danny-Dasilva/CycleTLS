@@ -51,7 +51,6 @@ body:
       description: What Node version are you using? If "other", please provide more details in the "Description" section above.
       multiple: false
       options:
-        - C++
         - Node 14.x
         - Node 15.x
         - Node 16.x
@@ -63,7 +62,6 @@ body:
       description: What Golang version are you using? If "other", please provide more details in the "Description" section above.
       multiple: false
       options:
-        - C++
         - Go 14.x
         - Go 15.x
         - Go 16.x
