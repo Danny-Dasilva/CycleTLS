@@ -234,14 +234,13 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	// set extension 43
 	vid64, err := strconv.ParseUint(version, 10, 16)
 	if err != nil {
-	   return nil, err
+		return nil, err
 	}
 	vid := uint16(vid64)
 	extMap["43"] = &utls.SupportedVersionsExtension{
-		Versions:
-	   []uint16{
-		vid,
-	   },
+		Versions: []uint16{
+			vid,
+		},
 	}
 
 	// build extenions list
