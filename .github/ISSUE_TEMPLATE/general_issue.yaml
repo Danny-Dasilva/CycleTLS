@@ -45,7 +45,7 @@ body:
         - Mac OS
         - Other
   - type: dropdown
-    id: version
+    id: Node-Version
     attributes:
       label: Node Version
       description: What Node version are you using? If "other", please provide more details in the "Description" section above.
@@ -57,7 +57,7 @@ body:
         - Node 16.x
         - Other
   - type: dropdown
-    id: version
+    id: Go-Version
     attributes:
       label: Golang Version
       description: What Golang version are you using? If "other", please provide more details in the "Description" section above.
