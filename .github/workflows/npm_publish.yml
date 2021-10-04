@@ -1,4 +1,4 @@
-name: "🚀 🟢 Npm Publish"
+name: "🚀 🟢 Npm Publish Package"
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
     name: 🚀 Npm Publish
     runs-on: ubuntu-latest
 
-    if: "startsWith(github.event.head_commit.message, '🚀')"
+    if: "startsWith(github.event.head_commit.message, 'Release:')"
 
     strategy:
       matrix:
