@@ -12,11 +12,7 @@ import (
 )
 
 
-var CycleTLSResults = []CycleTLSOptions{
-	{"66918128f1b9b03303d77c6f2eefd128", // HelloChrome_72
-		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.96 Safari/537.36",
-		200},
+var TLS13Results = []CycleTLSOptions{
 	{"b32309a26951912be7dba376398abc3b", // HelloChrome_83
 		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
@@ -28,7 +24,7 @@ var CycleTLSResults = []CycleTLSOptions{
 }
 func TestTLS_13(t *testing.T) {
 	client := cycletls.Init()
-	for _, options := range CycleTLSResults {
+	for _, options := range TLS13Results {
 
 		response, err := client.Do("https://ja3er.com/json", cycletls.Options{
 			Ja3:       options.Ja3,
