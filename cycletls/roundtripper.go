@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+
 	// "log"
 	"net"
 	"net/http"
@@ -16,16 +17,11 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 
-	utls "github.com/refraction-networking/utls"
+	utls "gitlab.com/yawning/utls.git"
 )
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
-type errExtensionNotExist string
-
-func (err errExtensionNotExist) Error() string {
-	return fmt.Sprintf("Extension does not exist: %s\n", err)
-}
 
 type roundTripper struct {
 	sync.Mutex
@@ -127,6 +123,10 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
 
+		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
+			//fix this
+			return nil, fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
+		}
 		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
 	}
 
@@ -249,9 +249,8 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	var exts []utls.TLSExtension
 	for _, e := range extensions {
 		te, ok := extMap[e]
-
 		if !ok {
-			return nil, errExtensionNotExist(e)
+			return nil, raiseExtensionError(e)
 		}
 		exts = append(exts, te)
 	}
@@ -303,6 +302,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 				utls.PKCS1WithSHA1,
 			},
 		},
+		"15": &utls.GenericExtension{Id: 15}, //FIXME hearbeat extension
 		"16": &utls.ALPNExtension{
 			AlpnProtocols: []string{"h2", "http/1.1"},
 		},
@@ -310,10 +310,13 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
-		"27": &utls.FakeCertCompressionAlgsExtension{},
+		"27": &utls.CompressCertificateExtension{
+					Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+				},
 	    "28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 		"35": &utls.SessionTicketExtension{},
 		"34": &utls.GenericExtension{Id: 34},
+		"41": &utls.GenericExtension{Id: 41}, //FIXME pre_shared_key
 		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
 			utls.GREASE_PLACEHOLDER,
 			utls.VersionTLS13,
@@ -329,10 +332,11 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
 			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
 			{Group: utls.X25519},
-			{Group: utls.CurveP256},
 
-			// {Group: utls.CurveP384},
+
+			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
 		}},
+		"30032": &utls.GenericExtension{Id: 30032},
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
