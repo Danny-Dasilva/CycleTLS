@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+
 	// "log"
 	"net"
 	"net/http"
@@ -189,6 +190,7 @@ func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundT
 }
 
 ///////////////////////// test code
+
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	extMap := genMap()
@@ -216,7 +218,10 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		targetCurves = append(targetCurves, utls.CurveID(cid))
 	}
-	extMap["10"] = &utls.utls "gitlab.com/yawning/utls.git"s []byte
+	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
+
+	// parse point formats
+	var targetPointFormats []byte
 	for _, p := range pointFormats {
 		pid, err := strconv.ParseUint(p, 10, 8)
 		if err != nil {
@@ -273,7 +278,13 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	}, nil
 }
 
-func genMap() (extMap mautls "gitlab.com/yawning/utls.git"pportedPointsExtension{...}
+func genMap() (extMap map[string]utls.TLSExtension) {
+	extMap = map[string]utls.TLSExtension{
+		"0": &utls.SNIExtension{},
+		"5": &utls.StatusRequestExtension{},
+		// These are applied later
+		// "10": &tls.SupportedCurvesExtension{...}
+		// "11": &tls.SupportedPointsExtension{...}
 		"13": &utls.SignatureAlgorithmsExtension{
 			SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				utls.ECDSAWithP256AndSHA256,
