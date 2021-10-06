@@ -5,7 +5,8 @@
 Bugfix Ja3 Token Parsing and better error handling
 ### Bug Fixes
 - Fix Stack overlflow if token is unsuported [Some Ja3 strings causing stackoverflow](https://github.com/Danny-Dasilva/CycleTLS/issues/51)
-- Address Ticket (fix extension 43) [Spoofed TLS/JA3 fingerprint is detected by some sites](https://github.com/Danny-Dasilva/CycleTLS/issues/47)
+- Address Ticket [Spoofed TLS/JA3 fingerprint is detected by some sites](https://github.com/Danny-Dasilva/CycleTLS/issues/47)
+- Address Ticket [Set User-Agent for the CONNECT request from the config](https://github.com/Danny-Dasilva/CycleTLS/issues/46)
 
 ## 0.0.13 - (09-16-2021)
 ### Release Highlights
