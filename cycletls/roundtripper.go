@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+
 	// "log"
 	"net"
 	"net/http"
@@ -16,16 +17,10 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 
-	utls "github.com/refraction-networking/utls"
+	utls "gitlab.com/yawning/utls.git"
 )
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
-
-type errExtensionNotExist string
-
-func (err errExtensionNotExist) Error() string {
-	return fmt.Sprintf("Extension does not exist: %s\n", err)
-}
 
 type roundTripper struct {
 	sync.Mutex
@@ -41,7 +36,7 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// This is dumb but whatever
+	// Fix this later for proper cookie parsing
 	for _, properties := range rt.Cookies {
 		req.AddCookie(&http.Cookie{Name: properties.Name,
 			Value:      properties.Value,
@@ -56,7 +51,6 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Raw:        properties.Raw,
 			Unparsed:   properties.Unparsed,
 		})
-		fmt.Println(properties.Raw)
 	}
 	req.Header.Set("User-Agent", rt.UserAgent)
 	addr := rt.getDialTLSAddr(req)
@@ -112,7 +106,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 	//////////////////
 
-	spec, err := stringToSpec(rt.JA3)
+	spec, err := StringToSpec(rt.JA3)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +121,10 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
 
+		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
+			//fix this
+			return nil, fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
+		}
 		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
 	}
 
@@ -192,8 +190,9 @@ func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundT
 }
 
 ///////////////////////// test code
-// stringToSpec creates a ClientHelloSpec based on a JA3 string
-func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
+
+// StringToSpec creates a ClientHelloSpec based on a JA3 string
+func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
@@ -211,6 +210,7 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// parse curves
 	var targetCurves []utls.CurveID
+	targetCurves = append(targetCurves, utls.CurveID(utls.CurveID(utls.GREASE_PLACEHOLDER))) //append grease for Chrome browsers
 	for _, c := range curves {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {
@@ -237,18 +237,18 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		return nil, err
 	}
 	vid := uint16(vid64)
-	extMap["43"] = &utls.SupportedVersionsExtension{
-		Versions: []uint16{
-			vid,
-		},
-	}
+	// extMap["43"] = &utls.SupportedVersionsExtension{
+	// 	Versions: []uint16{
+	// 		utls.VersionTLS12,
+	// 	},
+	// }
 
 	// build extenions list
 	var exts []utls.TLSExtension
 	for _, e := range extensions {
 		te, ok := extMap[e]
 		if !ok {
-			return nil, errExtensionNotExist(e)
+			return nil, raiseExtensionError(e)
 		}
 		exts = append(exts, te)
 	}
@@ -267,10 +267,10 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 		}
 		suites = append(suites, uint16(cid))
 	}
-	// _ = vid
+	_ = vid
 	return &utls.ClientHelloSpec{
-		TLSVersMin:         vid,
-		TLSVersMax:         vid,
+		// TLSVersMin:         vid,
+		// TLSVersMax:         vid,
 		CipherSuites:       suites,
 		CompressionMethods: []byte{0},
 		Extensions:         exts,
@@ -307,17 +307,32 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
-		"27": &utls.FakeCertCompressionAlgsExtension{},
-		"28": &utls.FakeRecordSizeLimitExtension{},
+		"27": &utls.CompressCertificateExtension{
+			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		},
+		"28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 		"35": &utls.SessionTicketExtension{},
+		"34": &utls.GenericExtension{Id: 34},
+		"41": &utls.GenericExtension{Id: 41}, //FIXME pre_shared_key
+		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
+			utls.GREASE_PLACEHOLDER,
+			utls.VersionTLS13,
+			utls.VersionTLS12,
+			utls.VersionTLS11,
+			utls.VersionTLS10}},
 		"44": &utls.CookieExtension{},
 		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 			utls.PskModeDHE,
 		}},
 		"49": &utls.GenericExtension{Id: 49}, // post_handshake_auth
 		"50": &utls.GenericExtension{Id: 50}, // signature_algorithms_cert
-		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{{Group: utls.X25519},
-			{Group: utls.CurveP256}}},
+		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+			{Group: utls.X25519},
+
+			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
+		}},
+		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,

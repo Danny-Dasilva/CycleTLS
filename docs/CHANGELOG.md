@@ -1,6 +1,13 @@
 # CycleTLS Changelog
 
-## 0.0.13 - (09-16-2020)
+## 0.0.14 - (10-06-2021)
+### Release Highlights
+Bugfix Ja3 Token Parsing and better error handling
+### Bug Fixes
+- Fix Stack overlflow if token is unsuported [Some Ja3 strings causing stackoverflow](https://github.com/Danny-Dasilva/CycleTLS/issues/51)
+- Address Ticket (fix extension 43) [Spoofed TLS/JA3 fingerprint is detected by some sites](https://github.com/Danny-Dasilva/CycleTLS/issues/47)
+
+## 0.0.13 - (09-16-2021)
 ### Release Highlights
 Performance improvements and Better Ja3 Token Parsing 
 ### Bug Fixes
@@ -12,7 +19,7 @@ Performance improvements and Better Ja3 Token Parsing
 - Updated Integration tests for new token fixes
 - Add new issue template
 
-## 0.0.12 - (08-14-2020)
+## 0.0.12 - (08-14-2021)
 ### Release Highlights
 Timeout and Disable redirect integration
 ### Bug Fixes
@@ -26,7 +33,7 @@ Timeout and Disable redirect integration
 - Make client exportable [ Make client interface exportable for easy use ](https://github.com/Danny-Dasilva/CycleTLS/pull/37)
 - Update CI release with stable node version
 
-## 0.0.11 - (06-6-2020)
+## 0.0.11 - (06-6-2021)
 ### Release Highlights
 Memory leak fixes and Clean Exit 
 ### Bug Fixes
@@ -38,7 +45,7 @@ Memory leak fixes and Clean Exit
 - New Jest test for clean exit 
 - Update ReadMe
 
-## 0.0.10 - (06-4-2020)
+## 0.0.10 - (06-4-2021)
 ### Release Highlights
 New Error Handling and bufixes
 ### Bug Fixes
@@ -49,7 +56,7 @@ New Error Handling and bufixes
 - New Errors file for checking proxy errors
 - Timeout now hard coded to 6 seconds
 
-## 0.0.9 - (05-28-2020)
+## 0.0.9 - (05-28-2021)
 ### Release Highlights
 New Jest CI Tests and general bugfixes
 
@@ -65,7 +72,7 @@ New Jest CI Tests and general bugfixes
 - CI fixes
 - Add Changelog 
 
-## 0.0.8 - (05-24-2020)
+## 0.0.8 - (05-24-2021)
 ### Release Highlights
 add fix for crashing js instance
 

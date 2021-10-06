@@ -1,4 +1,4 @@
-name: "🚀 🟢 Npm Publish"
+name: "🚀 🟢 Npm Publish Package"
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
     name: 🚀 Npm Publish
     runs-on: ubuntu-latest
 
-    if: "startsWith(github.event.head_commit.message, '🚀')"
+    if: "startsWith(github.event.head_commit.message, 'Release:')"
 
     strategy:
       matrix:
@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get gitlab.com/yawning/utls.git
         working-directory: ./
 
       - name: Install deps
