@@ -37,7 +37,7 @@ type roundTripper struct {
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// This is dumb but whatever
+	// Fix this later for proper cookie parsing
 	for _, properties := range rt.Cookies {
 		req.AddCookie(&http.Cookie{Name: properties.Name,
 			Value:      properties.Value,
@@ -52,7 +52,6 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Raw:        properties.Raw,
 			Unparsed:   properties.Unparsed,
 		})
-		fmt.Println(properties.Raw)
 	}
 	req.Header.Set("User-Agent", rt.UserAgent)
 	addr := rt.getDialTLSAddr(req)
@@ -108,7 +107,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 	//////////////////
 
-	spec, err := stringToSpec(rt.JA3)
+	spec, err := StringToSpec(rt.JA3)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +191,8 @@ func newRoundTripper(browser browser, dialer ...proxy.ContextDialer) http.RoundT
 }
 
 ///////////////////////// test code
-// stringToSpec creates a ClientHelloSpec based on a JA3 string
-func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
+// StringToSpec creates a ClientHelloSpec based on a JA3 string
+func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
@@ -211,8 +210,7 @@ func stringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// parse curves
 	var targetCurves []utls.CurveID
-	targetCurves = append(targetCurves, utls.CurveID(utls.CurveID(utls.GREASE_PLACEHOLDER)))
-	//append grease for Chrome browsers
+	targetCurves = append(targetCurves, utls.CurveID(utls.CurveID(utls.GREASE_PLACEHOLDER))) //append grease for Chrome browsers
 	for _, c := range curves {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {
@@ -302,7 +300,6 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 				utls.PKCS1WithSHA1,
 			},
 		},
-		"15": &utls.GenericExtension{Id: 15}, //FIXME hearbeat extension
 		"16": &utls.ALPNExtension{
 			AlpnProtocols: []string{"h2", "http/1.1"},
 		},
@@ -336,7 +333,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 
 			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
 		}},
-		"30032": &utls.GenericExtension{Id: 30032},
+		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME 
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,

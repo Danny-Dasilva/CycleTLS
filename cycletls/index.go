@@ -88,6 +88,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		browser,
 		request.Options.Timeout,
 		request.Options.DisableRedirect,
+		request.Options.UserAgent,
 		request.Options.Proxy,
 	)
 	if err != nil {
