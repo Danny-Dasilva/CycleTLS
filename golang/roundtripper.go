@@ -21,7 +21,6 @@ import (
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
-
 type roundTripper struct {
 	sync.Mutex
 	// fix typing
@@ -307,9 +306,9 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
 		"27": &utls.CompressCertificateExtension{
-					Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
-				},
-	    "28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
+			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		},
+		"28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 		"35": &utls.SessionTicketExtension{},
 		"34": &utls.GenericExtension{Id: 34},
 		"41": &utls.GenericExtension{Id: 41}, //FIXME pre_shared_key
@@ -329,10 +328,9 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
 			{Group: utls.X25519},
 
-
 			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
 		}},
-		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME 
+		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME
 		"13172": &utls.NPNExtension{},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,

@@ -77,18 +77,16 @@ func parseError(err error) (errormessage errorMessage) {
 
 }
 
-
 type errExtensionNotExist struct {
-    Context string
+	Context string
 }
 
 func (w *errExtensionNotExist) Error() string {
-    return fmt.Sprintf("Extension {{ %s }} is not Supported by CycleTLS please raise an issue", w.Context)
+	return fmt.Sprintf("Extension {{ %s }} is not Supported by CycleTLS please raise an issue", w.Context)
 }
 
 func raiseExtensionError(info string) *errExtensionNotExist {
-    return &errExtensionNotExist{
-        Context: info,
-    }
+	return &errExtensionNotExist{
+		Context: info,
+	}
 }
-
