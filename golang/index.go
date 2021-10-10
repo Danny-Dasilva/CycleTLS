@@ -5,13 +5,13 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
 )
 
@@ -94,16 +94,81 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
 	if err != nil {
-		log.Print(request.RequestID + "Request_Id_On_The_Left" + err.Error())
-		return
+		log.Fatal(err)
 	}
+	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
+	//if your site has any custom headers, see the header order chrome uses and then add those headers to this list
+	masterheaderorder := []string{
+		"host",
+		"connection",
+		"cache-control",
+		"device-memory",
+		"viewport-width",
+		"rtt",
+		"downlink",
+		"ect",
+		"sec-ch-ua",
+		"sec-ch-ua-mobile",
+		"sec-ch-ua-full-version",
+		"sec-ch-ua-arch",
+		"sec-ch-ua-platform",
+		"sec-ch-ua-platform-version",
+		"sec-ch-ua-model",
+		"upgrade-insecure-requests",
+		"user-agent",
+		"accept",
+		"sec-fetch-site",
+		"sec-fetch-mode",
+		"sec-fetch-user",
+		"sec-fetch-dest",
+		"referer",
+		"accept-encoding",
+		"accept-language",
+		"cookie",
+	}
+
+	headermap := make(map[string]string)
+	//TODO: REDUCE TIME COMPLEXITY (This code is very bad)
+	headerorderkey := []string{}
+	for _, key := range masterheaderorder {
+		for k, v := range request.Options.Headers {
+			lowercasekey := strings.ToLower(k)
+			if key == lowercasekey {
+				headermap[k] = v
+				headerorderkey = append(headerorderkey, lowercasekey)
+			}
+		}
+
+	}
+
+	for k, v := range req.Header {
+		if _, ok := headermap[k]; !ok {
+			headermap[k] = v[0]
+			headerorderkey = append(headerorderkey, strings.ToLower(k))
+		}
+	}
+
+	//ordering the pseudo headers and our normal headers
+	req.Header = http.Header{
+		http.HeaderOrderKey:  headerorderkey,
+		http.PHeaderOrderKey: {":method", ":authority", ":scheme", ":path"},
+	}
+	//set our Host header
+	u, err := url.Parse(request.Options.URL)
+	if err != nil {
+		panic(err)
+	}
+	//append our normal headers
 	for k, v := range request.Options.Headers {
-		if k != "host" {
+		if k != "Content-Length" {
 			req.Header.Set(k, v)
 		}
 	}
+	req.Header.Set("Host", u.Host)
+
 	return fullRequest{req: req, client: client, options: request}
 
 }

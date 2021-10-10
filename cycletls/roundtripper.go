@@ -6,15 +6,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-
-	// "log"
 	"net"
-	"net/http"
+
 	"strconv"
 	"strings"
 	"sync"
 
-	"golang.org/x/net/http2"
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	"golang.org/x/net/proxy"
 
 	utls "gitlab.com/yawning/utls.git"
@@ -47,7 +46,6 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			MaxAge:     properties.MaxAge,
 			HttpOnly:   properties.HTTPOnly,
 			Secure:     properties.Secure,
-			SameSite:   properties.SameSite,
 			Raw:        properties.Raw,
 			Unparsed:   properties.Unparsed,
 		})
@@ -112,7 +110,8 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 
 	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
-		// MaxVersion:         tls.VersionTLS12, // Default is TLS13
+		// MaxVersion:         tls.VersionTLS13,
+
 		utls.HelloCustom)
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err
@@ -137,8 +136,16 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	// of ALPN.
 	switch conn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
-		// The remote peer is speaking HTTP 2 + TLS.
-		rt.cachedTransports[addr] = &http2.Transport{DialTLS: rt.dialTLSHTTP2}
+		t2 := http2.Transport{DialTLS: rt.dialTLSHTTP2}
+		t2.Settings = []http2.Setting{
+			{ID: http2.SettingMaxConcurrentStreams, Val: 1000},
+			{ID: http2.SettingMaxFrameSize, Val: 16384},
+			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+		}
+		t2.InitialWindowSize = 6291456
+		t2.HeaderTableSize = 65536
+		t2.PushHandler = &http2.DefaultPushHandler{}
+		rt.cachedTransports[addr] = &t2
 	default:
 		// Assume the remote peer is speaking HTTP 1.x + TLS.
 		rt.cachedTransports[addr] = &http.Transport{DialTLSContext: rt.dialTLS}
