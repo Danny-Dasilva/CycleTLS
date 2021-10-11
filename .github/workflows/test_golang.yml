@@ -17,7 +17,9 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-
+      - name: Download Dependencies
+        working-directory: ./cycletls
+        run: go mod download
       - name: Build
         working-directory: ./cycletls
         run: go build -v ./...
