@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
 	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
 )
@@ -187,12 +186,15 @@ func dispatcher(res fullRequest) (response Response, err error) {
 
 	}
 	defer resp.Body.Close()
+
+	encoding := resp.Header["Content-Encoding"]
+
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("Parse Bytes" + err.Error())
 		return response, err
 	}
-
+	Body := DecompressBody(bodyBytes, encoding)
 	headers := make(map[string]string)
 
 	for name, values := range resp.Header {
@@ -205,7 +207,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		}
 	}
 
-	respData := respData{resp.StatusCode, string(bodyBytes), headers}
+	respData := respData{resp.StatusCode, Body, headers}
 
 	return Response{res.options.RequestID, respData}, nil
 
