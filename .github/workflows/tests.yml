@@ -31,7 +31,7 @@ jobs:
       - name: Export Go
         run: go env -w  GO111MODULE=auto
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
+        run: go mod download github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
         working-directory: ./
 
       - name: Install npm depencencies
