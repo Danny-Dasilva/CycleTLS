@@ -28,12 +28,12 @@ jobs:
         run: go env -w  GO111MODULE=auto
         working-directory: ./
       - name: Install golang dependencies
-        run: go env -w  GO111MODULE=auto && cd cycletls && go mod download
+        run: go env -w  GO111MODULE=auto && cd cycletls && go mod download && npm ci
         working-directory: ./
 
-      - name: Install npm depencencies
-        run: npm ci
-        working-directory: ./
+      # - name: Install npm depencencies
+      #   run: npm ci
+      #   working-directory: ./
 
       - name: Run Tests
         run: npm test
