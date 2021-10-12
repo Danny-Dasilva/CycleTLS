@@ -2,6 +2,10 @@ name: "🧪 Run NPM Tests"
 
 on: [push, pull_request]
 
+env:
+  GITHUB_HASH: $(git rev-parse --short "$GITHUB_SHA")
+
+
 jobs:
   release:
     name: Run general NPM unit and itegration tests
@@ -24,16 +28,16 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Export Go
-        run: go env -w  GO111MODULE=auto
+      - name: Echo Hash
+        run: echo "github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}"
         working-directory: ./
       - name: Install golang dependencies
-        run: go env -w  GO111MODULE=auto && cd cycletls && go mod download && npm ci
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
         working-directory: ./
 
-      # - name: Install npm depencencies
-      #   run: npm ci
-      #   working-directory: ./
+      - name: Install npm depencencies
+        run: npm ci
+        working-directory: ./
 
       - name: Run Tests
         run: npm test
