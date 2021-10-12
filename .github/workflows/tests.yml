@@ -32,7 +32,7 @@ jobs:
         working-directory: ./
 
       - name: Install golang dependencies
-        run: export GO111MODULE=auto && go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
         working-directory: ./
       - name: Install npm depencencies
         run: npm ci
