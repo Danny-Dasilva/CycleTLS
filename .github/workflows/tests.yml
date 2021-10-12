@@ -28,9 +28,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Echo Hash
-        run: echo "github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}"
-        working-directory: ./
       - name: Install golang dependencies
         run: go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
         working-directory: ./
