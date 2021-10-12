@@ -28,7 +28,7 @@ jobs:
         run: go env -w  GO111MODULE=auto
         working-directory: ./
       - name: Install golang dependencies
-        run: cd cycletls && go mod download
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp
         working-directory: ./
 
       - name: Install deps
