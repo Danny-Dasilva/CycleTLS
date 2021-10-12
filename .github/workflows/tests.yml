@@ -28,7 +28,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
+        run: go mod init && go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
         working-directory: ./
 
       - name: Install npm depencencies
