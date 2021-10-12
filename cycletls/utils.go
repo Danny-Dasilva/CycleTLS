@@ -18,19 +18,19 @@ func DecompressBody(Body []byte, encoding []string) (parsedBody string) {
 		if encoding[0] == "gzip" {
 			unz, err := gUnzipData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else if encoding[0] == "deflate" {
 			unz, err := enflateData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else if encoding[0] == "br" {
 			unz, err := unBrotliData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else {
