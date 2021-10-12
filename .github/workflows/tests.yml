@@ -31,11 +31,12 @@ jobs:
         run: export GO111MODULE=on
         working-directory: ./
 
-      - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
-        working-directory: ./
+      
       - name: Install golang dependencies
         run: go mod download github.com/Danny-Dasilva/CycleTLS/cycletls@${{ env.GITHUB_HASH }}
+        working-directory: ./
+      - name: Install golang dependencies
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
         working-directory: ./
       - name: Install npm depencencies
         run: npm ci
