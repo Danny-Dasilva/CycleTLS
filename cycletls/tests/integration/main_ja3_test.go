@@ -118,6 +118,7 @@ func TestHTTP2(t *testing.T) {
 		response, err = client.Do("https://http2.pro/api/v1", cycletls.Options{
 			Ja3:       options.Ja3,
 			UserAgent: options.UserAgent,
+			Headers: map[string]string{"Accept-Encoding": "application/json"},
 		}, "GET")
 		if response.Response.Status != options.HTTPResponse {
 			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Response.Status, "for", options.Ja3Hash)
