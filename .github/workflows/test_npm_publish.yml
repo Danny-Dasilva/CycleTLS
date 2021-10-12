@@ -1,4 +1,4 @@
-name: "🚨 🟢 Npm Test Publish Package"
+name: "🚨 🚀 🟢 Npm Test Publish Package"
 
 on: [pull_request]
 
@@ -26,7 +26,7 @@ jobs:
         run: go env -w  GO111MODULE=auto
         working-directory: ./
       - name: Install golang dependencies
-        run: go mod download
+        run: cd cycletls && go mod download
         working-directory: ./cycletls
 
       - name: Install npm depencencies
