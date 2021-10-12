@@ -26,8 +26,8 @@ jobs:
         run: go env -w  GO111MODULE=auto
         working-directory: ./
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get gitlab.com/yawning/utls.git
-        working-directory: ./
+        run: go mod download
+        working-directory: ./cycletls
 
       - name: Install npm depencencies
         run: npm ci

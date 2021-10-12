@@ -24,9 +24,12 @@ jobs:
 
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 
-      - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get gitlab.com/yawning/utls.git
+      - name: Export Go
+        run: go env -w  GO111MODULE=auto
         working-directory: ./
+      - name: Install golang dependencies
+        run: go mod download
+        working-directory: ./cycletls
 
       - name: Install deps
         run: npm ci --unsafe-perm
