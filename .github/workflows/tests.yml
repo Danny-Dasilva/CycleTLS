@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         node-version: [14.x]
-        go-version: [1.14]
+        go-version: [1.16]
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
@@ -27,7 +27,9 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-
+      - name: Set module-aware mode
+        run: go env -w  GO111MODULE=auto
+        working-directory: ./
       - name: Install golang dependencies
         run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
         working-directory: ./

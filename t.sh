@@ -1,9 +1,14 @@
-docker build -t my_first_image .
+docker build -t testing_container .
 
-docker run --name test my_first_image
+docker run --name test testing_container
+docker run -dit --name test testing_container
 
-docker exec -it my_first_image
+docker start test
+
+docker exec -it test  /bin/bash 
 
 docker run --name testing \
 --rm -it --privileged -p 6006:6006 \
 my_first_image
+
+docker system prune -a
