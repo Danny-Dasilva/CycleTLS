@@ -1,4 +1,4 @@
-name: "🧪 Run NPM Tests"
+name: "🧪 Node Tests"
 
 on: [push, pull_request]
 
