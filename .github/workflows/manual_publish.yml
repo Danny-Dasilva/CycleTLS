@@ -32,7 +32,6 @@ jobs:
         run: |
           echo "PACKAGE_NAME=$(node -p "try { require('./package.json').name } catch(e) {}")" >> $GITHUB_ENV
         id: package
-        working-directory: ./my-package
       - name: Retrieve Latest Version
         run: |
           echo "::set-output name=LATEST_VERSION::$(npm view ${{ env.PACKAGE_NAME }} version)"
@@ -40,7 +39,6 @@ jobs:
       - name: Update to latest version
         run: |
           npm version ${{ steps.version.outputs.LATEST_VERSION }} --allow-same-version
-        working-directory: ./my-package
       - name: bump version
         run: |
           if [[ "${{ github.event.inputs.releaseCandidate }}" == "alpha" ]]; then
@@ -49,7 +47,6 @@ jobs:
           if [[ "${{ github.event.inputs.releaseCandidate }}" == "beta" ]]; then
               npm version prerelease --preid beta
           fi
-        working-directory: ./my-package
 
       - name: Set module-aware mode
         run: go env -w  GO111MODULE=auto

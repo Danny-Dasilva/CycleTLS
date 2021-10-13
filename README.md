@@ -29,7 +29,7 @@ For any feature requests or API change requests, please feel free to open an iss
 
 ```
 node ^v14.0
-golang ^v1.14
+golang ^v1.16x
 ```
 
 ## Installation
@@ -283,9 +283,17 @@ const promises = [];
 
 If you would like to compile CycleTLS on your own, use the following commands:
 
-`npm install`
+Set module-aware mode
 
-`npm run prepare`
+`go env -w  GO111MODULE=auto`
+
+Install golang dependencies
+
+`go get github.com/Danny-Dasilva/CycleTLS/cycletls`
+
+install npm packages
+
+`npm install`
 
 ### To recompile index.ts in the src folder
 
