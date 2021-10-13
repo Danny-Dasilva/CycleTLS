@@ -28,10 +28,6 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: export
-        run: export GO111MODULE=on
-        working-directory: ./
-
       - name: Install golang dependencies
         run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
         working-directory: ./
