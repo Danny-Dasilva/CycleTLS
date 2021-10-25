@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	http "github.com/Danny-Dasilva/fhttp"
+	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -10,8 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	http "github.com/Danny-Dasilva/fhttp"
-	"github.com/gorilla/websocket"
 )
 
 // Options sets CycleTLS client options
@@ -182,7 +182,6 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		respData := respData{parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}
 
 		return Response{res.options.RequestID, respData}, nil //normally return error here
-		// return response, err
 
 	}
 	defer resp.Body.Close()
@@ -219,7 +218,7 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 	options.URL = URL
 	options.Method = Method
 	//TODO add timestamp to request
-	opt := cycleTLSRequest{"n", options}
+	opt := cycleTLSRequest{"Queued Request", options}
 	response := processRequest(opt)
 	client.ReqChan <- response
 }

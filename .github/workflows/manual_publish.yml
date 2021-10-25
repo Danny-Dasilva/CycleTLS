@@ -73,4 +73,4 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN}}
           
       - name: Push git
-        run: git commit -a -m "[RELEASE] %s" && git push
+        run: git add * && git commit -a -m "[RELEASE] %s" && git push

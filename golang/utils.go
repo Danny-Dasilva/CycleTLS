@@ -1,36 +1,37 @@
 package main
 
 import (
-	"crypto/sha256"
-	"compress/zlib"
 	"bytes"
-	"strconv"
-	utls "gitlab.com/yawning/utls.git"
-	"github.com/andybalholm/brotli"
-	"log"
 	"compress/gzip"
-	"strings"
+	"compress/zlib"
+	"crypto/sha256"
+	"github.com/andybalholm/brotli"
+	utls "gitlab.com/yawning/utls.git"
 	"io/ioutil"
-
+	"log"
+	"strconv"
+	"strings"
 )
+
+// DecompressBody unzips compressed data
 func DecompressBody(Body []byte, encoding []string) (parsedBody string) {
 	if len(encoding) > 0 {
 		if encoding[0] == "gzip" {
 			unz, err := gUnzipData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else if encoding[0] == "deflate" {
 			unz, err := enflateData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else if encoding[0] == "br" {
 			unz, err := unBrotliData(Body)
 			if err != nil {
-				panic(err)
+				return string(Body)
 			}
 			parsedBody = string(unz)
 		} else {
@@ -61,9 +62,6 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	respBody, err := ioutil.ReadAll(br)
 	return respBody, err
 }
-
-
-
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
