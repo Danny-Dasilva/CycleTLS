@@ -82,7 +82,7 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// parse curves
 	var targetCurves []utls.CurveID
-	targetCurves = append(targetCurves, utls.CurveID(utls.CurveID(utls.GREASE_PLACEHOLDER))) //append grease for Chrome browsers
+	targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
 	for _, c := range curves {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {
@@ -117,10 +117,14 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// build extenions list
 	var exts []utls.TLSExtension
+	exts = append(exts, &utls.UtlsGREASEExtension{})
 	for _, e := range extensions {
 		te, ok := extMap[e]
 		if !ok {
 			return nil, raiseExtensionError(e)
+		}
+		if e == "21" {
+			exts = append(exts, &utls.UtlsGREASEExtension{})
 		}
 		exts = append(exts, te)
 	}
@@ -132,6 +136,8 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// build CipherSuites
 	var suites []uint16
+	suites = append(suites, utls.GREASE_PLACEHOLDER)
+
 	for _, c := range ciphers {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {

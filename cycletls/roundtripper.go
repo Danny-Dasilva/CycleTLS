@@ -102,18 +102,19 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 	//////////////////
 
-	spec, err := StringToSpec(rt.JA3)
-	if err != nil {
-		return nil, err
-	}
+	// spec, err := StringToSpec(rt.JA3)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS13,
 
-		utls.HelloCustom)
-	if err := conn.ApplyPreset(spec); err != nil {
-		return nil, err
-	}
+		utls.HelloChrome_83)
+
+	// if err := conn.ApplyPreset(spec); err != nil {
+	// 	return nil, err
+	// }
 
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
