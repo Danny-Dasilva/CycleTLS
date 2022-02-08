@@ -103,7 +103,7 @@ class Golang extends EventEmitter {
       this.emit("ready");
       ws.on("message", (data: string) => {
         const message = JSON.parse(data);
-        this.emit(message.RequestID, message.Response);
+        this.emit(message.RequestID, message);
       });
 
       ws.on("close", (data: string) => {
@@ -209,7 +209,7 @@ const initCycleTLS = async (
 
             instance.once(requestId, (response) => {
               if (response.error) return rejectRequest(response.error);
-
+              
               const { Status: status, Body: body, Headers: headers } = response;
 
               if (headers["Set-Cookie"])

@@ -102,7 +102,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 	//////////////////
 
-	spec, err := StringToSpec(rt.JA3)
+	spec, err := StringToSpec(rt.JA3, rt.UserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +111,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		// MaxVersion:         tls.VersionTLS13,
 
 		utls.HelloCustom)
+
 	if err := conn.ApplyPreset(spec); err != nil {
 		return nil, err
 	}

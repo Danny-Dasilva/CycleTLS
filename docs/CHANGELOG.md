@@ -1,5 +1,16 @@
 # CycleTLS Changelog
 
+## 0.0.15 - (2-07-2022)
+### Release Highlights
+Ordered Requests headers and Support for 
+### Bug Fixes
+- Properly form grease  
+
+### Enhancements
+- Ordered Request Headers
+- Gzip/brotly/deflate decoding 
+- Add new issue template
+
 ## 0.0.14 - (10-06-2021)
 ### Release Highlights
 Bugfix Ja3 Token Parsing and better error handling

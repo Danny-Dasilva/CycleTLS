@@ -13,6 +13,25 @@ import (
 	"strings"
 )
 
+const(
+	Chrome = "chrome"
+	Firefox = "firefox"
+	Default = ""
+
+)
+
+func ParseUserAgent(userAgent string) (string){
+	switch {
+    case strings.Contains(strings.ToLower(userAgent), "chrome") :
+		return Chrome
+	case strings.Contains(strings.ToLower(userAgent), "firefox") :
+		return Firefox
+    default:
+        return Chrome
+    }
+	
+}
+
 // DecompressBody unzips compressed data
 func DecompressBody(Body []byte, encoding []string) (parsedBody string) {
 	if len(encoding) > 0 {
@@ -64,7 +83,8 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 }
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
-func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
+func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
+	parsedUserAgent := ParseUserAgent("chrome")
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
@@ -82,7 +102,7 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// parse curves
 	var targetCurves []utls.CurveID
-	targetCurves = append(targetCurves, utls.CurveID(utls.CurveID(utls.GREASE_PLACEHOLDER))) //append grease for Chrome browsers
+	targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
 	for _, c := range curves {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {
@@ -117,10 +137,18 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// build extenions list
 	var exts []utls.TLSExtension
+	//Optionally Add Chrome Grease Extension
+	if parsedUserAgent == Chrome {
+		exts = append(exts, &utls.UtlsGREASEExtension{})
+	}
 	for _, e := range extensions {
 		te, ok := extMap[e]
 		if !ok {
 			return nil, raiseExtensionError(e)
+		}
+		//Optionally add Chrome Grease Extension
+		if e == "21" && parsedUserAgent == Chrome {
+			exts = append(exts, &utls.UtlsGREASEExtension{})
 		}
 		exts = append(exts, te)
 	}
@@ -132,6 +160,10 @@ func StringToSpec(ja3 string) (*utls.ClientHelloSpec, error) {
 
 	// build CipherSuites
 	var suites []uint16
+	//Optionally Add Chrome Grease Extension
+	if parsedUserAgent == Chrome {
+		suites = append(suites, utls.GREASE_PLACEHOLDER)
+	}
 	for _, c := range ciphers {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {

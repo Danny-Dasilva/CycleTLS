@@ -40,17 +40,22 @@ type fullRequest struct {
 	options cycleTLSRequest
 }
 
-//TODO: rename this response struct
-type respData struct {
+//Response contains Cycletls response data
+type Response struct {
+	RequestID string
 	Status  int
 	Body    string
 	Headers map[string]string
 }
 
-//Response contains Cycletls response data
-type Response struct {
-	RequestID string
-	Response  respData
+//Json Conversion in golang
+func (re Response) JsonBody() (map[string]interface{}) {
+	var data map[string]interface{}
+	err := json.Unmarshal([]byte(re.Body), &data)
+	if err != nil {
+		log.Print("Json Conversion failed" + err.Error() + re.Body)
+	}
+	return data
 }
 
 //CycleTLS creates full request and response
@@ -130,7 +135,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	}
 
 	headermap := make(map[string]string)
-	//TODO: REDUCE TIME COMPLEXITY (This code is very bad)
+	//TODO: Shorten this
 	headerorderkey := []string{}
 	for _, key := range masterheaderorder {
 		for k, v := range request.Options.Headers {
@@ -179,9 +184,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		respData := respData{parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}
-
-		return Response{res.options.RequestID, respData}, nil //normally return error here
+		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
@@ -205,10 +208,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-
-	respData := respData{resp.StatusCode, Body, headers}
-
-	return Response{res.options.RequestID, respData}, nil
+	return Response{res.options.RequestID, resp.StatusCode, Body, headers}, nil
 
 }
 

@@ -22,8 +22,8 @@ func TestRedirectEnabled(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	if resp.Response.Status != 200 {
-		t.Fatal("Expected {} Got {} for Status", 200, resp.Response.Status)
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
 	}
 
 }
@@ -40,8 +40,8 @@ func TestRedirectDisabled(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	if resp.Response.Status != 301 {
-		t.Fatal("Expected {} Got {} for Status", 301, resp.Response.Status)
+	if resp.Status != 301 {
+		t.Fatal("Expected {} Got {} for Status", 301, resp.Status)
 	}
 
 }

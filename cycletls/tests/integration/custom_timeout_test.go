@@ -24,8 +24,8 @@ func TestTimeoutSuccess(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	if resp.Response.Status != 200 {
-		t.Fatalf("Expected %d Got %d for Status", 200, resp.Response.Status)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	}
 }
 
@@ -41,11 +41,11 @@ func TestTimeoutError(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	if resp.Response.Status != 408 {
-		t.Fatalf("Expected %d Got %d for Status", 408, resp.Response.Status)
+	if resp.Status != 408 {
+		t.Fatalf("Expected %d Got %d for Status", 408, resp.Status)
 	}
-	if strings.Contains(resp.Response.Body, "Timeout") == false {
-		t.Fatalf("Expected %s in Body Got %s", "Timeout", resp.Response.Body)
+	if strings.Contains(resp.Body, "Timeout") == false {
+		t.Fatalf("Expected %s in Body Got %s", "Timeout", resp.Body)
 	}
 
 }

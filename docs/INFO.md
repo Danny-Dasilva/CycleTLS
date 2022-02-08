@@ -17,9 +17,7 @@ Takes an URL string, makes an HTTP GET and returns a dict with the response.
 
 Examples:
 
-```python
-import faster_than_requests as requests
-requests.get("http://example.com")
+```js
 ```
 
 **Returns:**
@@ -58,6 +56,3 @@ $ python3 benchmark.py   # Inside Docker.
 - ✅ Linux
 - ✅ Windows
 - ✅ Mac
-- ✅ Android
-- ✅ Raspberry Pi
-- ✅ BSD
