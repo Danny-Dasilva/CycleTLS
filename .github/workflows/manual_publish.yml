@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           registry-url: https://registry.npmjs.org
+
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -38,6 +39,7 @@ jobs:
         run: |
           echo "PACKAGE_NAME=$(node -p "try { require('./package.json').name } catch(e) {}")" >> $GITHUB_ENV
         id: package
+
 
       - name: Retrieve Latest Version
         run: |
