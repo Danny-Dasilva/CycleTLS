@@ -26,7 +26,10 @@ type Options struct {
 	Cookies         []Cookie          `json:"cookies"`
 	Timeout         int               `json:"timeout"`
 	DisableRedirect bool              `json:"disableRedirect"`
+	HeaderOrder  	[]string          `json:"headerOrder"`
+	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
 }
+
 
 type cycleTLSRequest struct {
 	RequestID string  `json:"requestId"`
@@ -103,41 +106,47 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	headerorder := []string{}
 	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
 	//if your site has any custom headers, see the header order chrome uses and then add those headers to this list
-	masterheaderorder := []string{
-		"host",
-		"connection",
-		"cache-control",
-		"device-memory",
-		"viewport-width",
-		"rtt",
-		"downlink",
-		"ect",
-		"sec-ch-ua",
-		"sec-ch-ua-mobile",
-		"sec-ch-ua-full-version",
-		"sec-ch-ua-arch",
-		"sec-ch-ua-platform",
-		"sec-ch-ua-platform-version",
-		"sec-ch-ua-model",
-		"upgrade-insecure-requests",
-		"user-agent",
-		"accept",
-		"sec-fetch-site",
-		"sec-fetch-mode",
-		"sec-fetch-user",
-		"sec-fetch-dest",
-		"referer",
-		"accept-encoding",
-		"accept-language",
-		"cookie",
+	if len(request.Options.HeaderOrder) > 0 {
+		headerorder = request.Options.HeaderOrder
+	} else {
+		headerorder = append(headerorder,
+			"host",
+			"connection",
+			"cache-control",
+			"device-memory",
+			"viewport-width",
+			"rtt",
+			"downlink",
+			"ect",
+			"sec-ch-ua",
+			"sec-ch-ua-mobile",
+			"sec-ch-ua-full-version",
+			"sec-ch-ua-arch",
+			"sec-ch-ua-platform",
+			"sec-ch-ua-platform-version",
+			"sec-ch-ua-model",
+			"upgrade-insecure-requests",
+			"user-agent",
+			"accept",
+			"sec-fetch-site",
+			"sec-fetch-mode",
+			"sec-fetch-user",
+			"sec-fetch-dest",
+			"referer",
+			"accept-encoding",
+			"accept-language",
+			"cookie",
+		)
 	}
-
+	
+	
 	headermap := make(map[string]string)
 	//TODO: Shorten this
 	headerorderkey := []string{}
-	for _, key := range masterheaderorder {
+	for _, key := range headerorder {
 		for k, v := range request.Options.Headers {
 			lowercasekey := strings.ToLower(k)
 			if key == lowercasekey {
@@ -148,12 +157,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	}
 
-	for k, v := range req.Header {
-		if _, ok := headermap[k]; !ok {
-			headermap[k] = v[0]
-			headerorderkey = append(headerorderkey, strings.ToLower(k))
-		}
-	}
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
@@ -165,13 +168,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		panic(err)
 	}
-	//append our normal headers
-	for k, v := range request.Options.Headers {
-		if k != "Content-Length" {
-			req.Header.Set(k, v)
-		}
-	}
 	req.Header.Set("Host", u.Host)
+
+	//append our normal headers
+	for k, v := range headermap {
+		req.Header.Set(k, v)
+	}
 
 	return fullRequest{req: req, client: client, options: request}
 
@@ -244,7 +246,6 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (response 
 
 // Init starts the worker pool or returns a empty cycletls struct
 func Init(workers ...bool) CycleTLS {
-
 	if len(workers) > 0 && workers[0] {
 		reqChan := make(chan fullRequest)
 		respChan := make(chan Response)
