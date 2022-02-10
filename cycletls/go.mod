@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/Danny-Dasilva/fhttp v0.0.0-20211010093114-56fde831fe2f
+	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/andybalholm/brotli v1.0.3
 	github.com/gorilla/websocket v1.4.2
 	gitlab.com/yawning/utls.git v0.0.12-1
