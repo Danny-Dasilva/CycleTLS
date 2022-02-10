@@ -26,10 +26,9 @@ type Options struct {
 	Cookies         []Cookie          `json:"cookies"`
 	Timeout         int               `json:"timeout"`
 	DisableRedirect bool              `json:"disableRedirect"`
-	HeaderOrder  	[]string          `json:"headerOrder"`
+	HeaderOrder     []string          `json:"headerOrder"`
 	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
 }
-
 
 type cycleTLSRequest struct {
 	RequestID string  `json:"requestId"`
@@ -46,13 +45,13 @@ type fullRequest struct {
 //Response contains Cycletls response data
 type Response struct {
 	RequestID string
-	Status  int
-	Body    string
-	Headers map[string]string
+	Status    int
+	Body      string
+	Headers   map[string]string
 }
 
-//Json Conversion in golang
-func (re Response) JsonBody() (map[string]interface{}) {
+//JSONBody converts response body to json
+func (re Response) JSONBody() map[string]interface{} {
 	var data map[string]interface{}
 	err := json.Unmarshal([]byte(re.Body), &data)
 	if err != nil {
@@ -145,8 +144,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 			"cookie",
 		)
 	}
-	
-	log.Println(headerorder)
+
 	headermap := make(map[string]string)
 	//TODO: Shorten this
 	headerorderkey := []string{}
@@ -160,8 +158,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 
 	}
-
-	log.Println(headerorderkey)
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{

@@ -27,7 +27,7 @@ func main() {
 		log.Print("Request Failed: " + err.Error())
 	}
 	log.Println(resp.Body)
-	if resp.JsonBody()["deflated"] != true {
+	if resp.JSONBody()["deflated"] != true {
 		log.Println("Deflated not found in Reponse Body: %s", resp.Body)
 	}
 

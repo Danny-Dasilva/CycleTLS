@@ -13,23 +13,21 @@ import (
 	"strings"
 )
 
-const(
-	Chrome = "chrome"
-	Firefox = "firefox"
-	Default = ""
-
+const (
+	chrome  = "chrome"  //chrome User agent enum
+	firefox = "firefox" //firefox User agent enum
 )
 
-func ParseUserAgent(userAgent string) (string){
+func parseUserAgent(userAgent string) string {
 	switch {
-    case strings.Contains(strings.ToLower(userAgent), "chrome") :
-		return Chrome
-	case strings.Contains(strings.ToLower(userAgent), "firefox") :
-		return Firefox
-    default:
-        return Chrome
-    }
-	
+	case strings.Contains(strings.ToLower(userAgent), "chrome"):
+		return chrome
+	case strings.Contains(strings.ToLower(userAgent), "firefox"):
+		return firefox
+	default:
+		return chrome
+	}
+
 }
 
 // DecompressBody unzips compressed data
@@ -88,10 +86,9 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	return respBody, err
 }
 
-
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
-	parsedUserAgent := ParseUserAgent("chrome")
+	parsedUserAgent := parseUserAgent("chrome")
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 

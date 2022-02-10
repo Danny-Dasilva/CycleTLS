@@ -1,32 +1,31 @@
 package cycletls_test
 
 import (
-"io/ioutil"
-"log"
-"bytes"
-"path/filepath"
-"testing"
-
+	"bytes"
+	"io/ioutil"
+	"log"
+	"path/filepath"
+	"testing"
 )
 
-func findGoFiles(path string) []string{
+func findGoFiles(path string) []string {
 	var a []string
 	items, _ := ioutil.ReadDir(path)
-    for _, item := range items {
-        if item.IsDir() {
-        } else {
-            // handle file there
+	for _, item := range items {
+		if item.IsDir() {
+		} else {
+			// handle file there
 			if filepath.Ext(item.Name()) == ".go" {
-				a = append(a, path + "/"+item.Name())
+				a = append(a, path+"/"+item.Name())
 			}
-        }
-    }
+		}
+	}
 	return a
 }
 func TestPackagesAreSame(t *testing.T) {
 	cycleTLSFiles := findGoFiles("../../../cycletls")
 	golangFiles := findGoFiles("../../../golang")
-	
+
 	for i, _ := range cycleTLSFiles {
 		f1, err1 := ioutil.ReadFile(cycleTLSFiles[i])
 
@@ -39,9 +38,9 @@ func TestPackagesAreSame(t *testing.T) {
 		if err2 != nil {
 			log.Fatal(err2)
 		}
-		if bytes.Equal(f1[17:], f2[13:]) != true  {
+		if bytes.Equal(f1[17:], f2[13:]) != true {
 			t.Fatalf("%s and %s are different", cycleTLSFiles[i][7:], golangFiles[i][7:])
 		}
 	}
-    
+
 }
