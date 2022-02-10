@@ -82,6 +82,7 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	return respBody, err
 }
 
+
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 	parsedUserAgent := ParseUserAgent("chrome")
