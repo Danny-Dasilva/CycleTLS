@@ -65,13 +65,19 @@ func DecompressBody(Body []byte, encoding []string) (parsedBody string) {
 }
 
 func gUnzipData(data []byte) (resData []byte, err error) {
-	gz, _ := gzip.NewReader(bytes.NewReader(data))
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return []byte{}, err
+	}
 	defer gz.Close()
 	respBody, err := ioutil.ReadAll(gz)
 	return respBody, err
 }
 func enflateData(data []byte) (resData []byte, err error) {
-	zr, _ := zlib.NewReader(bytes.NewReader(data))
+	zr, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return []byte{}, err
+	}
 	defer zr.Close()
 	enflated, err := ioutil.ReadAll(zr)
 	return enflated, err

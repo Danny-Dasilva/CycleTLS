@@ -56,7 +56,7 @@ func (re Response) JsonBody() (map[string]interface{}) {
 	var data map[string]interface{}
 	err := json.Unmarshal([]byte(re.Body), &data)
 	if err != nil {
-		log.Print("Json Conversion failed" + err.Error() + re.Body)
+		log.Print("Json Conversion failed " + err.Error() + re.Body)
 	}
 	return data
 }
