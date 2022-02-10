@@ -15,6 +15,7 @@ export interface CycleTLSRequestOptions {
   proxy?: string;
   timeout?: number;
   disableRedirect?: boolean;
+  headerOrder?: string[];
 }
 
 export interface CycleTLSResponse {

@@ -181,6 +181,8 @@ If URL is not passed, one must be specified in the config.
   timeout: 2,
   // Toggle if CycleTLS should follow redirects
   disableRedirect: true
+  // Custom header order to send with request (This value will overwrite default header order)
+  headerOrder: ["cache-control", "connection", "host"]
 }
 );
 

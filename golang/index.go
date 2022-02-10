@@ -110,7 +110,11 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
 	//if your site has any custom headers, see the header order chrome uses and then add those headers to this list
 	if len(request.Options.HeaderOrder) > 0 {
-		headerorder = request.Options.HeaderOrder
+		//lowercase headers
+		for _, v := range request.Options.HeaderOrder {
+			lowercasekey := strings.ToLower(v)
+			headerorder = append(headerorder, lowercasekey)
+		}
 	} else {
 		headerorder = append(headerorder,
 			"host",
