@@ -1,6 +1,6 @@
 name: 🧪 🐹 Go Integration/Unit Tests
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   test:

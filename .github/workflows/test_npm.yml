@@ -1,6 +1,6 @@
 name: "🧪 Node Tests"
 
-on: [push, pull_request]
+on: [pull_request]
 
 env:
   GITHUB_HASH: $(git rev-parse --short "$GITHUB_SHA")
