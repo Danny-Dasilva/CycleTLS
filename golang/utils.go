@@ -142,7 +142,7 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 	// build extenions list
 	var exts []utls.TLSExtension
 	//Optionally Add Chrome Grease Extension
-	if parsedUserAgent == Chrome {
+	if parsedUserAgent == chrome {
 		exts = append(exts, &utls.UtlsGREASEExtension{})
 	}
 	for _, e := range extensions {
@@ -151,7 +151,7 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 			return nil, raiseExtensionError(e)
 		}
 		//Optionally add Chrome Grease Extension
-		if e == "21" && parsedUserAgent == Chrome {
+		if e == "21" && parsedUserAgent == chrome {
 			exts = append(exts, &utls.UtlsGREASEExtension{})
 		}
 		exts = append(exts, te)
@@ -165,7 +165,7 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 	// build CipherSuites
 	var suites []uint16
 	//Optionally Add Chrome Grease Extension
-	if parsedUserAgent == Chrome {
+	if parsedUserAgent == chrome {
 		suites = append(suites, utls.GREASE_PLACEHOLDER)
 	}
 	for _, c := range ciphers {
