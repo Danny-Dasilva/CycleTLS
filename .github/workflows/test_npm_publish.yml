@@ -4,12 +4,13 @@ on: [pull_request]
 
 jobs:
   release:
-    name: test npm publish
+    name: Test Npm Publish
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
+        node-version: [15.x]
         go-version: [1.16]
-        node-version: [14.x]
     steps:
       - uses: actions/checkout@v2
       - name: 🟢 Use Node.js ${{ matrix.node-version }}
@@ -18,6 +19,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           registry-url: "https://registry.npmjs.org"
 
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -30,7 +32,8 @@ jobs:
         working-directory: ./
 
       - name: Install npm depencencies
-        run: npm ci
+        run: npm ci --unsafe-perm
+
         working-directory: ./
 
       - name: 🚀 publish

@@ -24,7 +24,10 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
       - name: Export Go
         run: go env -w  GO111MODULE=auto
         working-directory: ./
