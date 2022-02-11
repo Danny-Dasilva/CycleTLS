@@ -29,7 +29,7 @@ For any feature requests or API change requests, please feel free to open an iss
 
 ```
 node ^v14.0
-golang ^v1.14
+golang ^v1.16x
 ```
 
 ## Installation
@@ -181,6 +181,8 @@ If URL is not passed, one must be specified in the config.
   timeout: 2,
   // Toggle if CycleTLS should follow redirects
   disableRedirect: true
+  // Custom header order to send with request (This value will overwrite default header order)
+  headerOrder: ["cache-control", "connection", "host"]
 }
 );
 
@@ -283,9 +285,17 @@ const promises = [];
 
 If you would like to compile CycleTLS on your own, use the following commands:
 
-`npm install`
+Set module-aware mode
 
-`npm run prepare`
+`go env -w  GO111MODULE=auto`
+
+Install golang dependencies
+
+`go get github.com/Danny-Dasilva/CycleTLS/cycletls`
+
+install npm packages
+
+`npm install`
 
 ### To recompile index.ts in the src folder
 

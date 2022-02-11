@@ -1,14 +1,16 @@
-name: "🚨 🟢 Npm Test Publish Package"
+name: "🚨 🚀 🟢 Npm Test Publish Package"
 
 on: [pull_request]
 
 jobs:
   release:
-    name: test npm publish
+    name: Test Npm Publish
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        node-version: [14.x]
+        node-version: [15.x]
+        go-version: [1.16]
     steps:
       - uses: actions/checkout@v2
       - name: 🟢 Use Node.js ${{ matrix.node-version }}
@@ -17,17 +19,21 @@ jobs:
           node-version: ${{ matrix.node-version }}
           registry-url: "https://registry.npmjs.org"
 
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-
+      - name: Export Go
+        run: go env -w  GO111MODULE=auto
+        working-directory: ./
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get gitlab.com/yawning/utls.git
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
         working-directory: ./
 
       - name: Install npm depencencies
-        run: npm ci
+        run: npm ci --unsafe-perm
+
         working-directory: ./
 
       - name: 🚀 publish

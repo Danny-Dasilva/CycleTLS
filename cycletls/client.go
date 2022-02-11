@@ -1,7 +1,8 @@
 package cycletls
 
 import (
-	"net/http"
+	http "github.com/Danny-Dasilva/fhttp"
+
 	"time"
 
 	"golang.org/x/net/proxy"

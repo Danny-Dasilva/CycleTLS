@@ -24,6 +24,6 @@ func main() {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	log.Println(response.Response.Body)
+	log.Println(response.Body)
 
 }

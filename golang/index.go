@@ -3,16 +3,15 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	http "github.com/Danny-Dasilva/fhttp"
+	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 // Options sets CycleTLS client options
@@ -27,6 +26,8 @@ type Options struct {
 	Cookies         []Cookie          `json:"cookies"`
 	Timeout         int               `json:"timeout"`
 	DisableRedirect bool              `json:"disableRedirect"`
+	HeaderOrder     []string          `json:"headerOrder"`
+	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
 }
 
 type cycleTLSRequest struct {
@@ -41,17 +42,22 @@ type fullRequest struct {
 	options cycleTLSRequest
 }
 
-//TODO: rename this response struct
-type respData struct {
-	Status  int
-	Body    string
-	Headers map[string]string
-}
-
 //Response contains Cycletls response data
 type Response struct {
 	RequestID string
-	Response  respData
+	Status    int
+	Body      string
+	Headers   map[string]string
+}
+
+//JSONBody converts response body to json
+func (re Response) JSONBody() map[string]interface{} {
+	var data map[string]interface{}
+	err := json.Unmarshal([]byte(re.Body), &data)
+	if err != nil {
+		log.Print("Json Conversion failed " + err.Error() + re.Body)
+	}
+	return data
 }
 
 //CycleTLS creates full request and response
@@ -94,16 +100,82 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
 	if err != nil {
-		log.Print(request.RequestID + "Request_Id_On_The_Left" + err.Error())
-		return
+		log.Fatal(err)
 	}
-	for k, v := range request.Options.Headers {
-		if k != "host" {
-			req.Header.Set(k, v)
+	headerorder := []string{}
+	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
+	//if your site has any custom headers, see the header order chrome uses and then add those headers to this list
+	if len(request.Options.HeaderOrder) > 0 {
+		//lowercase headers
+		for _, v := range request.Options.HeaderOrder {
+			lowercasekey := strings.ToLower(v)
+			headerorder = append(headerorder, lowercasekey)
 		}
+	} else {
+		headerorder = append(headerorder,
+			"host",
+			"connection",
+			"cache-control",
+			"device-memory",
+			"viewport-width",
+			"rtt",
+			"downlink",
+			"ect",
+			"sec-ch-ua",
+			"sec-ch-ua-mobile",
+			"sec-ch-ua-full-version",
+			"sec-ch-ua-arch",
+			"sec-ch-ua-platform",
+			"sec-ch-ua-platform-version",
+			"sec-ch-ua-model",
+			"upgrade-insecure-requests",
+			"user-agent",
+			"accept",
+			"sec-fetch-site",
+			"sec-fetch-mode",
+			"sec-fetch-user",
+			"sec-fetch-dest",
+			"referer",
+			"accept-encoding",
+			"accept-language",
+			"cookie",
+		)
 	}
+
+	headermap := make(map[string]string)
+	//TODO: Shorten this
+	headerorderkey := []string{}
+	for _, key := range headerorder {
+		for k, v := range request.Options.Headers {
+			lowercasekey := strings.ToLower(k)
+			if key == lowercasekey {
+				headermap[k] = v
+				headerorderkey = append(headerorderkey, lowercasekey)
+			}
+		}
+
+	}
+
+	//ordering the pseudo headers and our normal headers
+	req.Header = http.Header{
+		http.HeaderOrderKey:  headerorderkey,
+		http.PHeaderOrderKey: {":method", ":authority", ":scheme", ":path"},
+	}
+	//set our Host header
+	u, err := url.Parse(request.Options.URL)
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Host", u.Host)
+
+	//append our normal headers
+	for k, v := range headermap {
+		req.Header.Set(k, v)
+	}
+
 	return fullRequest{req: req, client: client, options: request}
 
 }
@@ -115,19 +187,19 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		respData := respData{parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}
-
-		return Response{res.options.RequestID, respData}, nil //normally return error here
-		// return response, err
+		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
+
+	encoding := resp.Header["Content-Encoding"]
+
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("Parse Bytes" + err.Error())
 		return response, err
 	}
-
+	Body := DecompressBody(bodyBytes, encoding)
 	headers := make(map[string]string)
 
 	for name, values := range resp.Header {
@@ -139,10 +211,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-
-	respData := respData{resp.StatusCode, string(bodyBytes), headers}
-
-	return Response{res.options.RequestID, respData}, nil
+	return Response{res.options.RequestID, resp.StatusCode, Body, headers}, nil
 
 }
 
@@ -152,7 +221,7 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 	options.URL = URL
 	options.Method = Method
 	//TODO add timestamp to request
-	opt := cycleTLSRequest{"n", options}
+	opt := cycleTLSRequest{"Queued Request", options}
 	response := processRequest(opt)
 	client.ReqChan <- response
 }
@@ -178,7 +247,6 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (response 
 
 // Init starts the worker pool or returns a empty cycletls struct
 func Init(workers ...bool) CycleTLS {
-
 	if len(workers) > 0 && workers[0] {
 		reqChan := make(chan fullRequest)
 		respChan := make(chan Response)

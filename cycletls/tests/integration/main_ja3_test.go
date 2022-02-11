@@ -93,14 +93,14 @@ func TestHTTP2(t *testing.T) {
 			t.Fatal("Unmarshal Error")
 		}
 
-		if response.Response.Status != options.HTTPResponse {
+		if response.Status != options.HTTPResponse {
 			t.Fatal("Expected Result Not given")
 		} else {
-			log.Println("ja3er: ", response.Response.Status)
+			log.Println("ja3er: ", response.Status)
 		}
 		ja3resp := new(Ja3erResp)
 
-		err = json.Unmarshal([]byte(response.Response.Body), &ja3resp)
+		err = json.Unmarshal([]byte(response.Body), &ja3resp)
 		if err != nil {
 			t.Fatal("Unmarshal Error")
 		}
@@ -118,11 +118,12 @@ func TestHTTP2(t *testing.T) {
 		response, err = client.Do("https://http2.pro/api/v1", cycletls.Options{
 			Ja3:       options.Ja3,
 			UserAgent: options.UserAgent,
+			Headers:   map[string]string{"Accept-Encoding": "application/json"},
 		}, "GET")
-		if response.Response.Status != options.HTTPResponse {
-			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Response.Status, "for", options.Ja3Hash)
+		if response.Status != options.HTTPResponse {
+			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash)
 		} else {
-			log.Println("http2: ", response.Response.Status)
+			log.Println("http2: ", response.Status)
 		}
 	}
 }

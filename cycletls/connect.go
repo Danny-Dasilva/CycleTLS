@@ -1,7 +1,6 @@
-// borrowed from from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
-
 package cycletls
 
+// borrowed from from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
 import (
 	"bufio"
 	"context"

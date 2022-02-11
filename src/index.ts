@@ -15,6 +15,7 @@ export interface CycleTLSRequestOptions {
   proxy?: string;
   timeout?: number;
   disableRedirect?: boolean;
+  headerOrder?: string[];
 }
 
 export interface CycleTLSResponse {
@@ -26,11 +27,11 @@ export interface CycleTLSResponse {
 }
 
 let child: ChildProcessWithoutNullStreams;
+let lastRequestID: string
 
-const cleanExit = async (message?: string | Error) => {
-  if (message) {
-    console.log(message);
-  }
+const cleanExit = async (message?: string | Error, exit?: boolean) => {
+  if (message) console.log(message);
+  exit = exit ?? true
 
   if (process.platform == "win32") {
     new Promise((resolve, reject) => {
@@ -40,8 +41,7 @@ const cleanExit = async (message?: string | Error) => {
           if (error) {
             console.warn(error);
           }
-          process.exit();
-          resolve(stdout ? stdout : stderr);
+          if (exit) process.exit();
         }
       );
     });
@@ -49,20 +49,44 @@ const cleanExit = async (message?: string | Error) => {
     //linux/darwin os
     new Promise((resolve, reject) => {
       process.kill(-child.pid);
-      process.exit();
+      if (exit) process.exit();
     });
   }
 };
 process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
 
+const handleSpawn = (debug: boolean, fileName: string, port: number) => {
+  child = spawn(path.join(`"${__dirname}"`, fileName), {
+    env: { WS_PORT: port.toString() },
+    shell: true,
+    windowsHide: true,
+    detached: process.platform !== "win32"
+  });
+  child.stderr.on("data", (stderr) => {
+    if (stderr.toString().includes("Request_Id_On_The_Left")) {
+      const splitRequestIdAndError = stderr.toString().split("Request_Id_On_The_Left");
+      const [requestId, error] = splitRequestIdAndError;
+      //TODO Correctly parse logging messages
+      // this.emit(requestId, { error: new Error(error) });
+    } else {
+      debug
+        ? cleanExit(new Error(stderr))
+        //TODO add Correct error logging url request/ response/ 
+        : cleanExit(`Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${stderr}`, false).then(() => handleSpawn(debug, fileName, port));
+    }
+  });
+}
+
+
 class Golang extends EventEmitter {
   server: Server;
+  queue: Array<string>;
+  queueId: NodeJS.Timeout;
   constructor(port: number, debug: boolean) {
     super();
-
     this.server = new Server({ port });
-
+    this.queue = [];
     let executableFilename;
 
     if (process.platform == "win32") {
@@ -74,35 +98,20 @@ class Golang extends EventEmitter {
     } else {
       cleanExit(new Error("Operating system not supported"));
     }
-
-    child = spawn(path.join(`"${__dirname}"`, executableFilename), {
-      env: { WS_PORT: port.toString() },
-      shell: true,
-      windowsHide: true,
-      detached: process.platform !== "win32"
-    });
-
-    child.stderr.on("data", (stderr) => {
-      if (stderr.toString().includes("Request_Id_On_The_Left")) {
-        const splitRequestIdAndError = stderr.toString().split("Request_Id_On_The_Left");
-        const [requestId, error] = splitRequestIdAndError;
-        this.emit(requestId, { error: new Error(error) });
-      } else {
-        debug
-          ? cleanExit(new Error(stderr))
-          //TODO add Correct error logging url request/ response/ 
-          : cleanExit(new Error("Error Exiting ... (Golang wrapper exception)"));
-      }
-    });
+    handleSpawn(debug, executableFilename, port);
 
     this.server.on("connection", (ws) => {
       this.emit("ready");
-
       ws.on("message", (data: string) => {
         const message = JSON.parse(data);
-        this.emit(message.RequestID, message.Response);
+        this.emit(message.RequestID, message);
+      });
+
+      ws.on("close", (data: string) => {
+        this.emit(lastRequestID, { error: new Error(`Error Occured on URL: ${lastRequestID} Go Process is restarting`) });
       });
     });
+
   }
 
   request(
@@ -111,7 +120,28 @@ class Golang extends EventEmitter {
       [key: string]: any;
     }
   ) {
-    [...this.server.clients][0].send(JSON.stringify({ requestId, options }));
+    lastRequestID = requestId
+
+    let client = [...this.server.clients][0]
+    if (client) {
+      client.send(JSON.stringify({ requestId, options }));
+    } else {
+      this.queue.push(JSON.stringify({ requestId, options }))
+
+      if (this.queueId == null) {
+        this.queueId = setInterval(() => {
+          let client = [...this.server.clients][0]
+          if (client) {
+            for (let request of this.queue) {
+              client.send(request);
+            }
+            this.queue = [];
+            clearInterval(this.queueId);
+            this.queueId = null
+          }
+        }, 100)
+      }
+    }
   }
 
   exit() {
@@ -145,7 +175,7 @@ const initCycleTLS = async (
     let { port, debug } = initOptions;
 
     if (!port) port = 9119;
-    if (!debug) debug = true;
+    if (!debug) debug = false;
 
     const instance = new Golang(port, debug);
     instance.on("ready", () => {
@@ -180,7 +210,7 @@ const initCycleTLS = async (
 
             instance.once(requestId, (response) => {
               if (response.error) return rejectRequest(response.error);
-
+              
               const { Status: status, Body: body, Headers: headers } = response;
 
               if (headers["Set-Cookie"])
