@@ -30,8 +30,14 @@ jobs:
       - name: Set module-aware mode
         run: go env -w  GO111MODULE=auto
         working-directory: ./
-      - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
+      - name: Install Cycletls dependencies
+        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls
+        working-directory: ./
+      - name: Install fhttp dependencies
+        run: go get github.com/Danny-Dasilva/fhttp
+        working-directory: ./
+      - name: Install brotli dependencies
+        run: go get github.com/andybalholm/brotli
         working-directory: ./
       - name: Install npm depencencies
         run: npm ci
