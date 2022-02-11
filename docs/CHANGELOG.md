@@ -8,8 +8,8 @@ Support Ordered Request Headers
 - Refactor error handling 
 ### Enhancements
 - Ordered Request Headers
-- Gzip/brotly/deflate decoding 
-- Queue requests in case of Process restart
+- [Gzip/brotly/deflate decoding](https://github.com/Danny-Dasilva/CycleTLS/issues/48)
+- [Queue requests in case of Process restart](https://github.com/Danny-Dasilva/CycleTLS/issues/50)
 
 ## 0.0.14 - (10-06-2021)
 ### Release Highlights
