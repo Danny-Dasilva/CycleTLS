@@ -1,15 +1,15 @@
 # CycleTLS Changelog
 
-## 0.0.15 - (2-07-2022)
+## 0.0.15 - (2-11-2022)
 ### Release Highlights
-Ordered Requests headers and Support for 
+Support Ordered Request Headers
 ### Bug Fixes
-- Properly form grease  
-
+- Properly form Grease Headers based on UserAgent 
+- Refactor error handling 
 ### Enhancements
 - Ordered Request Headers
 - Gzip/brotly/deflate decoding 
-- Add new issue template
+- Queue requests in case of Process restart
 
 ## 0.0.14 - (10-06-2021)
 ### Release Highlights
