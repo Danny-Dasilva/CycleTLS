@@ -4,7 +4,7 @@
 ### Release Highlights
 Fix setting request headers
 ### Bug Fixes
-- Fix request Headers not being set
+- [Fix request Headers not being set](https://github.com/Danny-Dasilva/CycleTLS/issues/60)
 ### Enhancements
 - Add request header integration test
 
