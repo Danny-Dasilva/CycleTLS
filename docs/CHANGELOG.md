@@ -1,6 +1,6 @@
 # CycleTLS Changelog
 
-## 0.0.15 - (2-15-2022)
+## 0.0.16 - (2-15-2022)
 ### Release Highlights
 Fix setting request headers
 ### Bug Fixes
