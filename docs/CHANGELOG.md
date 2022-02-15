@@ -1,5 +1,13 @@
 # CycleTLS Changelog
 
+## 0.0.15 - (2-15-2022)
+### Release Highlights
+Fix setting request headers
+### Bug Fixes
+- Fix request Headers not being set
+### Enhancements
+- Add request header integration test
+
 ## 0.0.15 - (2-11-2022)
 ### Release Highlights
 Support Ordered Request Headers
