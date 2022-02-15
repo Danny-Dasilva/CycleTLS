@@ -48,6 +48,18 @@ test('Should correctly set header order', async () => {
 
     expect(responseOrder).toStrictEqual(expectedresponseOrder)
 
+
+
+
+      //Test Setting headers
+      const headerRequest = await cycleTLS('https://httpbin.org/headers', {
+          ja3: ja3,
+          userAgent: userAgent,
+          headers: { "foo":"bar"},
+          proxy: ''
+      });
+      expect(JSON.parse(headerRequest.body).headers.Foo).toStrictEqual("bar")
+
     cycleTLS.exit()
 
 });

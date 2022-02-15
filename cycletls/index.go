@@ -169,12 +169,14 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Set("Host", u.Host)
 
 	//append our normal headers
-	for k, v := range headermap {
-		req.Header.Set(k, v)
+	for k, v := range request.Options.Headers {
+		if k != "Content-Length" {
+			req.Header.Set(k, v)
+		}
 	}
+	req.Header.Set("Host", u.Host)
 
 	return fullRequest{req: req, client: client, options: request}
 
