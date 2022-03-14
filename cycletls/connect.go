@@ -10,12 +10,12 @@ import (
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
-	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
 
-	"golang.org/x/net/http2"
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
 )
 
 // connectDialer allows to configure one-time use HTTP CONNECT client
