@@ -177,7 +177,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 	}
 	req.Header.Set("Host", u.Host)
-
+	req.Header.Set("user-agent", request.Options.UserAgent)
 	return fullRequest{req: req, client: client, options: request}
 
 }
