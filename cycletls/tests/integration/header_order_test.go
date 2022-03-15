@@ -40,7 +40,7 @@ func TestDefaultHeaderOrder(t *testing.T) {
 
 	headername := doc.Find(".headername").Text()
 	// headervalue := doc.Find(".headerval").Text()
-	expected_order := "Accept-Encoding:User-Agent:Cache-Control:Connection:Host:"
+	expected_order := "User-Agent:Cache-Control:Connection:Host:"
 
 	if expected_order != headername {
 		t.Fatalf("Headers are ordered incorrectly: %s", headername)
@@ -66,7 +66,7 @@ func TestCustomHeaderOrder(t *testing.T) {
 	}
 
 	headername := doc.Find(".headername").Text()
-	expected_order := "Accept-Encoding:User-Agent:Host:Connection:Cache-Control:"
+	expected_order := "User-Agent:Host:Connection:Cache-Control:"
 
 	if expected_order != headername {
 		t.Fatalf("Custom Headers are ordered incorrectly: %s", headername)
@@ -92,7 +92,7 @@ func TestCustomHeaderOrderFailure(t *testing.T) {
 	}
 
 	headername := doc.Find(".headername").Text()
-	unexpected_order := "Accept-Encoding:User-Agent:Cache-Control:Connection:Host:"
+	unexpected_order := "User-Agent:Cache-Control:Connection:Host:"
 
 	if unexpected_order == headername {
 		t.Fatalf("Custom Headers Failures are ordered incorrectly: %s", headername)
