@@ -2,7 +2,6 @@ package cycletls
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +13,7 @@ import (
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	"golang.org/x/net/proxy"
 
+	tls "gitlab.com/yawning/utls.git"
 	utls "gitlab.com/yawning/utls.git"
 )
 

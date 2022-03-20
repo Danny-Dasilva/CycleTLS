@@ -1,5 +1,12 @@
 # CycleTLS Changelog
 
+
+## 0.0.17 - (3-14-2022)
+### Release Highlights
+Fix fhttp handshake 
+### Bug Fixes
+- Added utls to the fhttp package and fix imports
+
 ## 0.0.16 - (2-15-2022)
 ### Release Highlights
 Fix setting request headers
