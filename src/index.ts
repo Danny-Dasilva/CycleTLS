@@ -35,20 +35,22 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
 
   if (process.platform == "win32") {
     new Promise((resolve, reject) => {
-      exec(
-        "taskkill /pid " + child.pid + " /T /F",
-        (error: any, stdout: any, stderr: any) => {
-          if (error) {
-            console.warn(error);
+      if (child != null) {
+        exec(
+          "taskkill /pid " + child.pid + " /T /F",
+          (error: any, stdout: any, stderr: any) => {
+            if (error) {
+              console.warn(error);
+            }
+            if (exit) process.exit();
           }
-          if (exit) process.exit();
-        }
-      );
+        );
+      }
     });
   } else {
     //linux/darwin os
     new Promise((resolve, reject) => {
-      process.kill(-child.pid);
+      if (child != null) process.kill(-child.pid);
       if (exit) process.exit();
     });
   }
