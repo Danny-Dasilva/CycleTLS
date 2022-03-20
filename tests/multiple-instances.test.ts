@@ -10,15 +10,16 @@ test("Should Return 200", async () => {
         userAgent:
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
     };
-    const handle = (out: CycleTLSResponse) => {
-        expect(out.status).toBe(200);
-    }
 
     const cycleTLS = await initCycleTLS({ port: 9118 });
     const cycleTLS2 = await initCycleTLS({ port: 9118 });
 
-    cycleTLS.get(url, options).then(handle);
-    cycleTLS2.get(url, options).then(handle);
+    let resp;
+
+    resp = await cycleTLS.get(url, options);
+    expect(resp.status).toBe(200);
+    resp = await cycleTLS2.get(url, options);
+    expect(resp.status).toBe(200);
 
     await cycleTLS2.exit();
     await cycleTLS.exit();

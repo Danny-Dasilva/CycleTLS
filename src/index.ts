@@ -37,23 +37,27 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
   exit = exit ?? true
 
   if (process.platform == "win32") {
-    new Promise((resolve, reject) => {
-      exec(
-        "taskkill /pid " + child.pid + " /T /F",
-        (error: any, stdout: any, stderr: any) => {
-          if (error) {
-            console.warn(error);
-          }
-          if (exit) process.exit();
-        }
-      );
-    });
+    if(child) {
+      new Promise((resolve, reject) => {
+        exec(
+            "taskkill /pid " + child.pid + " /T /F",
+            (error: any, stdout: any, stderr: any) => {
+              if (error) {
+                console.warn(error);
+              }
+              if (exit) process.exit();
+            }
+        );
+      });
+    }
   } else {
-    //linux/darwin os
-    new Promise((resolve, reject) => {
-      process.kill(-child.pid);
-      if (exit) process.exit();
-    });
+    if(child) {
+      //linux/darwin os
+      new Promise((resolve, reject) => {
+        process.kill(-child.pid);
+        if (exit) process.exit();
+      });
+    }
   }
 };
 process.on("SIGINT", () => cleanExit());
@@ -85,6 +89,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number) => {
 class Golang extends EventEmitter {
   server: WebSocket;
   queue: Array<string>;
+  host: boolean;
   queueId: NodeJS.Timeout;
   constructor(port: number, debug: boolean) {
     super();
@@ -93,15 +98,13 @@ class Golang extends EventEmitter {
     server.listen(port)
         .on('listening', () => {
           server.close(() => {
-            // SPAWN GOLANG INSTANCE
             this.spawnServer(port, debug);
-            //this.createClient(port, debug);
+            this.host = true;
           })
         })
         .on('error', () => {
-          // CONNECT TO GOLANG INSTANCE
           this.createClient(port, debug);
-          return;
+          this.host = false;
         });
 
 
@@ -191,8 +194,8 @@ class Golang extends EventEmitter {
   exit() : Promise<undefined>{
     if (process.platform == "win32") {
       return new Promise((resolve, reject) => {
-        if(child) {
-          this.server.close();
+        this.server.close();
+        if(this.host) {
           exec(
               "taskkill /pid " + child.pid + " /T /F",
               (error: any, stdout: any, stderr: any) => {
@@ -202,13 +205,17 @@ class Golang extends EventEmitter {
                 resolve(stdout ? stdout : stderr);
               }
           );
+        }else{
+          resolve(null);
         }
       });
     } else {
       return new Promise((resolve, reject) => {
         this.server.close();
-        if(child) {
+        if(this.host) {
           process.kill(-child.pid);
+          resolve(null);
+        }else{
           resolve(null);
         }
       });
