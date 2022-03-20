@@ -7,11 +7,11 @@ import (
 	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"log"
+	nhttp "net/http"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // Options sets CycleTLS client options
@@ -66,20 +66,6 @@ type CycleTLS struct {
 	RespChan chan Response
 }
 
-func getWebsocketAddr() string {
-	port, exists := os.LookupEnv("WS_PORT")
-
-	var addr *string
-
-	if exists {
-		addr = flag.String("addr", "localhost:"+port, "http service address")
-	} else {
-		addr = flag.String("addr", "localhost:9112", "http service address")
-	}
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
-
-	return u.String()
-}
 
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
@@ -291,8 +277,11 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 	for {
 		_, message, err := c.ReadMessage()
 		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				return
+			}
 			log.Print("Socket Error", err)
-			continue
+			return
 		}
 		request := new(cycleTLSRequest)
 
@@ -328,28 +317,47 @@ func writeSocket(respChan chan Response, c *websocket.Conn) {
 	}
 }
 
-func main() {
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
+func wsEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
+	upgrader.CheckOrigin = func(r *nhttp.Request) bool { return true }
 
-	start := time.Now()
-	defer func() {
-		log.Println("Execution Time: ", time.Since(start))
-	}()
-
-	websocketAddress := getWebsocketAddr()
-	c, _, err := websocket.DefaultDialer.Dial(websocketAddress, nil)
+	// upgrade this connection to a WebSocket
+	// connection
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print(err)
-		return
+		log.Println(err)
 	}
-
 	reqChan := make(chan fullRequest)
 	respChan := make(chan Response)
 	go workerPool(reqChan, respChan)
 
-	go readSocket(reqChan, c)
+	go readSocket(reqChan, ws)
 	//run as main thread
-	writeSocket(respChan, c)
+	writeSocket(respChan, ws)
 
+}
+func homePage(w nhttp.ResponseWriter, r *nhttp.Request) {
+	log.Println(w, "Home Page")
+}
+func setupRoutes() {
+	nhttp.HandleFunc("/", wsEndpoint)
+}
+
+func main() {
+	port, exists := os.LookupEnv("WS_PORT")
+	var addr *string
+	if exists {
+		addr = flag.String("addr", ":"+port, "http service address")
+	} else {
+		addr = flag.String("addr", ":9112", "http service address")
+	}
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	setupRoutes()
+	log.Fatal(nhttp.ListenAndServe(*addr, nil))
 }
