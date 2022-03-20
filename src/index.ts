@@ -217,8 +217,9 @@ class Golang extends EventEmitter {
 }
 export interface CycleTLSClient {
   (
-    options: CycleTLSRequestOptions | string,
-    method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
+      url: string,
+      options: CycleTLSRequestOptions,
+      method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
   ): Promise<CycleTLSResponse>;
   head(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   get(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
@@ -232,10 +233,10 @@ export interface CycleTLSClient {
   exit(): Promise<undefined>;
 }
 const initCycleTLS = async (
-  initOptions: {
-    port?: number;
-    debug?: boolean;
-  } = {}
+    initOptions: {
+      port?: number;
+      debug?: boolean;
+    } = {}
 ): Promise<CycleTLSClient> => {
   return new Promise((resolveReady) => {
     let { port, debug } = initOptions;
@@ -247,41 +248,26 @@ const initCycleTLS = async (
     instance.on("ready", () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
-          options: CycleTLSRequestOptions | string,
-          method?:
-            | "head"
-            | "get"
-            | "post"
-            | "put"
-            | "delete"
-            | "trace"
-            | "options"
-            | "connect"
-            | "patch"
+            url: string,
+            options: CycleTLSRequestOptions,
+            method:
+                | "head"
+                | "get"
+                | "post"
+                | "put"
+                | "delete"
+                | "trace"
+                | "options"
+                | "connect"
+                | "patch" = "get"
         ): Promise<CycleTLSResponse> => {
           return new Promise((resolveRequest, rejectRequest) => {
-            let url: string;
-            if(typeof options == "string"){
-              url = options;
-            }else{
-              url = options.url;
-            }
             const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
 
-            if(options instanceof Object) {
-              if (!options.ja3)
-                options.ja3 = "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0";
-              if (!options.body) options.body = "";
-              if (!options.proxy) options.proxy = "";
-              if(method) options.method = method;
-            }else{
-              options = {
-                ja3: "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0",
-                body: "",
-                proxy: "",
-                method: method != null ? method : "get"
-              };
-            }
+            if (!options.ja3)
+              options.ja3 = "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0";
+            if (!options.body) options.body = "";
+            if (!options.proxy) options.proxy = "";
 
             instance.request(requestId, {
               url,
@@ -305,41 +291,32 @@ const initCycleTLS = async (
             });
           });
         };
-        CycleTLS.head = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "head");
+        CycleTLS.head = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "head");
         };
-        CycleTLS.get = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "get");
+        CycleTLS.get = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "get");
         };
-        CycleTLS.post = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "post");
+        CycleTLS.post = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "post");
         };
-        CycleTLS.put = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "put");
+        CycleTLS.put = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "put");
         };
-        CycleTLS.delete = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "delete");
+        CycleTLS.delete = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "delete");
         };
-        CycleTLS.trace = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "trace");
+        CycleTLS.trace = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "trace");
         };
-        CycleTLS.options = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "options");
+        CycleTLS.options = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "options");
         };
-        CycleTLS.connect = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "connect");
+        CycleTLS.connect = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "options");
         };
-        CycleTLS.patch = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          options != null ? options.url = url : options = {url};
-          return CycleTLS(options, "patch");
+        CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          return CycleTLS(url, options, "patch");
         };
         CycleTLS.exit = async (): Promise<undefined> => {
           return instance.exit();

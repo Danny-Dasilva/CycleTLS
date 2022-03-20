@@ -1,7 +1,6 @@
 const initCycleTLS = require("../dist/index.js");
 
 (async () => {
-  const
 
   const cycleTLS = await initCycleTLS();
   try {
