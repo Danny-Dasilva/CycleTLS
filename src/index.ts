@@ -1,8 +1,11 @@
-import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
+import {spawn, exec, ChildProcessWithoutNullStreams, ChildProcess} from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
-import { Server } from "ws";
+import WebSocket from "ws";
+import * as http from "http";
 export interface CycleTLSRequestOptions {
+  url?: string;
+  method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch";
   headers?: {
     [key: string]: any;
   };
@@ -72,7 +75,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number) => {
     } else {
       debug
         ? cleanExit(new Error(stderr))
-        //TODO add Correct error logging url request/ response/ 
+        //TODO add Correct error logging url request/ response/
         : cleanExit(`Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${stderr}`, false).then(() => handleSpawn(debug, fileName, port));
     }
   });
@@ -80,13 +83,36 @@ const handleSpawn = (debug: boolean, fileName: string, port: number) => {
 
 
 class Golang extends EventEmitter {
-  server: Server;
+  server: WebSocket;
   queue: Array<string>;
   queueId: NodeJS.Timeout;
   constructor(port: number, debug: boolean) {
     super();
-    this.server = new Server({ port });
-    this.queue = [];
+    let server = http.createServer();
+
+    server.listen(port)
+        .on('listening', () => {
+          server.close(() => {
+            // SPAWN GOLANG INSTANCE
+            this.spawnServer(port, debug);
+            //this.createClient(port, debug);
+          })
+        })
+        .on('error', () => {
+          // CONNECT TO GOLANG INSTANCE
+          this.createClient(port, debug);
+          return;
+        });
+
+
+    /**/
+
+  }
+
+  spawnServer(
+      port: number,
+      debug: boolean
+  ){
     let executableFilename;
 
     if (process.platform == "win32") {
@@ -100,18 +126,35 @@ class Golang extends EventEmitter {
     }
     handleSpawn(debug, executableFilename, port);
 
-    this.server.on("connection", (ws) => {
-      this.emit("ready");
-      ws.on("message", (data: string) => {
+    this.createClient(port, debug);
+  }
+
+  createClient(
+      port: number,
+      debug: boolean
+  ){
+    const server = new WebSocket(`ws://localhost:${port}`);
+
+    server.on("open", () => {
+      // WebSocket connected - set server and emit ready
+      this.server = server;
+
+      this.server.on("message", (data: string) => {
         const message = JSON.parse(data);
         this.emit(message.RequestID, message);
       });
 
-      ws.on("close", (data: string) => {
-        this.emit(lastRequestID, { error: new Error(`Error Occured on URL: ${lastRequestID} Go Process is restarting`) });
-      });
-    });
+      this.emit("ready");
+    })
 
+    server.on("error", (err) => {
+      // Connection error - retry in .1s
+      server.removeAllListeners();
+
+      setTimeout(() => {
+        this.createClient(port, debug)
+      }, 100)
+    })
   }
 
   request(
@@ -122,18 +165,19 @@ class Golang extends EventEmitter {
   ) {
     lastRequestID = requestId
 
-    let client = [...this.server.clients][0]
-    if (client) {
-      client.send(JSON.stringify({ requestId, options }));
+    if (this.server) {
+      this.server.send(JSON.stringify({ requestId, options }));
     } else {
+      if(this.queue == null){
+        this.queue = [];
+      }
       this.queue.push(JSON.stringify({ requestId, options }))
 
       if (this.queueId == null) {
         this.queueId = setInterval(() => {
-          let client = [...this.server.clients][0]
-          if (client) {
+          if (this.server) {
             for (let request of this.queue) {
-              client.send(request);
+              this.server.send(request);
             }
             this.queue = [];
             clearInterval(this.queueId);
@@ -144,14 +188,36 @@ class Golang extends EventEmitter {
     }
   }
 
-  exit() {
-    this.server.close();
+  exit() : Promise<undefined>{
+    if (process.platform == "win32") {
+      return new Promise((resolve, reject) => {
+        if(child) {
+          this.server.close();
+          exec(
+              "taskkill /pid " + child.pid + " /T /F",
+              (error: any, stdout: any, stderr: any) => {
+                if (error) {
+                  console.warn(error);
+                }
+                resolve(stdout ? stdout : stderr);
+              }
+          );
+        }
+      });
+    } else {
+      return new Promise((resolve, reject) => {
+        this.server.close();
+        if(child) {
+          process.kill(-child.pid);
+          resolve(null);
+        }
+      });
+    }
   }
 }
 export interface CycleTLSClient {
   (
-    url: string,
-    options: CycleTLSRequestOptions,
+    options: CycleTLSRequestOptions | string,
     method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
   ): Promise<CycleTLSResponse>;
   head(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
@@ -181,9 +247,8 @@ const initCycleTLS = async (
     instance.on("ready", () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
-          url: string,
-          options: CycleTLSRequestOptions,
-          method:
+          options: CycleTLSRequestOptions | string,
+          method?:
             | "head"
             | "get"
             | "post"
@@ -192,15 +257,31 @@ const initCycleTLS = async (
             | "trace"
             | "options"
             | "connect"
-            | "patch" = "get"
+            | "patch"
         ): Promise<CycleTLSResponse> => {
           return new Promise((resolveRequest, rejectRequest) => {
+            let url: string;
+            if(typeof options == "string"){
+              url = options;
+            }else{
+              url = options.url;
+            }
             const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
 
-            if (!options.ja3)
-              options.ja3 = "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0";
-            if (!options.body) options.body = "";
-            if (!options.proxy) options.proxy = "";
+            if(options instanceof Object) {
+              if (!options.ja3)
+                options.ja3 = "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0";
+              if (!options.body) options.body = "";
+              if (!options.proxy) options.proxy = "";
+              if(method) options.method = method;
+            }else{
+              options = {
+                ja3: "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0",
+                body: "",
+                proxy: "",
+                method: method != null ? method : "get"
+              };
+            }
 
             instance.request(requestId, {
               url,
@@ -210,7 +291,7 @@ const initCycleTLS = async (
 
             instance.once(requestId, (response) => {
               if (response.error) return rejectRequest(response.error);
-              
+
               const { Status: status, Body: body, Headers: headers } = response;
 
               if (headers["Set-Cookie"])
@@ -224,53 +305,44 @@ const initCycleTLS = async (
             });
           });
         };
-        CycleTLS.head = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "head");
+        CycleTLS.head = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "head");
         };
-        CycleTLS.get = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "get");
+        CycleTLS.get = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "get");
         };
-        CycleTLS.post = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "post");
+        CycleTLS.post = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "post");
         };
-        CycleTLS.put = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "put");
+        CycleTLS.put = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "put");
         };
-        CycleTLS.delete = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "delete");
+        CycleTLS.delete = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "delete");
         };
-        CycleTLS.trace = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "trace");
+        CycleTLS.trace = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "trace");
         };
-        CycleTLS.options = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "options");
+        CycleTLS.options = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "options");
         };
-        CycleTLS.connect = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "options");
+        CycleTLS.connect = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "connect");
         };
-        CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
-          return CycleTLS(url, options, "patch");
+        CycleTLS.patch = (url: string, options?: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
+          options != null ? options.url = url : options = {url};
+          return CycleTLS(options, "patch");
         };
         CycleTLS.exit = async (): Promise<undefined> => {
-          if (process.platform == "win32") {
-            return new Promise((resolve, reject) => {
-              exec(
-                "taskkill /pid " + child.pid + " /T /F",
-                (error: any, stdout: any, stderr: any) => {
-                  if (error) {
-                    console.warn(error);
-                  }
-                  instance.exit();
-                  resolve(stdout ? stdout : stderr);
-                }
-              );
-            });
-          } else {
-            return new Promise((resolve, reject) => {
-              process.kill(-child.pid);
-              instance.exit();
-            });
-          }
+          return instance.exit();
         };
 
         return CycleTLS;

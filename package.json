@@ -35,7 +35,7 @@
   "homepage": "https://github.com/Danny-Dasilva/CycleTLS#readme",
   "dependencies": {
     "@types/node": "^15.0.2",
-    "ws": "^7.3.1"
+    "ws": "^7.5.7"
   },
   "devDependencies": {
     "@types/jest": "^26.0.23",
@@ -46,8 +46,8 @@
     "eslint": "^7.4.0",
     "eslint-plugin-prefer-arrow": "^1.2.1",
     "jest": "^26.6.3",
+    "jsdom": "^16.7.0",
     "ts-jest": "^26.5.6",
-    "typescript": "^3.9.7",
-    "jsdom": "^16.7.0"
+    "typescript": "^3.9.7"
   }
 }
