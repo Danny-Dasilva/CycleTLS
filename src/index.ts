@@ -4,8 +4,6 @@ import { EventEmitter } from "events";
 import WebSocket from "ws";
 import * as http from "http";
 export interface CycleTLSRequestOptions {
-  url?: string;
-  method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch";
   headers?: {
     [key: string]: any;
   };
