@@ -1,4 +1,4 @@
-import {spawn, exec, ChildProcessWithoutNullStreams, ChildProcess} from "child_process";
+import {spawn, exec, ChildProcessWithoutNullStreams} from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
 import WebSocket from "ws";
