@@ -1,24 +1,51 @@
+# CycleTLS
+
+
+
 <div align="center">
 	<img src="docs/media/Banner.svg" alt="CycleTLS"/>
 	<br>
 	
-Currently a WIP and under active development. See the [Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info 
-
-
-More documentation coming soon, [Changelog](https://github.com/Danny-Dasilva/CycleTLS/blob/main/docs/CHANGELOG.md) provided as well
+Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info
 
 	
 	
-[![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/tests.yml/badge.svg?)](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/tests.yml) 
-[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
-[![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg?)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls?)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
-[![npm version](https://img.shields.io/npm/v/cycletls.svg)](https://www.npmjs.org/package/cycletls)
+
+![build](https://github.com/Danny-Dasilva/CycleTLS/actions/workflows/test_golang.yml/badge.svg)
+[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
+[![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
+[![npm version](https://img.shields.io/npm/v/axios.svg?style=flat-square)](https://www.npmjs.org/package/cycletls)
 </div>
 
-<!-- [![install size](https://packagephobia.now.sh/badge?p=cycletls)](https://packagephobia.now.sh/result?p=cycletls) -->
- <!-- [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.com/Danny-Dasilva/CycleTLS/cycletls)  -->
+If you have a API change or feature request feel free to open an Issue
 
+
+
+# 🚀 Features
+
+- [High-performance](#-performance) Built-in goroutine pool used for handling asynchronous requests
+- Custom header ordering via [fhttp](https://github.com/useflyent/fhttp)
+- Proxy support
+- Ja3 Token configuration
+
+
+Table of contents
+=================
+
+
+* [Table of contents](#table-of-contents)
+* [Installation](#installation)
+* [Usage](#usage)
+	* [QuickStart JS](#example-cycletls-request-for-typescript-and-javascript)
+	* [Quickstart Golang](#example-cycletls-request-for-golang)
+	* [Initializing CycleTLS](#creating-an-instance)
+	* [API/Methods](#cycletls-alias-methods)
+	* [Request Config](#cycletls-request-config)
+	* [Response Schema](#cycletls-response-schema)
+	* [Multiple Requests Example](#multiple-requests-example-for-typescript-and-javascript)
+* [Local Setup](#dev-setup)
+* [LICENSE](#license)
 
 
 
@@ -38,8 +65,9 @@ golang ^v1.16x
 $ npm install cycletls
 ```
 
+# Usage 
 
-# Example CycleTLS Request (JS/TS)
+## Example CycleTLS Request for Typescript and Javascript
 
 You can run this test in `tests/simple.test.ts`
 
@@ -69,7 +97,7 @@ const initCycleTLS = require('cycletls');
 
 ```
 
-# Example CycleTLS Request (Golang)
+## Example CycleTLS Request for Golang
 
 ```go
 package main
@@ -96,11 +124,11 @@ func main() {
 
 ```
 
-# Creating an instance
+## Creating an instance
 
 In order to create a `cycleTLS` instance, you can run the following:
 
-## JavaScript
+#### JavaScript
 
 ```js
 // The initCycleTLS function spawns a Golang process that handles all requests concurrently via goroutine loops. 
@@ -113,7 +141,7 @@ const cycleTLS = await initCycleTLS();
 initCycleTLS().then((cycleTLS) => {});
 
 ```
-## Golang
+#### Golang
 
 ```go
 import (
@@ -125,7 +153,7 @@ client := cycletls.Init()
 ```
 
 
-# CycleTLS Alias Methods
+## CycleTLS Alias Methods
 
 The following methods exist in CycleTLS
 
@@ -147,7 +175,7 @@ The following methods exist in CycleTLS
 
 If URL is not passed, one must be specified in the config.
 
-# CycleTLS Request Config
+## CycleTLS Request Config
 
 ```js
 {
@@ -188,7 +216,7 @@ If URL is not passed, one must be specified in the config.
 
 ```
 
-# CycleTLS Response Schema
+## CycleTLS Response Schema
 
 ```js
 {
@@ -208,7 +236,7 @@ If URL is not passed, one must be specified in the config.
 
 
 
-# Multiple Requests Example for TS/JS
+## Multiple Requests Example for Typescript and Javascript
 
 If CycleTLS is being used by in a JavaScript environment, CycleTLS will spawn a Golang process to handle requests. This Golang process handles requests `concurrently` in a worker pool. Due to this, CycleTLS returns response objects as soon as they are made available 
 (in other terms, CycleTLS processes requests as they are received, but responses are returned asynchronously so they will NOT be returned in the order requested)
@@ -315,3 +343,20 @@ Mac
 `npm run build:mac:`
 
 
+## LICENSE
+### GPL3 LICENSE SYNOPSIS
+
+**_TL;DR_*** Here's what the GPL3 license entails:
+
+```markdown
+1. Anyone can copy, modify and distribute this software.
+2. You have to include the license and copyright notice with each and every distribution.
+3. You can use this software privately.
+4. You can use this software for commercial purposes.
+5. Source code MUST be made available when the software is distributed.
+6. Any modifications of this code base MUST be distributed with the same license, GPLv3.
+7. This software is provided without warranty.
+8. The software author or license can not be held liable for any damages inflicted by the software.
+```
+
+More information on about the [LICENSE can be found here](http://choosealicense.com/licenses/gpl-3.0/)

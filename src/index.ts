@@ -1,7 +1,8 @@
-import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
+import {spawn, exec, ChildProcessWithoutNullStreams} from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
-import { Server } from "ws";
+import WebSocket from "ws";
+import * as http from "http";
 export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
@@ -34,23 +35,27 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
   exit = exit ?? true
 
   if (process.platform == "win32") {
-    new Promise((resolve, reject) => {
-      exec(
-        "taskkill /pid " + child.pid + " /T /F",
-        (error: any, stdout: any, stderr: any) => {
-          if (error) {
-            console.warn(error);
-          }
-          if (exit) process.exit();
-        }
-      );
-    });
+    if(child) {
+      new Promise((resolve, reject) => {
+        exec(
+            "taskkill /pid " + child.pid + " /T /F",
+            (error: any, stdout: any, stderr: any) => {
+              if (error) {
+                console.warn(error);
+              }
+              if (exit) process.exit();
+            }
+        );
+      });
+    }
   } else {
-    //linux/darwin os
-    new Promise((resolve, reject) => {
-      process.kill(-child.pid);
-      if (exit) process.exit();
-    });
+    if(child) {
+      //linux/darwin os
+      new Promise((resolve, reject) => {
+        process.kill(-child.pid);
+        if (exit) process.exit();
+      });
+    }
   }
 };
 process.on("SIGINT", () => cleanExit());
@@ -72,7 +77,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number) => {
     } else {
       debug
         ? cleanExit(new Error(stderr))
-        //TODO add Correct error logging url request/ response/ 
+        //TODO add Correct error logging url request/ response/
         : cleanExit(`Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${stderr}`, false).then(() => handleSpawn(debug, fileName, port));
     }
   });
@@ -80,13 +85,31 @@ const handleSpawn = (debug: boolean, fileName: string, port: number) => {
 
 
 class Golang extends EventEmitter {
-  server: Server;
+  server: WebSocket;
   queue: Array<string>;
+  host: boolean;
   queueId: NodeJS.Timeout;
   constructor(port: number, debug: boolean) {
     super();
-    this.server = new Server({ port });
-    this.queue = [];
+    let server = http.createServer();
+
+    server.listen(port)
+        .on('listening', () => {
+          server.close(() => {
+            this.spawnServer(port, debug);
+            this.host = true;
+          })
+        })
+        .on('error', () => {
+          this.createClient(port, debug);
+          this.host = false;
+        });
+  }
+
+  spawnServer(
+      port: number,
+      debug: boolean
+  ){
     let executableFilename;
 
     if (process.platform == "win32") {
@@ -100,18 +123,35 @@ class Golang extends EventEmitter {
     }
     handleSpawn(debug, executableFilename, port);
 
-    this.server.on("connection", (ws) => {
-      this.emit("ready");
-      ws.on("message", (data: string) => {
+    this.createClient(port, debug);
+  }
+
+  createClient(
+      port: number,
+      debug: boolean
+  ){
+    const server = new WebSocket(`ws://localhost:${port}`);
+
+    server.on("open", () => {
+      // WebSocket connected - set server and emit ready
+      this.server = server;
+
+      this.server.on("message", (data: string) => {
         const message = JSON.parse(data);
         this.emit(message.RequestID, message);
       });
 
-      ws.on("close", (data: string) => {
-        this.emit(lastRequestID, { error: new Error(`Error Occured on URL: ${lastRequestID} Go Process is restarting`) });
-      });
-    });
+      this.emit("ready");
+    })
 
+    server.on("error", (err) => {
+      // Connection error - retry in .1s
+      server.removeAllListeners();
+
+      setTimeout(() => {
+        this.createClient(port, debug)
+      }, 100)
+    })
   }
 
   request(
@@ -122,18 +162,19 @@ class Golang extends EventEmitter {
   ) {
     lastRequestID = requestId
 
-    let client = [...this.server.clients][0]
-    if (client) {
-      client.send(JSON.stringify({ requestId, options }));
+    if (this.server) {
+      this.server.send(JSON.stringify({ requestId, options }));
     } else {
+      if(this.queue == null){
+        this.queue = [];
+      }
       this.queue.push(JSON.stringify({ requestId, options }))
 
       if (this.queueId == null) {
         this.queueId = setInterval(() => {
-          let client = [...this.server.clients][0]
-          if (client) {
+          if (this.server) {
             for (let request of this.queue) {
-              client.send(request);
+              this.server.send(request);
             }
             this.queue = [];
             clearInterval(this.queueId);
@@ -144,15 +185,42 @@ class Golang extends EventEmitter {
     }
   }
 
-  exit() {
-    this.server.close();
+  exit(): Promise<undefined> {
+    if (process.platform == "win32") {
+      return new Promise((resolve, reject) => {
+        this.server.close();
+        if (this.host) {
+          exec(
+            "taskkill /pid " + child.pid + " /T /F",
+            (error: any, stdout: any, stderr: any) => {
+              if (error) {
+                console.warn(error);
+              }
+              resolve(stdout ? stdout : stderr);
+            }
+          );
+        } else {
+          resolve(null);
+        }
+      });
+    } else {
+      return new Promise((resolve, reject) => {
+        this.server.close();
+        if (this.host) {
+          process.kill(-child.pid);
+          resolve(null);
+        } else {
+          resolve(null);
+        }
+      });
+    }
   }
 }
 export interface CycleTLSClient {
   (
-    url: string,
-    options: CycleTLSRequestOptions,
-    method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
+      url: string,
+      options: CycleTLSRequestOptions,
+      method?: "head" | "get" | "post" | "put" | "delete" | "trace" | "options" | "connect" | "patch"
   ): Promise<CycleTLSResponse>;
   head(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   get(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
@@ -252,25 +320,7 @@ const initCycleTLS = async (
           return CycleTLS(url, options, "patch");
         };
         CycleTLS.exit = async (): Promise<undefined> => {
-          if (process.platform == "win32") {
-            return new Promise((resolve, reject) => {
-              exec(
-                "taskkill /pid " + child.pid + " /T /F",
-                (error: any, stdout: any, stderr: any) => {
-                  if (error) {
-                    console.warn(error);
-                  }
-                  instance.exit();
-                  resolve(stdout ? stdout : stderr);
-                }
-              );
-            });
-          } else {
-            return new Promise((resolve, reject) => {
-              process.kill(-child.pid);
-              instance.exit();
-            });
-          }
+          return instance.exit();
         };
 
         return CycleTLS;

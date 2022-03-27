@@ -26,7 +26,7 @@ test("Should return a timeout error", async () => {
             body: "",
             ja3: ja3,
             userAgent: userAgent,
-            timeout: 5,
+            timeout: 3,
         },
         "get"
     );
