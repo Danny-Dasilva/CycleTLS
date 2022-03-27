@@ -25,10 +25,9 @@ If you have a API change or feature request feel free to open an Issue
 # 🚀 Features
 
 - [High-performance](#-performance) Built-in goroutine pool used for handling asynchronous requests
-- Custom header ordering via fhttp
+- Custom header ordering via [fhttp](https://github.com/useflyent/fhttp)
 - Proxy support
 - Ja3 Token configuration
-- Request Redirection toggle 
 
 
 Table of contents
@@ -45,7 +44,7 @@ Table of contents
 	* [Request Config](#cycletls-request-config)
 	* [Response Schema](#cycletls-response-schema)
 	* [Multiple Requests Example](#multiple-requests-example-for-typescript-and-javascript)
-* [Dev Setup](#dev-setup)
+* [Local Setup](#dev-setup)
 * [LICENSE](#license)
 
 

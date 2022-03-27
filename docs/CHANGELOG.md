@@ -1,5 +1,12 @@
 # CycleTLS Changelog
 
+## 0.0.18 - (3-26-2022)
+### Release Highlights
+Swap Golang and TS server
+### Enhancements
+- Golang is now handles incoming requests, temporary solution till [this](https://github.com/Danny-Dasilva/CycleTLS/issues/55) is addressed 
+### Bug Fixes
+- [Don't kill process if it does not exist](https://github.com/Danny-Dasilva/CycleTLS/pull/71)
 
 ## 0.0.17 - (3-14-2022)
 ### Release Highlights
