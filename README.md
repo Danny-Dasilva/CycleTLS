@@ -15,10 +15,10 @@ Currently a WIP and in Active development. See the ![Projects](https://github.co
 [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/Danny-Dasilva/CycleTLS/cycletls) 
 [![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
-[![npm version](https://img.shields.io/npm/v/axios.svg?style=flat-square)](https://www.npmjs.org/package/cycletls)
+[![npm version](https://img.shields.io/npm/v/cycletls.svg)](https://www.npmjs.org/package/cycletls)
 </div>
 
-If you have a API change or feature request feel free to open an Issue
+If you have a API change or feature request feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose)
 
 
 
@@ -46,11 +46,6 @@ Table of contents
 	* [Multiple Requests Example](#multiple-requests-example-for-typescript-and-javascript)
 * [Local Setup](#dev-setup)
 * [LICENSE](#license)
-
-
-
-For any feature requests or API change requests, please feel free to open an issue.
-
 
 ## Dependencies
 
