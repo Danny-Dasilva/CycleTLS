@@ -56,7 +56,8 @@ test('Should correctly set header order', async () => {
           ja3: ja3,
           userAgent: userAgent,
           headers: { "foo":"bar"},
-          proxy: ''
+          proxy: '',
+          timeout: 20,
       });
       expect(JSON.parse(headerRequest.body).headers.Foo).toStrictEqual("bar")
 

@@ -1,4 +1,5 @@
 import initCycleTLS from "../dist/index.js";
+jest.setTimeout(30000);
 
 test("Should return a timeout error", async () => {
     const cycleTLS = await initCycleTLS({ port: 9116 });
