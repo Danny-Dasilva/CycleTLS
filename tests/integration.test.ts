@@ -1,5 +1,6 @@
 
 import initCycleTLS from '../dist/index.js'
+jest.setTimeout(30000);
 
 
 let ja3 = '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0'
@@ -86,7 +87,8 @@ test('Should Return 200 for all responses', async () => {
             ja3: request.ja3,
             userAgent: request.userAgent,
             headers: request.headers,
-            cookies: request.cookies
+            cookies: request.cookies,
+            timeout: 20,
         }, request.method);
 
 
