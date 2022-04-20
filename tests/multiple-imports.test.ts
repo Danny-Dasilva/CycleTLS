@@ -9,8 +9,8 @@ test("Test Multiple Imports, should return 200", async () => {
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
     };
     //Request the same CycleTLS instance
-    const cycleTLS = await initCycleTLS({ port: 9118 });
-    const cycleTLS2 = await initCycleTLS({ port: 9118 });
+    const cycleTLS = await initCycleTLS({ port: 9110 });
+    const cycleTLS2 = await initCycleTLS({ port: 9110 });
 
     let resp;
 
