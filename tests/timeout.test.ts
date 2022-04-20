@@ -8,7 +8,7 @@ test("Should return a timeout error", async () => {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36";
 
     const timeoutResponse = await cycleTLS(
-        "https://httpbin.org/delay/2",
+        "https://httpbin.org/delay/4",
         {
             body: "",
             ja3: ja3,
@@ -26,7 +26,7 @@ test("Should return a timeout error", async () => {
             body: "",
             ja3: ja3,
             userAgent: userAgent,
-            timeout: 3,
+            timeout: 30,
         },
         "get"
     );
