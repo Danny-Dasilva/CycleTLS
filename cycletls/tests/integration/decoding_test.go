@@ -23,7 +23,6 @@ func TestDeflateDecoding(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	log.Println(resp)
 	if resp.JSONBody()["deflated"] != true {
 		t.Fatalf("Deflated not found in Reponse Body: %s", resp.Body)
 	}
