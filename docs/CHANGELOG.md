@@ -1,5 +1,17 @@
 # CycleTLS Changelog
 
+## 0.0.19 - (4-20-2022)
+### Release Highlights
+Added image and Arm support
+### Enhancements
+- [Arm and Arm64 compilation support](https://github.com/Danny-Dasilva/CycleTLS/issues/86)
+- [Images are now Base64 encoded for Javascript](https://github.com/Danny-Dasilva/CycleTLS/issues/76)
+### Bug Fixes
+- [Fix installation dependencies](https://github.com/Danny-Dasilva/CycleTLS/issues/84)
+- Don't crash if golang websocket server receives a normal http request
+- Update npm dependencies
+- Added site support from updates to [fhttp](https://github.com/Danny-Dasilva/fhttp) and [utls](https://github.com/Danny-Dasilva/utls)
+
 ## 0.0.18 - (3-26-2022)
 ### Release Highlights
 Swap Golang and TS server

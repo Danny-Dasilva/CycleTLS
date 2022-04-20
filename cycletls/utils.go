@@ -5,12 +5,14 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"crypto/sha256"
-	"github.com/andybalholm/brotli"
-	utls "gitlab.com/yawning/utls.git"
+	"encoding/base64"
+	"encoding/json"
 	"io/ioutil"
-	"log"
 	"strconv"
 	"strings"
+
+	utls "github.com/Danny-Dasilva/utls"
+	"github.com/andybalholm/brotli"
 )
 
 const (
@@ -31,33 +33,39 @@ func parseUserAgent(userAgent string) string {
 }
 
 // DecompressBody unzips compressed data
-func DecompressBody(Body []byte, encoding []string) (parsedBody string) {
+func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody string) {
 	if len(encoding) > 0 {
 		if encoding[0] == "gzip" {
 			unz, err := gUnzipData(Body)
 			if err != nil {
 				return string(Body)
 			}
-			parsedBody = string(unz)
+			return string(unz)
 		} else if encoding[0] == "deflate" {
 			unz, err := enflateData(Body)
 			if err != nil {
 				return string(Body)
 			}
-			parsedBody = string(unz)
+			return string(unz)
 		} else if encoding[0] == "br" {
 			unz, err := unBrotliData(Body)
 			if err != nil {
 				return string(Body)
 			}
-			parsedBody = string(unz)
-		} else {
-			log.Println("Unknown Encoding" + encoding[0])
-			parsedBody = string(Body)
+			return string(unz)
 		}
-	} else {
-		parsedBody = string(Body)
+	} else if len(content) > 0 {
+		decodingTypes := map[string]bool{
+			"image/svg+xml": true,
+			"image/webp":    true,
+			"image/jpeg":    true,
+			"image/png":     true,
+		}
+		if decodingTypes[content[0]] {
+			return base64.StdEncoding.EncodeToString(Body)
+		}
 	}
+	parsedBody = string(Body)
 	return parsedBody
 
 }
@@ -103,7 +111,6 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 	if len(pointFormats) == 1 && pointFormats[0] == "" {
 		pointFormats = []string{}
 	}
-
 	// parse curves
 	var targetCurves []utls.CurveID
 	targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
@@ -113,6 +120,9 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 			return nil, err
 		}
 		targetCurves = append(targetCurves, utls.CurveID(cid))
+		// if cid != uint64(utls.CurveP521) {
+		// CurveP521 sometimes causes handshake errors
+		// }
 	}
 	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
 
@@ -215,8 +225,8 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
-		"27": &utls.CompressCertificateExtension{
-			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		"27": &utls.FakeCertCompressionAlgsExtension{
+			Methods: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
 		},
 		"28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 		"35": &utls.SessionTicketExtension{},
@@ -248,4 +258,12 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 	}
 	return
 
+}
+
+func PrettyStruct(data interface{}) (string, error) {
+	val, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		return "", err
+	}
+	return string(val), nil
 }

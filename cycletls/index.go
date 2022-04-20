@@ -66,7 +66,6 @@ type CycleTLS struct {
 	RespChan chan Response
 }
 
-
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
 
@@ -181,13 +180,15 @@ func dispatcher(res fullRequest) (response Response, err error) {
 	defer resp.Body.Close()
 
 	encoding := resp.Header["Content-Encoding"]
+	content := resp.Header["Content-Type"]
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("Parse Bytes" + err.Error())
 		return response, err
 	}
-	Body := DecompressBody(bodyBytes, encoding)
+
+	Body := DecompressBody(bodyBytes, encoding, content)
 	headers := make(map[string]string)
 
 	for name, values := range resp.Header {
@@ -322,29 +323,48 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-func wsEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
+func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 	upgrader.CheckOrigin = func(r *nhttp.Request) bool { return true }
 
 	// upgrade this connection to a WebSocket
 	// connection
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		//Golang Received a non-standard request to this port, printing request
+		var data map[string]interface{}
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Print("Invalid Request: Body Read Error" + err.Error())
+		}
+		err = json.Unmarshal(bodyBytes, &data)
+		if err != nil {
+			log.Print("Invalid Request: Json Conversion failed ")
+		}
+		body, err := PrettyStruct(data)
+		if err != nil {
+			log.Print("Invalid Request:", err)
+		}
+		headers, err := PrettyStruct(r.Header)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(headers)
+		log.Println(body)
+	} else {
+		reqChan := make(chan fullRequest)
+		respChan := make(chan Response)
+		go workerPool(reqChan, respChan)
+
+		go readSocket(reqChan, ws)
+		//run as main thread
+		writeSocket(respChan, ws)
+
 	}
-	reqChan := make(chan fullRequest)
-	respChan := make(chan Response)
-	go workerPool(reqChan, respChan)
-
-	go readSocket(reqChan, ws)
-	//run as main thread
-	writeSocket(respChan, ws)
 
 }
-func homePage(w nhttp.ResponseWriter, r *nhttp.Request) {
-	log.Println(w, "Home Page")
-}
+
 func setupRoutes() {
-	nhttp.HandleFunc("/", wsEndpoint)
+	nhttp.HandleFunc("/", WSEndpoint)
 }
 
 func main() {

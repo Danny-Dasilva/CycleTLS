@@ -3,6 +3,8 @@ import path from "path";
 import { EventEmitter } from "events";
 import WebSocket from "ws";
 import * as http from "http";
+import os from 'os';
+
 export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
@@ -115,7 +117,17 @@ class Golang extends EventEmitter {
     if (process.platform == "win32") {
       executableFilename = "index.exe";
     } else if (process.platform == "linux") {
-      executableFilename = "index";
+
+      //build arm 
+      if (os.arch() == "arm") {
+        executableFilename = "index-arm";
+      } else if (os.arch() == "arm64") {
+        executableFilename = "index-arm64";
+      } else {
+        //default
+        executableFilename = "index";
+      }
+  
     } else if (process.platform == "darwin") {
       executableFilename = "index-mac";
     } else {

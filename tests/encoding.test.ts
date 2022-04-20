@@ -1,5 +1,5 @@
 import initCycleTLS from "../dist/index.js";
-
+jest.setTimeout(30000);
 let ja3 =
     "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0";
 let userAgent =
@@ -87,11 +87,11 @@ test("Response bodies should be decoded", async () => {
             {
                 ja3: ja3,
                 userAgent: userAgent,
+                timeout: 20,
             },
             "get"
         );
         const Body = JSON.parse(response.body);
-        
         //Remove origin for comparison
         delete Body.origin;
         delete Body.headers["X-Amzn-Trace-Id"];

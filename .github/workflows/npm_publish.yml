@@ -31,9 +31,10 @@ jobs:
       - name: Export Go
         run: go env -w  GO111MODULE=auto
         working-directory: ./
+
       - name: Install golang dependencies
-        run: go get github.com/Danny-Dasilva/CycleTLS/cycletls && go get github.com/Danny-Dasilva/fhttp && go get github.com/andybalholm/brotli
-        working-directory: ./
+        run: while read l; do go get -v "$l"; done < <(go list -f '{{ join .Imports "\n" }}' ./cycletls)
+        shell: bash
 
       - name: Install deps
         run: npm ci --unsafe-perm

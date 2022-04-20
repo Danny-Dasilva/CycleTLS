@@ -45,6 +45,7 @@ Table of contents
 	* [Response Schema](#cycletls-response-schema)
 	* [Multiple Requests Example](#multiple-requests-example-for-typescript-and-javascript)
 * [Local Setup](#dev-setup)
+* [QA](#questions)
 * [LICENSE](#license)
 
 ## Dependencies
@@ -55,6 +56,10 @@ golang ^v1.16x
 ```
 
 ## Installation
+
+```bash
+$ npm install cycletls
+```
 
 ```bash
 $ npm install cycletls
@@ -337,6 +342,121 @@ Mac
 
 `npm run build:mac:`
 
+## Questions
+
+
+### How do I download images?
+<details>
+
+Images with a `Content-Type` header of the following types are base 64 encoded. 
+
+**Supported Image Types**
+* `image/svg+xml`
+* `image/webp`
+* `image/jpeg`
+* `image/png`
+
+To write them to a file you can use the below methods
+
+### Javascript Image Write to File
+```js
+const initCycleTLS = require("cycletls");
+var fs = require("fs");
+
+//Function to write image to a file
+const writeImage = (filename, data) => {
+  let writeStream = fs.createWriteStream(filename);
+
+  // write some data with a base64 encoding
+  writeStream.write(data, "base64");
+  writeStream.on("finish", () => {
+    console.log(`wrote to file ${filename}`);
+  });
+  
+  // close the stream
+  writeStream.end();
+};
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+  // try {
+
+  const jpegImage = await cycleTLS("http://httpbin.org/image/jpeg", {
+    ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+    userAgent:
+      "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+  //Write Image
+  writeImage("test.jpeg", jpegImage.body);
+
+  cycleTLS.exit();
+})();
+
+```
+### Golang Image Write to File
+```golang
+package main
+
+import (
+    "encoding/base64"
+    "os"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+
+    client := cycletls.Init()
+    response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
+      Body:      "",
+      Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+      UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+    }, "GET")
+    // Decode Base64
+    dec, err := base64.StdEncoding.DecodeString(response.Body)
+    if err != nil {
+        panic(err)
+    }
+    //create file to write
+    f, err := os.Create("test.jpeg")
+    if err != nil {
+        panic(err)
+    }
+    defer f.Close()
+    //write b64 to file
+    if _, err := f.Write(dec); err != nil {
+        panic(err)
+    }
+    if err := f.Sync(); err != nil {
+        panic(err)
+    }
+}
+
+```
+
+
+Additional file type support is planned.
+
+Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
+</details>
+
+### Cross Compiling for other platforms
+<details>
+
+Natively the 3 Operating System types `linux`, `darwin` , `windows`  should cover most use cases.
+	
+You can use the built in Golang cross compiling commands `go build` to compile for another operating system. 
+
+As an example for linux arm you need to pass in the `GOOS` and `GOARCH` arguments
+
+```bash
+$ GOOS=linux GOARCH=arm go build -o ./dist/index ./golang && chmod +x ./dist/index
+```
+
+With the above command you can simply run `./index` and CycleTLS should function as intended.
+
+Use this [gist](https://gist.github.com/asukakenji/f15ba7e588ac42795f421b48b8aede63) for different Operating Systems that support cross-compilation and feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for your specific operating system use case. 
+
+</details>
 
 ## LICENSE
 ### GPL3 LICENSE SYNOPSIS

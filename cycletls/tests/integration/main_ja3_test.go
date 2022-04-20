@@ -92,27 +92,29 @@ func TestHTTP2(t *testing.T) {
 		if err != nil {
 			t.Fatal("Unmarshal Error")
 		}
+		if response.Status != 502 {
+			if response.Status != options.HTTPResponse {
+				t.Fatal("Expected Result Not given", response.Status, options.HTTPResponse, options.Ja3)
+			} else {
+				log.Println("ja3er: ", response.Status)
+			}
+			ja3resp := new(Ja3erResp)
 
-		if response.Status != options.HTTPResponse {
-			t.Fatal("Expected Result Not given")
-		} else {
-			log.Println("ja3er: ", response.Status)
-		}
-		ja3resp := new(Ja3erResp)
+			err = json.Unmarshal([]byte(response.Body), &ja3resp)
+			if err != nil {
+				t.Fatal("Unmarshal Error")
+			}
 
-		err = json.Unmarshal([]byte(response.Body), &ja3resp)
-		if err != nil {
-			t.Fatal("Unmarshal Error")
-		}
+			if ja3resp.Ja3Hash != options.Ja3Hash {
+				t.Fatal("Expected:", options.Ja3Hash, "Got:", ja3resp.Ja3Hash, "for Ja3Hash")
+			}
+			if ja3resp.Ja3 != options.Ja3 {
+				t.Fatal("Expected:", options.Ja3, "Got:", ja3resp.Ja3, "for Ja3")
+			}
+			if ja3resp.UserAgent != options.UserAgent {
+				t.Fatal("Expected:", options.UserAgent, "Got:", ja3resp.UserAgent, "for UserAgent")
+			}
 
-		if ja3resp.Ja3Hash != options.Ja3Hash {
-			t.Fatal("Expected:", options.Ja3Hash, "Got:", ja3resp.Ja3Hash, "for Ja3Hash")
-		}
-		if ja3resp.Ja3 != options.Ja3 {
-			t.Fatal("Expected:", options.Ja3, "Got:", ja3resp.Ja3, "for Ja3")
-		}
-		if ja3resp.UserAgent != options.UserAgent {
-			t.Fatal("Expected:", options.UserAgent, "Got:", ja3resp.UserAgent, "for UserAgent")
 		}
 
 		response, err = client.Do("https://http2.pro/api/v1", cycletls.Options{
