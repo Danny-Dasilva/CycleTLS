@@ -22,13 +22,13 @@ func lastString(ss []string) string {
 
 // func createErrorString(err: string) (msg, debugger string) {
 func createErrorString(err error) (msg, debugger string) {
-	msg = fmt.Sprintf("Proxy returned a Syscall Error: %s", err)
+	msg = fmt.Sprintf("Request returned a Syscall Error: %s", err)
 	debugger = fmt.Sprintf("%#v\n", err)
 	return
 }
 
 func createErrorMessage(StatusCode int, err error, op string) errorMessage {
-	msg := fmt.Sprintf("Proxy returned a Syscall Error: %s", err)
+	msg := fmt.Sprintf("Request returned a Syscall Error: %s", err)
 	debugger := fmt.Sprintf("%#v\n", err)
 	return errorMessage{StatusCode: StatusCode, debugger: debugger, ErrorMsg: msg, Op: op}
 }
