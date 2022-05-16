@@ -2,19 +2,18 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
+	"compress/zlib"
+	"encoding/base64"
 	"io"
+	"io/ioutil"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
-    "io/ioutil"
 	"path"
 	"path/filepath"
-	"compress/gzip"
-	"compress/zlib"
-	"encoding/base64"
-    "strings"
-	
+	"strings"
 
 	"github.com/andybalholm/brotli"
 )
@@ -78,6 +77,7 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 	return parsedBody
 
 }
+
 // func main() {
 //   fileDir, _ := os.Getwd()
 //   fileName := "README.md"
@@ -109,46 +109,46 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 // }
 
 func main() {
-    fileDir, _ := os.Getwd()
-    fileName := "README.md"
-    filePath := path.Join(fileDir, fileName)
-    file, _ := os.Open(filePath)
-    _=filepath.Base(file.Name())
+	fileDir, _ := os.Getwd()
+	fileName := "README.md"
+	filePath := path.Join(fileDir, fileName)
+	file, _ := os.Open(filePath)
+	_ = filepath.Base(file.Name())
 
-    defer file.Close()
-  
-    body := &bytes.Buffer{}
-    writer := multipart.NewWriter(body)
-    fw, err := writer.CreateFormField("name")
-    if err != nil {
-    }
-    _, err = io.Copy(fw, strings.NewReader("John"))
-    if err != nil {
-        log.Println("err")
-    }
-    ///////////////
-    fw, err = writer.CreateFormField("age")
-    if err != nil {
-    }
-    _, err = io.Copy(fw, strings.NewReader("23"))
-    if err != nil {
-        log.Println("err")
-    }
-    //////////
-    writer.Close()
-  
-    r, _ := http.NewRequest("POST", "http://httpbin.org/post", body)
-    r.Header.Add("Content-Type", writer.FormDataContentType())
-    client := &http.Client{}
-    resp, err := client.Do(r)
-    if err != nil {
-      log.Println("err")
-      }
-    bodyBytes, err := ioutil.ReadAll(resp.Body)
-    encoding := resp.Header["Content-Encoding"]
-    content := resp.Header["Content-Type"]
-  
-    Body := DecompressBody(bodyBytes, encoding, content)
-    log.Println(Body)
-  
-  }
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fw, err := writer.CreateFormField("name")
+	if err != nil {
+	}
+	_, err = io.Copy(fw, strings.NewReader("John"))
+	if err != nil {
+		log.Println("err")
+	}
+	///////////////
+	fw, err = writer.CreateFormField("age")
+	if err != nil {
+	}
+	_, err = io.Copy(fw, strings.NewReader("23"))
+	if err != nil {
+		log.Println("err")
+	}
+	//////////
+	writer.Close()
+
+	r, _ := http.NewRequest("POST", "http://httpbin.org/post", body)
+	r.Header.Add("Content-Type", writer.FormDataContentType())
+	client := &http.Client{}
+	resp, err := client.Do(r)
+	if err != nil {
+		log.Println("err")
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	encoding := resp.Header["Content-Encoding"]
+	content := resp.Header["Content-Type"]
+
+	Body := DecompressBody(bodyBytes, encoding, content)
+	log.Println(Body)
+
+}

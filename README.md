@@ -57,12 +57,16 @@ golang ^v1.16x
 
 ## Installation
 
+Node Js
+
 ```bash
 $ npm install cycletls
 ```
 
+Golang
+
 ```bash
-$ npm install cycletls
+$ go get github.com/Danny-Dasilva/CycleTLS/cycletls 
 ```
 
 # Usage 

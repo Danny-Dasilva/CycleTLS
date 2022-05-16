@@ -1,6 +1,6 @@
 {
   "name": "cycletls",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "description": "Spoof TLS/JA3 fingerprint in JS with help from Go",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,7 +30,7 @@
     "fingerprint",
     "mimic"
   ],
-  "license": "MIT",
+  "license": "GPL3",
   "bugs": {
     "url": "https://github.com/Danny-Dasilva/CycleTLS/issues"
   },
