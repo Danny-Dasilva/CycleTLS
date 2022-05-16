@@ -25,7 +25,6 @@ test("Should Write all Image types to file", async () => {
     {
       ja3: ja3,
       userAgent: userAgent,
-      timeout: 20,
     },
     "get"
   );
@@ -36,7 +35,6 @@ test("Should Write all Image types to file", async () => {
     {
       ja3: ja3,
       userAgent: userAgent,
-      timeout: 20,
     },
     "get"
   );
@@ -48,7 +46,6 @@ test("Should Write all Image types to file", async () => {
     {
       ja3: ja3,
       userAgent: userAgent,
-      timeout: 20,
     },
     "get"
   );
@@ -60,7 +57,6 @@ test("Should Write all Image types to file", async () => {
     {
       ja3: ja3,
       userAgent: userAgent,
-      timeout: 20,
     },
     "get"
   );

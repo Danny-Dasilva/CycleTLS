@@ -10,11 +10,11 @@
   "author": "Danny-Dasilva",
   "scripts": {
     "build": "tsc",
-    "build:windows": "cross-env GOOS=windows go build -o ./dist/index.exe ./golang",
-    "build:linux": "cross-env GOOS=linux go build -o ./dist/index ./golang && chmod +x ./dist/index",
-    "build:arm64": "cross-env GOOS=linux GOARCH=arm64 go build -o ./dist/index-arm64 ./golang && chmod +x ./dist/index-arm64",
-    "build:arm": "cross-env GOOS=linux GOARCH=arm go build -o ./dist/index-arm ./golang && chmod +x ./dist/index-arm",
-    "build:mac": "cross-env GOOS=darwin go build -o ./dist/index-mac ./golang && chmod +x ./dist/index-mac",
+    "build:windows": "cross-env GOOS=windows go build -o ./dist/index.exe ./src",
+    "build:linux": "cross-env GOOS=linux go build -o ./dist/index ./src && chmod +x ./dist/index",
+    "build:arm64": "cross-env GOOS=linux GOARCH=arm64 go build -o ./dist/index-arm64 ./src && chmod +x ./dist/index-arm64",
+    "build:arm": "cross-env GOOS=linux GOARCH=arm go build -o ./dist/index-arm ./src && chmod +x ./dist/index-arm",
+    "build:mac": "cross-env GOOS=darwin go build -o ./dist/index-mac ./src && chmod +x ./dist/index-mac",
     "prepare": "npm run build && npm run build:windows && npm run build:linux && npm run build:mac",
     "test": "jest"
   },
@@ -30,7 +30,7 @@
     "fingerprint",
     "mimic"
   ],
-  "license": "MIT",
+  "license": "GPL3",
   "bugs": {
     "url": "https://github.com/Danny-Dasilva/CycleTLS/issues"
   },

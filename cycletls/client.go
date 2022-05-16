@@ -20,9 +20,9 @@ var disabledRedirect = func(req *http.Request, via []*http.Request) error {
 }
 
 func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
-	//if timeout is not set in call default to 7
+	//if timeout is not set in call default to 15
 	if timeout == 0 {
-		timeout = 7
+		timeout = 15
 	}
 	client := http.Client{
 		Transport: newRoundTripper(browser, dialer),

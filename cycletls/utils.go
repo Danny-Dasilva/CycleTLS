@@ -56,10 +56,11 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 		}
 	} else if len(content) > 0 {
 		decodingTypes := map[string]bool{
-			"image/svg+xml": true,
-			"image/webp":    true,
-			"image/jpeg":    true,
-			"image/png":     true,
+			"image/svg+xml":   true,
+			"image/webp":      true,
+			"image/jpeg":      true,
+			"image/png":       true,
+			"application/pdf": true,
 		}
 		if decodingTypes[content[0]] {
 			return base64.StdEncoding.EncodeToString(Body)
@@ -96,7 +97,7 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
-	parsedUserAgent := parseUserAgent("chrome")
+	parsedUserAgent := parseUserAgent(userAgent)
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
@@ -160,12 +161,17 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 		if !ok {
 			return nil, raiseExtensionError(e)
 		}
-		//Optionally add Chrome Grease Extension
+		// //Optionally add Chrome Grease Extension
 		if e == "21" && parsedUserAgent == chrome {
 			exts = append(exts, &utls.UtlsGREASEExtension{})
 		}
 		exts = append(exts, te)
 	}
+	//Add this back in if user agent is chrome and no padding extension is given
+	// if parsedUserAgent == chrome {
+	// 	exts = append(exts, &utls.UtlsGREASEExtension{})
+	// 	exts = append(exts, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
+	// }
 	// build SSLVersion
 	// vid64, err := strconv.ParseUint(version, 10, 16)
 	// if err != nil {
@@ -252,6 +258,11 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		}},
 		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME
 		"13172": &utls.NPNExtension{},
+		"17513": &utls.ApplicationSettingsExtension{
+			SupportedALPNList: []string{
+				"h2",
+			},
+		},
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},

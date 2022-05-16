@@ -12,7 +12,7 @@ const writeImage = (filename, data) => {
   writeStream.on("finish", () => {
     console.log(`wrote to file ${filename}`);
   });
-  
+
   // close the stream
   writeStream.end();
 };

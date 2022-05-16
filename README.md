@@ -57,12 +57,16 @@ golang ^v1.16x
 
 ## Installation
 
+Node Js
+
 ```bash
 $ npm install cycletls
 ```
 
+Golang
+
 ```bash
-$ npm install cycletls
+$ go get github.com/Danny-Dasilva/CycleTLS/cycletls 
 ```
 
 # Usage 
@@ -355,6 +359,7 @@ Images with a `Content-Type` header of the following types are base 64 encoded.
 * `image/webp`
 * `image/jpeg`
 * `image/png`
+* `application/pdf`
 
 To write them to a file you can use the below methods
 
