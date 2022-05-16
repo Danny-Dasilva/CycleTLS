@@ -7,15 +7,14 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/url"
 	"strconv"
 	"sync"
-
-	http "github.com/Danny-Dasilva/fhttp"
-	http2 "github.com/Danny-Dasilva/fhttp/http2"
 )
 
 // connectDialer allows to configure one-time use HTTP CONNECT client
@@ -219,7 +218,8 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 	case "http/1.1":
 		return connectHTTP1(rawConn)
 	case "h2":
-		t := http2.Transport{}
+		//TODO: update this with correct navigator
+		t := http2.Transport{Navigator: "chrome"}
 		h2clientConn, err := t.NewClientConn(rawConn)
 		if err != nil {
 			_ = rawConn.Close()

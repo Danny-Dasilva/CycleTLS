@@ -6,7 +6,6 @@ package cycletls_test
 import (
 	//"fmt"
 	// "encoding/json"
-	"log"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -60,13 +59,10 @@ func TestTLS_13(t *testing.T) {
 			UserAgent: options.UserAgent,
 		}, "GET")
 		if err != nil {
-				t.Fatal(err)
+			t.Fatal(err)
 		}
 		if response.Status != options.HTTPResponse {
 			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash, response.Body)
-		} else {
-			log.Println("tls13: ", response.Status)
 		}
-
 	}
 }

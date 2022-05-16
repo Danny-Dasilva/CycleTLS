@@ -1,5 +1,17 @@
 # CycleTLS Changelog
 
+## 0.0.20 - (5-16-2022)
+### Release Highlights
+Add support for extension 17513 and repo cleanup
+### Enhancements
+- Changed default request timeout to 15 seconds
+- [remove duplicate sources](https://github.com/Danny-Dasilva/CycleTLS/issues/85)
+- [Added support for extension 17513](https://github.com/Danny-Dasilva/CycleTLS/issues/70)
+- add support for `application/pdf`, 
+### Bug Fixes
+- [properly add grease](https://github.com/Danny-Dasilva/CycleTLS/issues/53)
+
+
 ## 0.0.19 - (4-20-2022)
 ### Release Highlights
 Added image and Arm support

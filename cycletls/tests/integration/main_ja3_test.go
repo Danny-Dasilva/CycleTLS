@@ -94,7 +94,7 @@ func TestHTTP2(t *testing.T) {
 		}
 		if response.Status != 502 {
 			if response.Status != options.HTTPResponse {
-				t.Fatal("Expected Result Not given", response.Status, options.HTTPResponse, options.Ja3)
+				t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
 			} else {
 				log.Println("ja3er: ", response.Status)
 			}

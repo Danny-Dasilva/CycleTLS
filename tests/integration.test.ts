@@ -88,7 +88,6 @@ test('Should Return 200 for all responses', async () => {
             userAgent: request.userAgent,
             headers: request.headers,
             cookies: request.cookies,
-            timeout: 20,
         }, request.method);
 
 
