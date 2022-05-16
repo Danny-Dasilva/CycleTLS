@@ -87,6 +87,7 @@ test("Response bodies should be decoded", async () => {
       {
         ja3: ja3,
         userAgent: userAgent,
+        headers: {"Accept-Encoding": "gzip, deflate, br",}
       },
       "get"
     );
