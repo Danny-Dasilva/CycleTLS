@@ -359,6 +359,7 @@ Images with a `Content-Type` header of the following types are base 64 encoded.
 * `image/webp`
 * `image/jpeg`
 * `image/png`
+* `application/pdf`
 
 To write them to a file you can use the below methods
 
