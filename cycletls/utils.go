@@ -167,6 +167,8 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 		}
 		exts = append(exts, te)
 	}
+	exts = append(exts, &utls.GenericExtension{Id: 47802})
+	exts = append(exts, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
 	//Add this back in if user agent is chrome and no padding extension is given
 	// if parsedUserAgent == chrome {
 	// 	exts = append(exts, &utls.UtlsGREASEExtension{})
