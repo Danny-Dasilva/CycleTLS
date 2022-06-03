@@ -1,13 +1,13 @@
-name: CycleTLS Issue Template
-description: Use this template to report any issue
-labels: [bug, triage]
+name: CycleTLS Issue
+description: Please use this to report any issue
+labels: [triage]
 assignees:
   - Danny-Dasilva
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for taking the time to report a CycleTLS issue
+        Thank you for taking the time to report a issue with CycleTLS
   - type: textarea
     id: what-happened
     attributes:
@@ -29,8 +29,7 @@ body:
         - Performance
         - Support
         - Feature Request
-        - Documentation Feature Request
-        - Documentation Bug
+        - Documentation Request
         - Others
   - type: dropdown
     id: Operating-System
@@ -41,7 +40,6 @@ body:
       options:
         - Windows 10
         - Linux
-        - Ubuntu
         - Mac OS
         - Other
   - type: dropdown
