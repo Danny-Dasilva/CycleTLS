@@ -48,6 +48,6 @@ func main() {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	log.Println(response.Status, response.Body)
+	log.Println(response.Body)
 
 }

@@ -13,12 +13,15 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Carcraftz/cclient"
+	cclient "./cycletls"
 	"github.com/andybalholm/brotli"
 
-	http "github.com/Carcraftz/fhttp"
+	// http "github.com/Carcraftz/fhttp"
 
-	tls "github.com/Carcraftz/utls"
+	// tls "github.com/Carcraftz/utls"
+
+	http "github.com/Danny-Dasilva/fhttp"
+	tls "github.com/Danny-Dasilva/utls"
 )
 
 //var client http.Client
@@ -144,7 +147,7 @@ func main() {
 
 	//req.Close = true
 
-	log.Println(resp.Status)
+	
 	//forward decoded response body
 	encoding := resp.Header["Content-Encoding"]
 	body, err := ioutil.ReadAll(resp.Body)
