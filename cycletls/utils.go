@@ -167,6 +167,8 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 		}
 		exts = append(exts, te)
 	}
+	// exts = append(exts, &utls.GenericExtension{Id: 47802})
+	// exts = append(exts, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
 	//Add this back in if user agent is chrome and no padding extension is given
 	// if parsedUserAgent == chrome {
 	// 	exts = append(exts, &utls.UtlsGREASEExtension{})
@@ -231,8 +233,8 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.UtlsExtendedMasterSecretExtension{},
-		"27": &utls.FakeCertCompressionAlgsExtension{
-			Methods: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		"27": &utls.CompressCertificateExtension{
+			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
 		},
 		"28": &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 		"35": &utls.SessionTicketExtension{},
