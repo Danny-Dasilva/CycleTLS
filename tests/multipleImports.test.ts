@@ -1,4 +1,4 @@
-const initCycleTLS = require("../dist/index.js");
+import initCycleTLS from "../dist/index.js";
 
 test("Test Multiple Imports, should return 200", async () => {
   const url = "https://ja3er.com/json";

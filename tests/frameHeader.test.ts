@@ -1,4 +1,4 @@
-const initCycleTLS = require("../dist/index.js");
+import initCycleTLS from "../dist/index.js";
 
 test("Test latest Chrome frame headers", async () => {
   const cycleTLS = await initCycleTLS({ port: 9011 });
@@ -26,13 +26,16 @@ test("Test latest Chrome frame headers", async () => {
     length: 4,
     stream_id: 0,
   };
-
-  expect(response.body?.http2?.sent_frames[0]).toMatchObject(
-    expectedSentFrames0
-  );
-  expect(response.body?.http2?.sent_frames[1]).toMatchObject(
-    expectedSentFrames1
-  );
+  if (typeof response.body === "object") {
+    expect(response.body?.http2?.sent_frames[0]).toMatchObject(
+      expectedSentFrames0
+    );
+    expect(response.body?.http2?.sent_frames[1]).toMatchObject(
+      expectedSentFrames1
+    );
+  } else {
+    throw "Object decode error";
+  }
   cycleTLS.exit();
 });
 
@@ -62,12 +65,15 @@ test("Test latest Firefox frame headers", async () => {
     length: 4,
     stream_id: 0,
   };
-
-  expect(response.body?.http2?.sent_frames[0]).toMatchObject(
-    expectedSentFrames0
-  );
-  expect(response.body?.http2?.sent_frames[1]).toMatchObject(
-    expectedSentFrames1
-  );
+  if (typeof response.body === "object") {
+    expect(response.body?.http2?.sent_frames[0]).toMatchObject(
+      expectedSentFrames0
+    );
+    expect(response.body?.http2?.sent_frames[1]).toMatchObject(
+      expectedSentFrames1
+    );
+  } else {
+    throw "Object decode error";
+  }
   cycleTLS.exit();
 });
