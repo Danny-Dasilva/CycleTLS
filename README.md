@@ -441,7 +441,7 @@ const initCycleTLS = require("cycletls");
 ```
 
 
-### Golang Set Cookies
+### Golang Configure Cookies
 ```golang
 package main
 
@@ -482,6 +482,7 @@ func main() {
 
 Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
 </details>
+
 
 ### How do I use CookieJar in CycleTLS?
 
@@ -546,7 +547,10 @@ async function processCookies(response, url, cookieJar) {
 **Golang example coming soon** 
 
 </details>
+
+
 ### How do I download images?
+
 <details>
 
 Images with a `Content-Type` header of the following types are base 64 encoded. 
