@@ -6,15 +6,18 @@ const ja3 =
 const userAgent =
   "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
 
-function parseBody(html: string) {
-  const dom = new jsdom.JSDOM(html);
-  const query = dom.window.document.querySelectorAll(".headername nobr"); // content
-  let queryValues: string[] = [];
-  for (let i = 0; i < query.length; i++) {
-    const inner = query[i].innerHTML.split(":")[0];
-    queryValues.push(inner);
+function parseBody(html: any) {
+  if (typeof html === "string") {
+    const dom = new jsdom.JSDOM(html);
+    const query = dom.window.document.querySelectorAll(".headername nobr"); // content
+    let queryValues: string[] = [];
+    for (let i = 0; i < query.length; i++) {
+      const inner = query[i].innerHTML.split(":")[0];
+      queryValues.push(inner);
+    }
+    return queryValues;
   }
-  return queryValues;
+  return null;
 }
 
 test("Should correctly set header order", async () => {
@@ -34,6 +37,7 @@ test("Should correctly set header order", async () => {
       proxy: "",
     }
   );
+
   let responseOrder = parseBody(defaultHeaders.body);
   expect(responseOrder).toStrictEqual(headerOrder);
 
@@ -75,7 +79,8 @@ test("Should correctly set header order", async () => {
     headers: { foo: "bar" },
     proxy: "",
   });
-  expect(JSON.parse(headerRequest.body).headers.Foo).toStrictEqual("bar");
-
+  if (typeof headerRequest.body === "object") {
+    expect(headerRequest.body?.headers?.Foo).toStrictEqual("bar");
+  }
   cycleTLS.exit();
 });

@@ -28,8 +28,10 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-  writeImage("./tests/images/output.jpeg", jpegImage.body);
 
+  if (typeof jpegImage.body === "string") {
+    writeImage("./tests/images/output.jpeg", jpegImage.body);
+  }
   const pngImage = await cycleTLS(
     "http://httpbin.org/image/png",
     {
@@ -39,8 +41,9 @@ test("Should Write all Image types to file", async () => {
     "get"
   );
 
-  writeImage("./tests/images/output.png", pngImage.body);
-
+  if (typeof pngImage.body === "string") {
+    writeImage("./tests/images/output.png", pngImage.body);
+  }
   const svgImage = await cycleTLS(
     "http://httpbin.org/image/svg",
     {
@@ -49,9 +52,9 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-
-  writeImage("./tests/images/output.svg", svgImage.body);
-
+  if (typeof svgImage.body === "string") {
+    writeImage("./tests/images/output.svg", svgImage.body);
+  }
   const webpImage = await cycleTLS(
     "http://httpbin.org/image/webp",
     {
@@ -60,9 +63,9 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-
-  await writeImage("./tests/images/output.webp", webpImage.body);
-
+  if (typeof webpImage.body === "string") {
+    await writeImage("./tests/images/output.webp", webpImage.body);
+  }
   cycleTLS.exit();
 });
 
