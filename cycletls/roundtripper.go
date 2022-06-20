@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 
 	"strings"
@@ -34,7 +33,8 @@ type roundTripper struct {
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Fix this later for proper cookie parsing
 	for _, properties := range rt.Cookies {
-		req.AddCookie(&http.Cookie{Name: properties.Name,
+		req.AddCookie(&http.Cookie{
+			Name: properties.Name,
 			Value:      properties.Value,
 			Path:       properties.Path,
 			Domain:     properties.Domain,
@@ -136,7 +136,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	case http2.NextProtoTLS:
 		// t2 := http2.Transport{DialTLS: rt.dialTLSHTTP2}
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
-
 		t2 := http2.Transport{DialTLS: rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
 			Navigator:   parsedUserAgent,

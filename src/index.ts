@@ -4,14 +4,30 @@ import { EventEmitter } from "events";
 import WebSocket from "ws";
 import * as http from "http";
 import os from 'os';
+import util from "util";
 
+export interface Cookie {
+  name: string;
+  value: string;
+  path?: string;
+  domain?: string;
+  expires?: string;
+  rawExpires?: string;
+  maxAge?: number;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: string;
+  unparsed?: string;
+}
 export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
   };
-  cookies?: {
-    [key: string]: any;
-  };
+  cookies?:
+     Array<object>
+    | {
+        [key: string]: string;
+      };
   body?: string;
   ja3?: string;
   userAgent?: string;
@@ -23,7 +39,9 @@ export interface CycleTLSRequestOptions {
 
 export interface CycleTLSResponse {
   status: number;
-  body: string;
+  body: string | {
+    [key: string]: any;
+  };
   headers: {
     [key: string]: any;
   };
@@ -276,12 +294,26 @@ const initCycleTLS = async (
         ): Promise<CycleTLSResponse> => {
           return new Promise((resolveRequest, rejectRequest) => {
             const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
-
-            if (!options.ja3)
-              options.ja3 = "771,255-49195-49199-49196-49200-49171-49172-156-157-47-53,0-10-11-13,23-24,0";
-            if (!options.body) options.body = "";
-            if (!options.proxy) options.proxy = "";
-
+            //set default options
+            options ??= {}
+            //set default ja3, user agent, body and proxy
+            if (!options?.ja3)
+              options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
+              if (!options?.userAgent)
+              options.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36";
+            if (!options?.body) options.body = "";
+            if (!options?.proxy) options.proxy = "";
+            
+            // convert simple cookies
+            if (!Array.isArray(options?.cookies)) {
+              const tempArr: {
+                [key: string]: any;
+              } = [];
+              for (const [key, value] of Object.entries(options.cookies)) {
+                tempArr.push({ name: key, value: value });
+              }
+              options.cookies = tempArr;
+            }
             instance.request(requestId, {
               url,
               ...options,
@@ -290,12 +322,17 @@ const initCycleTLS = async (
 
             instance.once(requestId, (response) => {
               if (response.error) return rejectRequest(response.error);
-              
-              const { Status: status, Body: body, Headers: headers } = response;
+              try {
+                //parse json responses
+                response.Body = JSON.parse(response.Body);
+                //override console.log full repl to display full body
+                response.Body[util.inspect.custom] = function(){ return JSON.stringify( this, undefined, 2); }
+              } catch (e) {}
 
+              const { Status: status, Body: body, Headers: headers } = response;
+              
               if (headers["Set-Cookie"])
                 headers["Set-Cookie"] = headers["Set-Cookie"].split("/,/");
-
               resolveRequest({
                 status,
                 body,

@@ -161,23 +161,23 @@ client := cycletls.Init()
 
 The following methods exist in CycleTLS
 
-**cycleTLS([url], config)**
+**cycleTLS(url, [config])**
 
-**cycleTLS.get([url], config)**
+**cycleTLS.get(url, [config])**
 
-**cycleTLS.delete([url], config)**
+**cycleTLS.delete(url, [config])**
 
-**cycleTLS.head([url], config)**
+**cycleTLS.head(url, [config])**
 
-**cycleTLS.options([url], config)**
+**cycleTLS.options(url, [config])**
 
-**cycleTLS.post([url], config)**
+**cycleTLS.post(url, [config])**
 
-**cycleTLS.put([url], config)**
+**cycleTLS.put(url, config)**
 
-**cycleTLS.patch([url], config)**
+**cycleTLS.patch(url, [config])**
 
-If URL is not passed, one must be specified in the config.
+Url is not optional, config is optional
 
 ## CycleTLS Request Config
 
