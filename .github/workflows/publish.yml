@@ -81,6 +81,7 @@ jobs:
       -
         name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
+        working-directory: ./cycletls
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
