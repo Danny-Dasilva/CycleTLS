@@ -3,11 +3,15 @@ import initCycleTLS from "../dist/index.js";
 test("Test latest Chrome frame headers", async () => {
   const cycleTLS = await initCycleTLS({ port: 9011 });
 
+  const ja3 =
+    "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0";
+  const UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36";
+
   const response = await cycleTLS.get("https://tls.fxnatic.dev/api/fp", {
     body: "",
-    ja3: "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
+    ja3: ja3,
+    userAgent: UA,
   });
   const expectedSentFrames0 = {
     frame_type: "SETTINGS",
@@ -27,6 +31,10 @@ test("Test latest Chrome frame headers", async () => {
     stream_id: 0,
   };
   if (typeof response.body === "object") {
+    expect(response.body?.tls?.ja3).toEqual(ja3);
+
+    expect(response.body?.user_agent).toEqual(UA);
+
     expect(response.body?.http2?.sent_frames[0]).toMatchObject(
       expectedSentFrames0
     );
@@ -41,12 +49,14 @@ test("Test latest Chrome frame headers", async () => {
 
 test("Test latest Firefox frame headers", async () => {
   const cycleTLS = await initCycleTLS({ port: 9012 });
-
+  const ja3 =
+    "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-34-51-43-13-45-28,29-23-24-25-256-257,0";
+  const UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0";
   const response = await cycleTLS.get("https://tls.fxnatic.dev/api/fp", {
     body: "",
-    ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-34-51-43-13-45-28,29-23-24-25-256-257,0",
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0",
+    ja3: ja3,
+    userAgent: UA,
   });
 
   const expectedSentFrames0 = {
@@ -66,6 +76,10 @@ test("Test latest Firefox frame headers", async () => {
     stream_id: 0,
   };
   if (typeof response.body === "object") {
+    expect(response.body?.tls?.ja3).toEqual(ja3);
+
+    expect(response.body?.user_agent).toEqual(UA);
+
     expect(response.body?.http2?.sent_frames[0]).toMatchObject(
       expectedSentFrames0
     );
