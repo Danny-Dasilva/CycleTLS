@@ -1,7 +1,7 @@
 import initCycleTLS from "../dist/index.js";
 
 test("Simple Cookie test", async () => {
-  const cycleTLS = await initCycleTLS();
+  const cycleTLS = await initCycleTLS({port: 9093});
 
   const cookies = {
     cookie1: "value1",
@@ -21,7 +21,7 @@ test("Simple Cookie test", async () => {
 });
 
 test("Complex Cookie test", async () => {
-  const cycleTLS = await initCycleTLS();
+  const cycleTLS = await initCycleTLS({port: 9092});
   const cookies = {
     cookie1: "value1",
     cookie2: "value2",

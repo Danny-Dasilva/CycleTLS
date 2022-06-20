@@ -79,7 +79,7 @@ const myRequests: Request[] = [
 
 
 test('Should Return 200 for all responses', async () => {
-    const cycleTLS = await initCycleTLS();
+    const cycleTLS = await initCycleTLS({port: 9090});
 
     for (let request of myRequests) {
         const response = await cycleTLS(request.url, {

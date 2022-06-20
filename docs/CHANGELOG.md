@@ -2,7 +2,7 @@
 
 ## 1.0.21 - (6-20-2022)
 ### Release Highlights
-Add support for extension 17513 and repo cleanup
+Json Parse body in response and Cookie examples
 ### Enhancements
 - Return Json body instead of string if response is type Json 🚨 BREAKING CHANGE (users no longer need to `JSON.parse` the response request body)
 - Changed basic api to not require CycleTLS `config`

@@ -5,7 +5,7 @@ const Cookie = tough.Cookie;
 
 test("Should properly set and configure cookies", async () => {
   // Initiate cycleTLS and CookieJar
-  const cycleTLS = await initCycleTLS();
+  const cycleTLS = await initCycleTLS({port: 9091});
   const cookieJar = new tough.CookieJar();
 
   // Send an inital response to demonstrate no cookies being set, and verify it
@@ -63,9 +63,6 @@ test("Should properly set and configure cookies", async () => {
   const fifthBody = fifthResponse.body;
 
   expect(fifthBody?.cookies).toEqual(expected_cookies);
-
-  console.log("Passed all cookie tests successfully.");
-
   cycleTLS.exit();
 });
 
