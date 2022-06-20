@@ -7,7 +7,7 @@ Json Parse body in response and Cookie examples
 - Return Json body instead of string if response is type Json 🚨 BREAKING CHANGE (users no longer need to `JSON.parse` the response request body)
 - Changed basic api to not require CycleTLS `config`
 - Add Cookie examples in readme and update Cookie API
-- Add Golang release tags
+- WIP golang release tags and dependabot alerts 
 ### Bug Fixes
 - [Added support for TLS Certificate Compression (causing cloudflare handshake issues)](https://github.com/Danny-Dasilva/CycleTLS/issues/103)
 - [Send Correct Frame headers](https://github.com/Danny-Dasilva/CycleTLS/issues/101)
