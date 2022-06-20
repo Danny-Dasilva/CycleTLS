@@ -33,7 +33,8 @@ type roundTripper struct {
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Fix this later for proper cookie parsing
 	for _, properties := range rt.Cookies {
-		req.AddCookie(&http.Cookie{Name: properties.Name,
+		req.AddCookie(&http.Cookie{
+			Name: properties.Name,
 			Value:      properties.Value,
 			Path:       properties.Path,
 			Domain:     properties.Domain,
@@ -105,7 +106,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
+	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, InsecureSkipVerify: true}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS13,
 
 		utls.HelloCustom)
@@ -134,7 +135,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	switch conn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
-
 		t2 := http2.Transport{DialTLS: rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
 			Navigator:   parsedUserAgent,

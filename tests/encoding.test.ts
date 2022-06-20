@@ -87,17 +87,20 @@ test("Response bodies should be decoded", async () => {
       {
         ja3: ja3,
         userAgent: userAgent,
-        headers: {"Accept-Encoding": "gzip, deflate, br",}
+        headers: { "Accept-Encoding": "gzip, deflate, br" },
       },
       "get"
     );
-    const Body = JSON.parse(response.body);
     //Remove origin for comparison
-    delete Body.origin;
-    delete Body.headers["X-Amzn-Trace-Id"];
-
-    expect(response.status).toBe(200);
-    expect(Body).toStrictEqual(request.response);
+    if (typeof response.body === "object") {
+      delete response.body.origin;
+      delete response.body.headers["X-Amzn-Trace-Id"];
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject(request?.response || {});
+      
+    } else {
+      throw "encoding error";
+    }
   }
   cycleTLS.exit();
 });

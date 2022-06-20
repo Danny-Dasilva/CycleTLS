@@ -1,5 +1,18 @@
 # CycleTLS Changelog
 
+## 1.0.21 - (6-20-2022)
+### Release Highlights
+Json Parse body in response and Cookie examples
+### Enhancements
+- Return Json body instead of string if response is type Json 🚨 BREAKING CHANGE (users no longer need to `JSON.parse` the response request body)
+- Changed basic api to not require CycleTLS `config`
+- Add Cookie examples in readme and update Cookie API
+- WIP golang release tags and dependabot alerts 
+### Bug Fixes
+- [Added support for TLS Certificate Compression (causing cloudflare handshake issues)](https://github.com/Danny-Dasilva/CycleTLS/issues/103)
+- [Send Correct Frame headers](https://github.com/Danny-Dasilva/CycleTLS/issues/101)
+- [Add Temporary support for extension 17](https://github.com/Danny-Dasilva/CycleTLS/issues/100)
+
 ## 0.0.20 - (5-16-2022)
 ### Release Highlights
 Add support for extension 17513 and repo cleanup
