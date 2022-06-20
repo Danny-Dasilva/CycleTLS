@@ -319,7 +319,7 @@ If you would like to compile CycleTLS on your own, use the following commands:
 
 Set module-aware mode
 
-`go env -w  GO111MODULE=auto`
+`go env -w  GO111MODULE=off`
 
 Install golang dependencies
 
