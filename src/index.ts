@@ -295,7 +295,8 @@ const initCycleTLS = async (
           return new Promise((resolveRequest, rejectRequest) => {
             const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
             //set default options
-            options ??= {}
+            options = options ?? {}
+            
             //set default ja3, user agent, body and proxy
             if (!options?.ja3)
               options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
@@ -304,8 +305,13 @@ const initCycleTLS = async (
             if (!options?.body) options.body = "";
             if (!options?.proxy) options.proxy = "";
             
-            // convert simple cookies
-            if (!Array.isArray(options?.cookies)) {
+            //convert simple cookies
+            const cookies = options?.cookies;
+            if (
+              typeof cookies === "object" &&
+              !Array.isArray(cookies) &&
+              cookies !== null
+             ) {
               const tempArr: {
                 [key: string]: any;
               } = [];

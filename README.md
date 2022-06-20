@@ -348,7 +348,204 @@ Mac
 
 ## Questions
 
+### How do I set Cookies
+<details>
 
+There are two simple ways to interface with cookies 
+### Javascript Simple Cookie Configuration
+
+```js
+const initCycleTLS = require("cycletls");
+(async () => {
+  // Initiate cycleTLS
+  const cycleTLS = await initCycleTLS();
+  const response = await cycleTLS("https://httpbin.org/cookies", {
+    cookies: {
+      cookie1: "value1",
+      cookie2: "value2",
+    },
+  });
+  console.log(response.body);
+  /* Expected
+  {
+    "cookies": {
+      "cookie1": "value1",
+      "cookie2": "value2"
+    }
+  }
+  */
+  cycleTLS.exit();
+})();
+```
+
+In this simple example you can set the cookie `name` and `value` within an object
+
+
+### Javascript Complex Cookie Configuration
+
+If you wish to have more fine grained control over cookie parameters you have access to the full underlying Go struct
+
+here are the following values you can set
+
+```ts
+export interface Cookie {
+  name: string;
+  value: string;
+  path?: string;
+  domain?: string;
+  expires?: string;
+  rawExpires?: string;
+  maxAge?: number;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: string;
+  unparsed?: string;
+}
+```
+
+you can use them in a request as follows
+
+```js
+const initCycleTLS = require("cycletls");
+(async () => {
+  // Initiate cycleTLS
+  const cycleTLS = await initCycleTLS();
+  const complexCookies = [
+    {
+      name: "cookie1",
+      value: "value1",
+      domain: "httpbin.org",
+    },
+    {
+      name: "cookie2",
+      value: "value2",
+      domain: "httpbin.org",
+    },
+  ];
+
+  const response = await cycleTLS("https://httpbin.org/cookies", {
+    cookies: complexCookies,
+  });
+
+  console.log(response.body);
+  /* Expected
+  {
+    "cookies": {
+      "cookie1": "value1",
+      "cookie2": "value2"
+    }
+  }
+  */
+  cycleTLS.exit();
+})();
+```
+
+
+### Golang Set Cookies
+```golang
+package main
+
+import (
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    resp, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Cookies: []cycletls.Cookie{{Name: "cookie1", Value: "value1"},
+			{Name: "cookie2", Value: "value2"}},
+    }, "GET")
+    if err != nil {
+      log.Print("Request Failed: " + err.Error())
+    }
+    log.Println(resp.Body)
+    /* Expected
+    {
+      "cookies": {
+        "cookie1": "value1", 
+        "cookie2": "value2"
+      }
+      }
+    */
+    
+    //Altenatively if you want access to values within a map
+    log.Println(resp.JSONBody())
+    /* Expected
+    map[cookies:map[cookie1:value1 cookie2:value2]]
+    */
+}
+
+```
+
+
+Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
+</details>
+
+### How do I use CookieJar in CycleTLS?
+
+<details>
+
+```js
+const initCycleTLS = require("cycletls");
+
+const tough = require("tough-cookie");
+const Cookie = tough.Cookie;
+
+(async () => {
+  // Initiate cycleTLS and CookieJar
+  const cycleTLS = await initCycleTLS();
+  const cookieJar = new tough.CookieJar();
+
+  // Capture a set cookie
+  const firstResponse = await cycleTLS.get(
+    "https://httpbin.org/cookies/set?freeform=test",
+    {
+      disableRedirect: true,
+    }
+  );
+  
+  // Now use the processCookies function to add the cookies from the response headers to the cookie jar
+  await processCookies(
+    firstResponse,
+    "https://httpbin.org/cookies/set?freeform=test",
+    cookieJar
+  );
+  // Now send a second to verify we have our cookies
+  const secondResponse = await cycleTLS.get("https://httpbin.org/cookies", {
+    headers: {
+      cookie: await cookieJar.getCookieString("https://httpbin.org/cookies"),
+    },
+  });
+  
+  //verify cookies were set
+  console.log(secondResponse.body)
+  /* Expected
+  {
+    "cookies": {
+      "freeform": "test"
+    }
+  }
+  */
+  cycleTLS.exit();
+})();
+
+async function processCookies(response, url, cookieJar) {
+  if (response.headers["Set-Cookie"] instanceof Array) {
+    response.headers["Set-Cookie"].map(
+      async (cookieString) => await cookieJar.setCookie(cookieString, url)
+    );
+  } else {
+    await cookieJar.setCookie(response.headers["Set-Cookie"], url);
+  }
+}
+```
+
+
+**Golang example coming soon** 
+
+</details>
 ### How do I download images?
 <details>
 
