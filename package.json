@@ -9,13 +9,16 @@
   ],
   "author": "Danny-Dasilva",
   "scripts": {
+    "build:go:freebsd:amd64": " cross-env GO111MODULE=off GOOS=freebsd  GOARCH=amd64  go build -o ./dist/index-freebsd  ./src && chmod +x ./dist/index-freebsd",
+    "build:go:linux:amd64": "   cross-env GO111MODULE=off GOOS=linux    GOARCH=amd64  go build -o ./dist/index          ./src && chmod +x ./dist/index",
+    "build:go:linux:arm": "     cross-env GO111MODULE=off GOOS=linux    GOARCH=arm    go build -o ./dist/index-arm      ./src && chmod +x ./dist/index-arm",
+    "build:go:linux:arm64": "   cross-env GO111MODULE=off GOOS=linux    GOARCH=arm64  go build -o ./dist/index-arm64    ./src && chmod +x ./dist/index-arm64",
+    "build:go:mac:amd64": "     cross-env GO111MODULE=off GOOS=darwin   GOARCH=amd64  go build -o ./dist/index-mac      ./src && chmod +x ./dist/index-mac",
+    "build:go:windows:amd64": " cross-env GO111MODULE=off GOOS=windows  GOARCH=amd64  go build -o ./dist/index.exe      ./src",
+    "build:go": "concurrently npm:build:go:*",
     "build": "tsc",
-    "build:windows": "cross-env GOOS=windows go build -o ./dist/index.exe ./src",
-    "build:linux": "cross-env GOOS=linux go build -o ./dist/index ./src && chmod +x ./dist/index",
-    "build:arm64": "cross-env GOOS=linux GOARCH=arm64 go build -o ./dist/index-arm64 ./src && chmod +x ./dist/index-arm64",
-    "build:arm": "cross-env GOOS=linux GOARCH=arm go build -o ./dist/index-arm ./src && chmod +x ./dist/index-arm",
-    "build:mac": "cross-env GOOS=darwin go build -o ./dist/index-mac ./src && chmod +x ./dist/index-mac",
-    "prepare": "npm run build && npm run build:windows && npm run build:linux && npm run build:mac",
+    "prebuild:go": "cross-env GO111MODULE=off go get github.com/Danny-Dasilva/CycleTLS/cycletls",
+    "prepare": "npm run build && npm run build:go",
     "test": "jest"
   },
   "repository": {
@@ -44,12 +47,13 @@
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.19.0",
     "@typescript-eslint/parser": "^5.19.0",
+    "concurrently": "^7.2.2",
     "cross-env": "^7.0.3",
     "eslint": "^8.13.0",
     "eslint-plugin-prefer-arrow": "^1.2.3",
     "jest": "^27.5.1",
+    "jsdom": "^19.0.0",
     "ts-jest": "^27.1.4",
-    "typescript": "^4.6.3",
-    "jsdom": "^19.0.0"
+    "typescript": "^4.6.3"
   }
 }

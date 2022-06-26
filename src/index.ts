@@ -130,27 +130,18 @@ class Golang extends EventEmitter {
       port: number,
       debug: boolean
   ){
-    let executableFilename;
+    const PLATFORM_BINARIES: { [platform: string]: { [arch: string]: string } } = {
+      "win32":    { "x64": "index.exe" },
+      "linux":    { "arm": "index-arm", "arm64": "index-arm64", "x64": "index" },
+      "darwin":   { "x64": "index-mac" },
+      "freebsd":  { "x64": "index-freebsd" }
+    };
 
-    if (process.platform == "win32") {
-      executableFilename = "index.exe";
-    } else if (process.platform == "linux") {
-
-      //build arm 
-      if (os.arch() == "arm") {
-        executableFilename = "index-arm";
-      } else if (os.arch() == "arm64") {
-        executableFilename = "index-arm64";
-      } else {
-        //default
-        executableFilename = "index";
-      }
-  
-    } else if (process.platform == "darwin") {
-      executableFilename = "index-mac";
-    } else {
-      cleanExit(new Error("Operating system not supported"));
+    const executableFilename = PLATFORM_BINARIES[process.platform]?.[os.arch()];
+    if (!executableFilename) {
+      cleanExit(new Error(`Unsupported architecture ${os.arch()} for ${process.platform}`));
     }
+
     handleSpawn(debug, executableFilename, port);
 
     this.createClient(port, debug);
