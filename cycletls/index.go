@@ -35,14 +35,14 @@ type cycleTLSRequest struct {
 	Options   Options `json:"options"`
 }
 
-//rename to request+client+options
+// rename to request+client+options
 type fullRequest struct {
 	req     *http.Request
 	client  http.Client
 	options cycleTLSRequest
 }
 
-//Response contains Cycletls response data
+// Response contains Cycletls response data
 type Response struct {
 	RequestID string
 	Status    int
@@ -50,7 +50,7 @@ type Response struct {
 	Headers   map[string]string
 }
 
-//JSONBody converts response body to json
+// JSONBody converts response body to json
 func (re Response) JSONBody() map[string]interface{} {
 	var data map[string]interface{}
 	err := json.Unmarshal([]byte(re.Body), &data)
@@ -60,7 +60,7 @@ func (re Response) JSONBody() map[string]interface{} {
 	return data
 }
 
-//CycleTLS creates full request and response
+// CycleTLS creates full request and response
 type CycleTLS struct {
 	ReqChan  chan fullRequest
 	RespChan chan Response
@@ -205,7 +205,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 }
 
 // Queue queues request in worker pool
-func (client CycleTLS) Queue(URL string, options Options, Method string) {
+func (client CycleTLS) Queue(URL string, options Options, Method string) string {
 
 	options.URL = URL
 	options.Method = Method
@@ -213,6 +213,7 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 	opt := cycleTLSRequest{"Queued Request", options}
 	response := processRequest(opt)
 	client.ReqChan <- response
+	return opt.RequestID
 }
 
 // Do creates a single request
