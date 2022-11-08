@@ -37,7 +37,7 @@
   "homepage": "https://github.com/Danny-Dasilva/CycleTLS#readme",
   "dependencies": {
     "@types/node": "^17.0.24",
-    "ws": "^7.5.7"
+    "ws": "^8.11.0"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",
