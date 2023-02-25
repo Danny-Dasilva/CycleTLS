@@ -9,6 +9,5 @@ require (
 	github.com/andybalholm/brotli v1.0.4
 	github.com/gorilla/websocket v1.5.0
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
-	golang.org/x/net v0.0.0-20220615171555-694bf12d69de
-	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c // indirect
+	golang.org/x/net v0.7.0
 )
