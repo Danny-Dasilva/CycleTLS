@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	http "github.com/Danny-Dasilva/fhttp"
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	"golang.org/x/net/proxy"
@@ -32,15 +33,6 @@ type connectDialer struct {
 	cacheH2Mu          sync.Mutex
 	cachedH2ClientConn *http2.ClientConn
 	cachedH2RawConn    net.Conn
-}
-
-type SocketProxyError struct {
-	Err error
-}
-
-func (s SocketProxyError) Error() string {
-	//TODO implement me
-	return s.Err.Error()
 }
 
 // newConnectDialer creates a dialer to issue CONNECT requests and tunnel traffic via HTTP/S proxy.
@@ -83,12 +75,12 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		}
 		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, nil)
 		if err != nil {
-			return nil, SocketProxyError{Err: err}
+			return nil, errors.New(fmt.Sprintf("Error creating SOCKS5 proxy, reason %s", err))
 		}
 		if contextDialer, ok := dialSocksProxy.(proxy.ContextDialer); ok {
 			client.Dialer = contextDialer
 		} else {
-			return nil, SocketProxyError{Err: errors.New("failed type assertion to DialContext")}
+			return nil, errors.New("failed type assertion to DialContext")
 		}
 		client.DefaultHeader.Set("User-Agent", UserAgent)
 		return client, nil
@@ -98,16 +90,18 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		return nil, errors.New("scheme " + proxyURL.Scheme + " is not supported")
 	}
 
+	client.Dialer = &net.Dialer{}
+
 	if proxyURL.User != nil {
 		if proxyURL.User.Username() != "" {
 			// password, _ := proxyUrl.User.Password()
-			// client.DefaultHeader.Set("Proxy-Authorization", "Basic "+
+			// transport.DefaultHeader.Set("Proxy-Authorization", "Basic "+
 			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
 
 			username := proxyURL.User.Username()
 			password, _ := proxyURL.User.Password()
 
-			// client.DefaultHeader.SetBasicAuth(username, password)
+			// transport.DefaultHeader.SetBasicAuth(username, password)
 			auth := username + ":" + password
 			basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
 			client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
