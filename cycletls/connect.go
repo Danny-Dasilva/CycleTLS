@@ -22,7 +22,7 @@ type connectDialer struct {
 	ProxyURL      url.URL
 	DefaultHeader http.Header
 
-	Dialer net.Dialer // overridden dialer allow to control establishment of TCP connection
+	Dialer proxy.ContextDialer // overridden dialer allow to control establishment of TCP connection
 
 	// overridden DialTLS allows user to control establishment of TLS connection
 	// MUST return connection with completed Handshake, and NegotiatedProtocol
@@ -32,6 +32,15 @@ type connectDialer struct {
 	cacheH2Mu          sync.Mutex
 	cachedH2ClientConn *http2.ClientConn
 	cachedH2RawConn    net.Conn
+}
+
+type SocketProxyError struct {
+	Err error
+}
+
+func (s SocketProxyError) Error() string {
+	//TODO implement me
+	return s.Err.Error()
 }
 
 // newConnectDialer creates a dialer to issue CONNECT requests and tunnel traffic via HTTP/S proxy.
@@ -48,6 +57,12 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 			"`, make sure to specify full url like https://username:password@hostname.com:443/")
 	}
 
+	client := &connectDialer{
+		ProxyURL:          *proxyURL,
+		DefaultHeader:     make(http.Header),
+		EnableH2ConnReuse: true,
+	}
+
 	switch proxyURL.Scheme {
 	case "http":
 		if proxyURL.Port() == "" {
@@ -57,16 +72,30 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		if proxyURL.Port() == "" {
 			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "443")
 		}
+	case "socks5":
+		var auth *proxy.Auth
+		if proxyURL.User != nil {
+			if proxyURL.User.Username() != "" {
+				username := proxyURL.User.Username()
+				password, _ := proxyURL.User.Password()
+				auth = &proxy.Auth{User: username, Password: password}
+			}
+		}
+		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, nil)
+		if err != nil {
+			return nil, SocketProxyError{Err: err}
+		}
+		if contextDialer, ok := dialSocksProxy.(proxy.ContextDialer); ok {
+			client.Dialer = contextDialer
+		} else {
+			return nil, SocketProxyError{Err: errors.New("failed type assertion to DialContext")}
+		}
+		client.DefaultHeader.Set("User-Agent", UserAgent)
+		return client, nil
 	case "":
 		return nil, errors.New("specify scheme explicitly (https://)")
 	default:
 		return nil, errors.New("scheme " + proxyURL.Scheme + " is not supported")
-	}
-
-	client := &connectDialer{
-		ProxyURL:          *proxyURL,
-		DefaultHeader:     make(http.Header),
-		EnableH2ConnReuse: true,
 	}
 
 	if proxyURL.User != nil {
@@ -98,6 +127,10 @@ type ContextKeyHeader struct{}
 // ctx.Value will be inspected for optional ContextKeyHeader{} key, with `http.Header` value,
 // which will be added to outgoing request headers, overriding any colliding c.DefaultHeader
 func (c *connectDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if c.ProxyURL.Scheme == "socks5" {
+		return c.Dialer.DialContext(ctx, network, address)
+	}
+
 	req := (&http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Host: address},
@@ -194,8 +227,8 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			}
 		} else {
 			tlsConf := tls.Config{
-				NextProtos: []string{"h2", "http/1.1"},
-				ServerName: c.ProxyURL.Hostname(),
+				NextProtos:         []string{"h2", "http/1.1"},
+				ServerName:         c.ProxyURL.Hostname(),
 				InsecureSkipVerify: true,
 			}
 			tlsConn, err := tls.Dial(network, c.ProxyURL.Host, &tlsConf)
