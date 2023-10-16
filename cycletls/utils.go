@@ -60,6 +60,8 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 			"image/webp":      true,
 			"image/jpeg":      true,
 			"image/png":       true,
+			"image/gif":       true,
+			"image/avif":      true,
 			"application/pdf": true,
 		}
 		if decodingTypes[content[0]] {
@@ -272,6 +274,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 
 }
 
+// PrettyStruct formats json
 func PrettyStruct(data interface{}) (string, error) {
 	val, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {

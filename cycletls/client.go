@@ -37,28 +37,20 @@ func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, dis
 
 // newClient creates a new http client
 func newClient(browser browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
-	//fix check PR
+	var dialer proxy.ContextDialer
+	// Check if a valid proxyURL is provided.
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
-		dialer, err := newConnectDialer(proxyURL[0], UserAgent)
+		var err error
+		dialer, err = newConnectDialer(proxyURL[0], UserAgent)
 		if err != nil {
 			return http.Client{
 				Timeout:       time.Duration(timeout) * time.Second,
-				CheckRedirect: disabledRedirect, //fix this fallthrough issue (test for incorrect proxy)
+				CheckRedirect: disabledRedirect,
 			}, err
 		}
-		return clientBuilder(
-			browser,
-			dialer,
-			timeout,
-			disableRedirect,
-		), nil
+	} else {
+		dialer = proxy.Direct
 	}
 
-	return clientBuilder(
-		browser,
-		proxy.Direct,
-		timeout,
-		disableRedirect,
-	), nil
-
+	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
 }

@@ -75,7 +75,7 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		}
 		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, nil)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("Error creating SOCKS5 proxy, reason %s", err))
+			return nil, fmt.Errorf("Error creating SOCKS5 proxy, reason %s", err)
 		}
 		if contextDialer, ok := dialSocksProxy.(proxy.ContextDialer); ok {
 			client.Dialer = contextDialer

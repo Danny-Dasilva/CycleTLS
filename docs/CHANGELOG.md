@@ -1,5 +1,19 @@
 # CycleTLS Changelog
 
+
+## 1.0.22 - (10-15-2023)
+### Release Highlights
+Support for additional filetypes and memory leak fix
+
+### Enhancements
+- [Missing Gif/Avif/... support in Decoding ](https://github.com/Danny-Dasilva/CycleTLS/issues/262)
+### Bug Fixes
+- [Memory leaks builded package on Docker container](https://github.com/Danny-Dasilva/CycleTLS/issues/157) addressed by @abler98
+- [There are lot's of memory leaks, DDoS and infinite loop if any error in NodeJS](https://github.com/Danny-Dasilva/CycleTLS/issues/264) addressed by @abler98
+- [is there a way to support socks5 proxy?](https://github.com/Danny-Dasilva/CycleTLS/issues/263) addressed by @ChengHoward
+- [Support Socks5/4](https://github.com/Danny-Dasilva/CycleTLS/issues/77) addressed by @ChengHoward
+
+
 ## 1.0.21 - (6-20-2022)
 ### Release Highlights
 Json Parse body in response and Cookie examples

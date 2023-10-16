@@ -21,7 +21,7 @@ type data struct {
 // HTTP response or the Cookie header of an HTTP request.
 //
 // See https://tools.ietf.org/html/rfc6265 for details.
-//Stolen from Net/http/cookies
+// Stolen from Net/http/cookies
 type Cookie struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
