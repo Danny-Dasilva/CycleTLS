@@ -14,6 +14,24 @@ import (
 	"strings"
 )
 
+type FormField struct {
+    Name  string
+    Value string
+}
+
+type FormFile struct {
+    Name        string
+    Filename    string
+    ContentType string
+    Data        interface{} // You can use the empty interface to allow string or byte slice (i.e. []byte) as the data type
+}
+
+type FormData struct {
+    Fields []FormField
+    Files  []FormFile
+}
+
+
 // Options sets CycleTLS client options
 type Options struct {
 	URL             string            `json:"url"`
@@ -27,7 +45,8 @@ type Options struct {
 	Timeout         int               `json:"timeout"`
 	DisableRedirect bool              `json:"disableRedirect"`
 	HeaderOrder     []string          `json:"headerOrder"`
-	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
+	OrderAsProvided bool              `json:"orderAsProvided"` //TODO\
+	Form            FormData          `json:"form"` //used for conversion for js
 }
 
 type cycleTLSRequest struct {
@@ -85,8 +104,15 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	data := url.Values{}
+	data.Add("key2", "value2")
+	for _, field := range request.Options.Form.Fields {
+		data.Set(field.Name, field.Value)
+	}
 
-	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	// Encode the form data
+	encodedData := data.Encode()
+	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(encodedData))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -285,16 +311,17 @@ func readSocket(reqChan chan fullRequest, c *websocket.Conn) {
 			return
 		}
 		request := new(cycleTLSRequest)
-
 		err = json.Unmarshal(message, &request)
 		if err != nil {
 			log.Print("Unmarshal Error", err)
 			return
 		}
+		log.Print("request", request)
 
-		reply := processRequest(*request)
 
-		reqChan <- reply
+		// reply := processRequest(*request)
+
+		// reqChan <- reply
 	}
 }
 
