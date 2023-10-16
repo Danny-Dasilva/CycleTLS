@@ -31,8 +31,11 @@ jobs:
         run: go env -w  GO111MODULE=auto
         working-directory: ./
       - name: Install golang dependencies
-        run: while read l; do go get -v "$l"; done < <(go list -f '{{ join .Imports "\n" }}' ./cycletls)
-        shell: bash
+        run: |
+          go mod tidy
+          go mod download
+        working-directory: ./cycletls
+
 
       - name: Install npm depencencies
         run: npm ci
