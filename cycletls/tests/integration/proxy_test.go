@@ -7,7 +7,7 @@ import (
 	//"fmt"
 	"log"
 	"testing"
-
+	"runtime"
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
