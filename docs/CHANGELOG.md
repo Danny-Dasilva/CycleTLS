@@ -1,9 +1,10 @@
 # CycleTLS Changelog
 
 
-## 1.0.22 - (10-15-2023)
+## 1.0.22 - (10-16-2023)
 ### Release Highlights
 Support for additional filetypes and memory leak fix
+Update Golang version to 17 
 
 ### Enhancements
 - [Missing Gif/Avif/... support in Decoding ](https://github.com/Danny-Dasilva/CycleTLS/issues/262)

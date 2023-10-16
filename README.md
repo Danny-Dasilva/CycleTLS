@@ -317,7 +317,13 @@ const promises = [];
 
 If you would like to compile CycleTLS on your own, use the following commands:
 
-install npm packages
+Set module-aware mode
+`go env -w  GO111MODULE=off`
+
+Install golang dependencies
+`go get github.com/Danny-Dasilva/CycleTLS/cycletls`
+
+install npm packages (this command handles the above)
 
 `npm install`
 
