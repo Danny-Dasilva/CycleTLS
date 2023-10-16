@@ -31,7 +31,7 @@ jobs:
       - name: Start SOCKS5 Proxy (only on ubuntu)
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          docker run -d -p 1087:1080 rofl0r/microsocks -i 0.0.0.0 -u abc -P 123
+          docker run -d -p 1087:1080 serjs/go-socks5-proxy
 
       - name: Integration Tests
         working-directory: ./cycletls
