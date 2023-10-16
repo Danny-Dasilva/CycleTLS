@@ -25,9 +25,11 @@ func TestProxySuccess(t *testing.T) {
 		},
 	}, "GET")
 	if err != nil {
-		log.Print("Request Failed: " + err.Error())
+		t.Fatalf("Request Failed: " + err.Error())
 	}
-	log.Print("Status: " + strconv.Itoa(resp.Status))
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
 	log.Print("Body: " + resp.Body)
 }
 
