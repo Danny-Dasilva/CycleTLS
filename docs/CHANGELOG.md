@@ -5,6 +5,7 @@
 ### Release Highlights
 Support for additional filetypes and memory leak fix
 Update Golang version to 17 
+[New Discord Community](https://discord.gg/gsmxMHrwhu) 
 
 ### Enhancements
 - [Missing Gif/Avif/... support in Decoding ](https://github.com/Danny-Dasilva/CycleTLS/issues/262)
