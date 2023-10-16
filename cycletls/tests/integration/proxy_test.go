@@ -6,7 +6,6 @@ package cycletls_test
 import (
 	//"fmt"
 	"log"
-	"strconv"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
