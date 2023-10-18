@@ -1,5 +1,14 @@
 # CycleTLS Changelog
 
+## 1.0.21 - (8-16-2022)
+### Release Highlights
+Json Parse body in response and Cookie examples
+### Enhancements
+- Return Response URL (https://github.com/Danny-Dasilva/CycleTLS/issues/121)
+- Return Response Cookies (https://github.com/Danny-Dasilva/CycleTLS/issues/133)
+
+
+
 ## 1.0.21 - (6-20-2022)
 ### Release Highlights
 Json Parse body in response and Cookie examples

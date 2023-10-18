@@ -19,15 +19,19 @@ const (
 	chrome  = "chrome"  //chrome User agent enum
 	firefox = "firefox" //firefox User agent enum
 )
+type UserAgent struct {
+    UserAgent string; HeaderOrder []string
+}
 
-func parseUserAgent(userAgent string) string {
+// ParseUserAgent returns the pseudo header order and user agent string for chrome/firefox
+func parseUserAgent(userAgent string) UserAgent {
 	switch {
 	case strings.Contains(strings.ToLower(userAgent), "chrome"):
-		return chrome
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
 	case strings.Contains(strings.ToLower(userAgent), "firefox"):
-		return firefox
+		return UserAgent{firefox, []string{":method", ":path", ":authority", ":scheme"}}
 	default:
-		return chrome
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
 	}
 
 }
@@ -97,7 +101,7 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
-	parsedUserAgent := parseUserAgent(userAgent)
+	parsedUserAgent := parseUserAgent(userAgent).UserAgent
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
@@ -114,7 +118,9 @@ func StringToSpec(ja3 string, userAgent string) (*utls.ClientHelloSpec, error) {
 	}
 	// parse curves
 	var targetCurves []utls.CurveID
-	targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
+	if parsedUserAgent == chrome {
+		targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
+	}
 	for _, c := range curves {
 		cid, err := strconv.ParseUint(c, 10, 16)
 		if err != nil {
@@ -240,7 +246,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"34": &utls.GenericExtension{Id: 34},
 		"41": &utls.GenericExtension{Id: 41}, //FIXME pre_shared_key
 		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
-			utls.GREASE_PLACEHOLDER,
+			// utls.GREASE_PLACEHOLDER,
 			utls.VersionTLS13,
 			utls.VersionTLS12,
 			utls.VersionTLS11,
@@ -252,7 +258,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"49": &utls.GenericExtension{Id: 49}, // post_handshake_auth
 		"50": &utls.GenericExtension{Id: 50}, // signature_algorithms_cert
 		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
-			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+			// {Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
 			{Group: utls.X25519},
 
 			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
@@ -267,6 +273,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},
+		"65037": &utls.GenericExtension{Id: 65037},
 	}
 	return
 

@@ -48,6 +48,8 @@ type Response struct {
 	Status    int
 	Body      string
 	Headers   map[string]string
+	ResponseUrl string
+	Cookies []*http.Cookie
 }
 
 //JSONBody converts response body to json
@@ -143,11 +145,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 
 	}
+	headeOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
 		http.HeaderOrderKey:  headerorderkey,
-		http.PHeaderOrderKey: {":method", ":authority", ":scheme", ":path"},
+		http.PHeaderOrderKey: headeOrder,
 	}
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
@@ -169,14 +172,16 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 func dispatcher(res fullRequest) (response Response, err error) {
 	resp, err := res.client.Do(res.req)
+
 	if err != nil {
 
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}, nil //normally return error here
+		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers, resp.Request.URL.String(), resp.Cookies()}, nil //normally return error here
 
 	}
+	log.Println(resp.Cookies())
 	defer resp.Body.Close()
 
 	encoding := resp.Header["Content-Encoding"]
@@ -200,7 +205,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-	return Response{res.options.RequestID, resp.StatusCode, Body, headers}, nil
+	return Response{res.options.RequestID, resp.StatusCode, Body, headers, resp.Request.URL.String(), resp.Cookies()}, nil
 
 }
 
