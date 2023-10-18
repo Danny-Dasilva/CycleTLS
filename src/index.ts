@@ -133,7 +133,7 @@ class Golang extends EventEmitter {
     const PLATFORM_BINARIES: { [platform: string]: { [arch: string]: string } } = {
       "win32":    { "x64": "index.exe" },
       "linux":    { "arm": "index-arm", "arm64": "index-arm64", "x64": "index" },
-      "darwin":   { "x64": "index-mac" },
+      "darwin":   { "x64": "index-mac", "arm": "index-mac-arm", "arm64": "index-mac-arm64" },
       "freebsd":  { "x64": "index-freebsd" }
     };
 
