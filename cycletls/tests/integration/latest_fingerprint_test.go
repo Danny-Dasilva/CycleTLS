@@ -1,31 +1,29 @@
 package cycletls_test
 
 import (
-	//"fmt"
 	"encoding/json"
 	"log"
 	"testing"
 
-	cycletls "../../../cycletls"
+	// cycletls "../../../cycletls"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 type CycleTLSOptions struct {
-	Ja3Hash      string `json:"ja3_hash"`
-	Ja3          string `json:"ja3"`
-	UserAgent    string `json:"User-Agent"`
-	AkamaiFingerprint string 
-	AkamaiHash string 
+	Ja3Hash           string `json:"ja3_hash"`
+	Ja3               string `json:"ja3"`
+	UserAgent         string `json:"User-Agent"`
+	AkamaiFingerprint string
+	AkamaiHash        string
 
 	HTTPResponse int
-
 }
 
 type PeetResp struct {
-	Ja3       string `json:"ja3"`
-	Ja3Hash   string `json:"ja3_hash"`
+	Ja3               string `json:"ja3"`
+	Ja3Hash           string `json:"ja3_hash"`
 	AkamaiFingerprint string `json:"akamai"`
-	AkamaiHash string `json:"akamai_hash"`
-
+	AkamaiHash        string `json:"akamai_hash"`
 }
 
 var PeetRequests = []CycleTLSOptions{
@@ -78,7 +76,7 @@ func TestHTTP2(t *testing.T) {
 				t.Fatal("Expected:", options.AkamaiFingerprint, "Got:", jsonResp.AkamaiFingerprint, "for AkamaiFingerprint", options.UserAgent)
 			}
 			if jsonResp.AkamaiHash != options.AkamaiHash {
-				t.Fatal("Expected:", options.AkamaiHash, "Got:", jsonResp.AkamaiHash, "for AkamaiHash",options.UserAgent)
+				t.Fatal("Expected:", options.AkamaiHash, "Got:", jsonResp.AkamaiHash, "for AkamaiHash", options.UserAgent)
 			}
 
 		}
