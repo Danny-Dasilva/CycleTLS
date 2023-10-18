@@ -9,6 +9,8 @@ Update Golang version to 17
 
 ### Enhancements
 - [Missing Gif/Avif/... support in Decoding ](https://github.com/Danny-Dasilva/CycleTLS/issues/262)
+- [Discord Community](https://github.com/Danny-Dasilva/CycleTLS/issues/206)
+- Properly seat h2 Pseudo Header order
 ### Bug Fixes
 - [Memory leaks builded package on Docker container](https://github.com/Danny-Dasilva/CycleTLS/issues/157) addressed by @abler98
 - [There are lot's of memory leaks, DDoS and infinite loop if any error in NodeJS](https://github.com/Danny-Dasilva/CycleTLS/issues/264) addressed by @abler98

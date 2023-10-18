@@ -133,7 +133,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	// of ALPN.
 	switch conn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
-		parsedUserAgent := parseUserAgent(rt.UserAgent)
+		parsedUserAgent := parseUserAgent(rt.UserAgent).UserAgent
 		t2 := http2.Transport{DialTLS: rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
 			Navigator:   parsedUserAgent,
