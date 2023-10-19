@@ -12,16 +12,6 @@ import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
-type CycleTLSOptions struct {
-	Ja3Hash           string `json:"ja3_hash"`
-	Ja3               string `json:"ja3"`
-	UserAgent         string `json:"User-Agent"`
-	AkamaiFingerprint string
-	AkamaiHash        string
-
-	HTTPResponse int
-}
-
 type PeetResp struct {
 	Ja3               string `json:"ja3"`
 	Ja3Hash           string `json:"ja3_hash"`
