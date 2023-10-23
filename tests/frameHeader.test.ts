@@ -15,12 +15,13 @@ test("Test latest Chrome frame headers", async () => {
   });
   const expectedSentFrames0 = {
     frame_type: "SETTINGS",
-    length: 24,
+    length: 30,
     settings: [
       "HEADER_TABLE_SIZE = 65536",
       "MAX_CONCURRENT_STREAMS = 1000",
       "INITIAL_WINDOW_SIZE = 6291456",
       "MAX_HEADER_LIST_SIZE = 262144",
+      "MAX_FRAME_SIZE = 16384",
     ],
   };
   const expectedSentFrames1 = {
