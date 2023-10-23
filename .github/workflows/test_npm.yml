@@ -27,15 +27,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Set module-aware mode
-        run: go env -w  GO111MODULE=auto
-        working-directory: ./
-      - name: Install golang dependencies
-        run: |
-          go mod tidy
-          go mod download
-        working-directory: ./cycletls
-
 
       - name: Install npm depencencies
         run: npm ci
