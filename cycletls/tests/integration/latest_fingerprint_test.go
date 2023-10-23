@@ -12,6 +12,16 @@ import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
+type AkamaiOptions struct {
+	Ja3Hash           string `json:"ja3_hash"`
+	Ja3               string `json:"ja3"`
+	UserAgent         string `json:"User-Agent"`
+	AkamaiFingerprint string
+	AkamaiHash        string
+
+	HTTPResponse int
+}
+
 type PeetResp struct {
 	Ja3               string `json:"ja3"`
 	Ja3Hash           string `json:"ja3_hash"`
@@ -19,7 +29,7 @@ type PeetResp struct {
 	AkamaiHash        string `json:"akamai_hash"`
 }
 
-var PeetRequests = []CycleTLSOptions{
+var PeetRequests = []AkamaiOptions{
 	{"aa7744226c695c0b2e440419848cf700", // Firefox 101
 		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0",
