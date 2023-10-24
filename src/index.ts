@@ -19,6 +19,14 @@ export interface Cookie {
   sameSite?: string;
   unparsed?: string;
 }
+
+export interface TimeoutOptions {
+  /** How long should we wait on a request response before giving up */
+  requestTimeout: number,
+  /** How long should we wait before giving up on the request received handshake */
+  acknowledgementTimeout?: number
+}
+
 export interface CycleTLSRequestOptions {
   headers?: {
     [key: string]: any;
@@ -81,8 +89,9 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
 process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
 
-const handleSpawn = (debug: boolean, fileName: string, port: number) => {
-  child = spawn(path.join(`"${__dirname}"`, fileName), {
+const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: string) => {
+  const execPath = filePath ?? path.join(__dirname, fileName);
+  child = spawn(execPath, {
     env: { WS_PORT: port.toString() },
     shell: true,
     windowsHide: true,
@@ -109,27 +118,41 @@ class Golang extends EventEmitter {
   queue: Array<string>;
   host: boolean;
   queueId: NodeJS.Timeout;
-  constructor(port: number, debug: boolean) {
+  
+  private timeout: number;
+  private port: number;
+  private debug: boolean;
+  private filePath?: string;
+  private failedInitialization: boolean = false;
+
+  constructor(port: number, debug: boolean, timeout: number, filePath?: string) {
     super();
+
+    this.port = port;
+    this.debug = debug;
+    this.timeout = timeout;
+    this.filePath = filePath;
+
+    this.checkSpawnedInstance();
+  }
+
+  checkSpawnedInstance(){
     let server = http.createServer();
 
-    server.listen(port)
+    server.listen(this.port)
         .on('listening', () => {
           server.close(() => {
-            this.spawnServer(port, debug);
+            this.spawnServer();
             this.host = true;
           })
         })
         .on('error', () => {
-          this.createClient(port, debug);
+          this.createClient();
           this.host = false;
         });
   }
 
-  spawnServer(
-      port: number,
-      debug: boolean
-  ){
+  spawnServer(){
     const PLATFORM_BINARIES: { [platform: string]: { [arch: string]: string } } = {
       "win32":    { "x64": "index.exe" },
       "linux":    { "arm": "index-arm", "arm64": "index-arm64", "x64": "index" },
@@ -142,37 +165,49 @@ class Golang extends EventEmitter {
       cleanExit(new Error(`Unsupported architecture ${os.arch()} for ${process.platform}`));
     }
 
-    handleSpawn(debug, executableFilename, port);
+    handleSpawn(this.debug, executableFilename, this.port, this.filePath);
 
-    this.createClient(port, debug);
+    this.createClient();
   }
 
-  createClient(
-      port: number,
-      debug: boolean
-  ){
-    const server = new WebSocket(`ws://localhost:${port}`);
+  createClient(){
+    // In-line function that represents a connection attempt
+    const attemptConnection = () => {
+      const server = new WebSocket(`ws://localhost:${this.port}`);
 
-    server.on("open", () => {
-      // WebSocket connected - set server and emit ready
-      this.server = server;
+      server.on("open", () => {
+        // WebSocket connected - set server and emit ready
+        this.server = server;
 
-      this.server.on("message", (data: string) => {
-        const message = JSON.parse(data);
-        this.emit(message.RequestID, message);
-      });
+        this.server.on("message", (data: string) => {
+          const message = JSON.parse(data);
+          this.emit(message.RequestID, message);
+        });
 
-      this.emit("ready");
-    })
+        this.emit("ready");
+      })
 
-    server.on("error", (err) => {
-      // Connection error - retry in .1s
-      server.removeAllListeners();
+      server.on("error", (err) => {
+        // Connection error - retry in .1s
+        server.removeAllListeners();
 
-      setTimeout(() => {
-        this.createClient(port, debug)
-      }, 100)
-    })
+        setTimeout(() => {
+          // If we've failed to initialize, stop the loop
+          if(this.failedInitialization){
+            return;
+          }
+
+          attemptConnection();
+        }, 100)
+      })
+    }
+    attemptConnection();
+
+    // Set a timeout representing the initialization timeout that'll reject the promise if not initialized within the timeout
+    setTimeout(() => {
+      this.failedInitialization = true;
+      this.emit("failure", `Could not connect to the CycleTLS instance within ${this.timeout}ms`);
+    }, this.timeout);
   }
 
   request(
@@ -184,7 +219,27 @@ class Golang extends EventEmitter {
     lastRequestID = requestId
 
     if (this.server) {
-      this.server.send(JSON.stringify({ requestId, options }));
+      this.server.send(JSON.stringify({ requestId, options }), (err) => {
+        // An error occurred sending the webhook to a server we already confirmed exists - let's get back up and running
+
+        // First, we'll create a queue to store the failed request
+        // Do a check to make sure server isn't null to prevent a race condition where multiple requests fail
+        if(err){
+          if(this.server != null){
+            // Add failed request to queue
+            this.server = null;
+
+            // Just resend the request so that it adds to queue properly
+            this.request(requestId, options);
+
+            // Start process of client re-creation
+            this.checkSpawnedInstance();
+          }else{
+            // Add to queue and hope server restarts properly
+            this.queue.push(JSON.stringify({requestId, options}));
+          }
+        }
+      });
     } else {
       if(this.queue == null){
         this.queue = [];
@@ -193,6 +248,15 @@ class Golang extends EventEmitter {
 
       if (this.queueId == null) {
         this.queueId = setInterval(() => {
+          // If we failed to initialize - clear the queue
+          if(this.failedInitialization){
+            clearInterval(this.queueId);
+            this.queue = [];
+            this.queueId = null;
+            return;
+          }
+
+          // If the server is available - empty the queue into the server and delete the queue
           if (this.server) {
             for (let request of this.queue) {
               this.server.send(request);
@@ -258,15 +322,18 @@ const initCycleTLS = async (
   initOptions: {
     port?: number;
     debug?: boolean;
+    timeout?: number;
+    executablePath?: string;
   } = {}
 ): Promise<CycleTLSClient> => {
-  return new Promise((resolveReady) => {
-    let { port, debug } = initOptions;
+  return new Promise((resolveReady, reject) => {
+    let { port, debug, timeout, executablePath } = initOptions;
 
     if (!port) port = 9119;
     if (!debug) debug = false;
+    if (!timeout) timeout = 4000;
 
-    const instance = new Golang(port, debug);
+    const instance = new Golang(port, debug, timeout, executablePath);
     instance.on("ready", () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
@@ -373,6 +440,10 @@ const initCycleTLS = async (
       })();
       resolveReady(CycleTLS);
     });
+
+    instance.on("failure", (reason: string) => {
+      reject(reason);
+    })
   });
 };
 
