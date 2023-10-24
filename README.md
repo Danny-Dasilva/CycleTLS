@@ -16,6 +16,9 @@ Currently a WIP and in Active development. See the ![Projects](https://github.co
 [![license](https://img.shields.io/github/license/Danny-Dasilva/CycleTLS.svg)](https://github.com/Danny-Dasilva/CycleTLS/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Danny-Dasilva/CycleTLS/cycletls)](https://goreportcard.com/report/github.com/Danny-Dasilva/CycleTLS/cycletls)
 [![npm version](https://img.shields.io/npm/v/cycletls.svg)](https://www.npmjs.org/package/cycletls)
+ <a href="https://discord.gg/gsmxMHrwhu">
+  <img src="https://img.shields.io/discord/1100945880888115200?logo=discord"
+      alt="chat on Discord"></a>
 </div>
 
 If you have a API change or feature request feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose)
@@ -52,7 +55,7 @@ Table of contents
 
 ```
 node ^v14.0
-golang ^v1.16x
+golang ^v1.17x
 ```
 
 ## Installation
@@ -317,7 +320,13 @@ const promises = [];
 
 If you would like to compile CycleTLS on your own, use the following commands:
 
-install npm packages
+Set module-aware mode
+`go env -w  GO111MODULE=off`
+
+Install golang dependencies
+`go get github.com/Danny-Dasilva/CycleTLS/cycletls`
+
+install npm packages (this command handles the above)
 
 `npm install`
 

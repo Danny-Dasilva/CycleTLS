@@ -143,11 +143,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 
 	}
+	headeOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
 		http.HeaderOrderKey:  headerorderkey,
-		http.PHeaderOrderKey: {":method", ":authority", ":scheme", ":path"},
+		http.PHeaderOrderKey: headeOrder,
 	}
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
@@ -325,6 +326,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+// WSEndpoint exports the main cycletls function as we websocket connection that clients can connect to
 func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 	upgrader.CheckOrigin = func(r *nhttp.Request) bool { return true }
 

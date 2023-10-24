@@ -3,7 +3,7 @@ import initCycleTLS from '../dist/index.js'
 jest.setTimeout(30000);
 
 
-let ja3 = '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0'
+let ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0"
 let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36'
 
 interface Request {
@@ -79,7 +79,7 @@ const myRequests: Request[] = [
 
 
 test('Should Return 200 for all responses', async () => {
-    const cycleTLS = await initCycleTLS({port: 9090});
+    const cycleTLS = await initCycleTLS({port: 9123});
 
     for (let request of myRequests) {
         const response = await cycleTLS(request.url, {
@@ -89,7 +89,6 @@ test('Should Return 200 for all responses', async () => {
             headers: request.headers,
             cookies: request.cookies,
         }, request.method);
-
 
         expect(response.status).toBe(200)
     }

@@ -6,7 +6,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.16]
+        go-version: [1.17]
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
 
@@ -27,6 +27,11 @@ jobs:
       - name: Unit Test
         working-directory: ./cycletls
         run: go test --race -v ./...
+
+      - name: Start SOCKS5 Proxy (only on ubuntu)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          docker run -d -p 1087:1080 serjs/go-socks5-proxy
 
       - name: Integration Tests
         working-directory: ./cycletls

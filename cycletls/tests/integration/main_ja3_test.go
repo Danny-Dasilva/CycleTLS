@@ -22,7 +22,8 @@ type CycleTLSOptions struct {
 type Ja3erResp struct {
 	Ja3Hash   string `json:"ja3_hash"`
 	Ja3       string `json:"ja3"`
-	UserAgent string `json:"User-Agent"`
+	AkamaiHash   string `json:"akamai_hash"`
+	Akamai       string `json:"akamai"`
 }
 
 var CycleTLSResults = []CycleTLSOptions{
@@ -85,7 +86,7 @@ func TestHTTP2(t *testing.T) {
 	client := cycletls.Init()
 	for _, options := range CycleTLSResults {
 
-		response, err := client.Do("https://ja3er.com/json", cycletls.Options{
+		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
 			Ja3:       options.Ja3,
 			UserAgent: options.UserAgent,
 		}, "GET")
@@ -110,9 +111,6 @@ func TestHTTP2(t *testing.T) {
 			}
 			if ja3resp.Ja3 != options.Ja3 {
 				t.Fatal("Expected:", options.Ja3, "Got:", ja3resp.Ja3, "for Ja3")
-			}
-			if ja3resp.UserAgent != options.UserAgent {
-				t.Fatal("Expected:", options.UserAgent, "Got:", ja3resp.UserAgent, "for UserAgent")
 			}
 
 		}

@@ -139,4 +139,26 @@ func TestFileWriting(t *testing.T) {
 	if filesEqual != true {
 		t.Fatal("Files are not equal", "webp")
 	}
+
+	//gif
+	resp = GetRequest("https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.gif")
+	filesEqual = CompareFiles("../../../tests/images/test.gif", "../../../tests/images/source.gif")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "gif")
+	}
+
+	//webp
+	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.avif")
+	filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "avif")
+	}
 }
