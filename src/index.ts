@@ -63,6 +63,7 @@ export interface CycleTLSResponse {
   finalUrl: string;
 }
 
+
 let child: ChildProcessWithoutNullStreams;
 let lastRequestID: string
 
@@ -134,12 +135,61 @@ async function streamToString(stream: Readable): Promise<string> {
   );
   return Buffer.concat(chunks).toString('utf8');
 }
+class PacketBuffer {
+
+  private _data: Buffer;
+  private _index: number;
+
+  constructor(data: Buffer) {
+    this._data = data;
+    this._index = 0;
+  }
+
+  readU8(): number {
+    return this._data[this._index++];
+  }
+
+  readU16(): number {
+    return this.readU8() << 8
+      | this.readU8();
+  }
+
+  readU64(): number {
+    return this.readU8() << 56
+      | this.readU8() << 48
+      | this.readU8() << 40
+      | this.readU8() << 32
+      | this.readU8() << 24
+      | this.readU8() << 16
+      | this.readU8() << 8
+      | this.readU8();
+  }
+
+  readBytes(): Buffer {
+    const len   = this.readU64();
+    const bytes = this._data.subarray(this._index, this._index + len);
+
+    this._index += len;
+
+    return bytes;
+  }
+
+  readString(encoding?: BufferEncoding): string {
+    const len   = this.readU16();
+    const bytes = this._data.subarray(this._index, this._index + len);
+
+    this._index += len;
+
+    return bytes.toString(encoding);
+  }
+}
+
 class Golang extends EventEmitter {
   server: WebSocket;
   queue: Array<string>;
   host: boolean;
   queueId: NodeJS.Timeout;
-  
+
   private timeout: number;
   private port: number;
   private debug: boolean;
@@ -200,9 +250,55 @@ class Golang extends EventEmitter {
         // WebSocket connected - set server and emit ready
         this.server = server;
 
-        this.server.on("message", (data: string) => {
-          const message = JSON.parse(data);
-          this.emit(message.RequestID, message);
+        this.server.on("message", (data: Buffer) => {
+          const packetBuffer  = new PacketBuffer(data);
+          const requestID     = packetBuffer.readString();
+          const method        = packetBuffer.readString();
+
+          if (method === "response") {
+            const statusCode    = packetBuffer.readU16();
+            const headers       = [];
+            const headersLength = packetBuffer.readU16();
+
+            for (let i = 0; i < headersLength; i++) {
+              const headerValues  = [];
+              const headerName    = packetBuffer.readString();
+              const valuesLength  = packetBuffer.readU16();
+
+              for (let j = 0; j < valuesLength; j++)
+                headerValues.push(packetBuffer.readString());
+
+              headers.push([ headerName, headerValues ]);
+            }
+
+            this.emit(requestID, {
+              method,
+              data: {
+                statusCode,
+                headers: Object.fromEntries(headers),
+              },
+            });
+          }
+
+          if (method === "data") {
+            this.emit(requestID, {
+              method,
+              data: packetBuffer.readBytes(),
+            });
+          }
+
+          // @TODO: Finish this
+          if (method === "error") {
+            console.log(packetBuffer);
+            // this.emit(requestID, {
+            //   method,
+            //   data: packetBuffer.readBytes(),
+            // });
+          }
+
+          if (method === "end") {
+            this.emit(requestID, { method });
+          }
         });
 
         this.emit("ready");
@@ -365,6 +461,7 @@ const initCycleTLS = async (
     if (!timeout) timeout = 4000;
 
     const instance = new Golang(port, debug, timeout, executablePath);
+
     instance.on("ready", () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
@@ -380,17 +477,20 @@ const initCycleTLS = async (
             | "options"
             | "connect"
             | "patch" = "get"
-        ): Promise<CycleTLSResponse> => {
+        ): Promise<any> => {
           return new Promise((resolveRequest, rejectRequest) => {
-            const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
+            const requestId = `${url}#${Date.now()}-${Math.floor(1000 * Math.random())}`;
+
             //set default options
-            options = options ?? {}
-            
+            options ??= {}
+
             //set default ja3, user agent, body and proxy
             if (!options?.ja3)
               options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
-              if (!options?.userAgent)
+
+            if (!options?.userAgent)
               options.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36";
+
             if (!options?.body) options.body = "";
             if (!options?.proxy) options.proxy = "";
             if (!options?.insecureSkipVerify) options.insecureSkipVerify = false;
@@ -399,19 +499,17 @@ const initCycleTLS = async (
             
             //convert simple cookies
             const cookies = options?.cookies;
-            if (
-              typeof cookies === "object" &&
-              !Array.isArray(cookies) &&
-              cookies !== null
-             ) {
-              const tempArr: {
-                [key: string]: any;
-              } = [];
+
+            if (typeof cookies === "object" && !Array.isArray(cookies) && cookies !== null) {
+              const tempArr: { [key: string]: any; } = [];
+
               for (const [key, value] of Object.entries(options.cookies)) {
                 tempArr.push({ name: key, value: value });
               }
+
               options.cookies = tempArr;
             }
+
             instance.request(requestId, {
               url,
               ...options,
@@ -419,66 +517,80 @@ const initCycleTLS = async (
             });
 
             instance.once(requestId, (response) => {
-              if (response.error) return rejectRequest(response.error);
-              try {
-                //parse json responses
-                response.Body = JSON.parse(response.Body);
-                //override console.log full repl to display full body
-                response.Body[util.inspect.custom] = function(){ return JSON.stringify( this, undefined, 2); }
-              } catch (e) {}
+              if (response.method === "error") {
+                rejectRequest(response.data);
 
-              const { Status: status, Body: body, Headers: headers, FinalUrl: finalUrl } = response;
-              
-              if (headers["Set-Cookie"])
-                headers["Set-Cookie"] = headers["Set-Cookie"].split("/,/");
-              resolveRequest({
-                status,
-                body,
-                headers,
-                finalUrl,
-              });
+              } else {
+                let _resolve: (buf: Buffer | null) => void;
+                let promise: Promise<Buffer | null> = new Promise((resolve) => (_resolve = resolve));
+
+                instance.once(requestId, (response) => {
+                  response.method === "data"
+                    ? _resolve(response.data)
+                    : _resolve(null);
+                });
+
+                resolveRequest({
+                  code    : response.data.statusCode,
+                  headers : response.data.headers,
+                  raw     : ()                      => promise,
+                  json    : ()                      => promise.then((data) => JSON.parse(data.toString())),
+                  text    : (enc: BufferEncoding)   => promise.then((data) => data.toString(enc)),
+                });
+              }
             });
           });
         };
+
         CycleTLS.head = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "head");
         };
+
         CycleTLS.get = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "get");
         };
+
         CycleTLS.post = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "post");
         };
+
         CycleTLS.put = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "put");
         };
+
         CycleTLS.delete = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "delete");
         };
+
         CycleTLS.trace = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "trace");
         };
+
         CycleTLS.options = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "options");
         };
+
         CycleTLS.connect = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "options");
         };
+
         CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "patch");
         };
+
         CycleTLS.exit = async (): Promise<undefined> => {
           return instance.exit();
         };
 
         return CycleTLS;
       })();
+
       resolveReady(CycleTLS);
     });
 
     instance.on("failure", (reason: string) => {
       reject(reason);
-    })
+    });
   });
 };
 
