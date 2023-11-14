@@ -488,6 +488,7 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 		}
 		log.Println(headers)
 		log.Println(body)
+
 	} else {
 		chanRead := make(chan fullRequest)
 		chanWrite := make(chan []byte)
@@ -498,7 +499,6 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 		// Run as main thread
 		writeSocket(chanWrite, ws)
 	}
-
 }
 
 func setupRoutes() {
