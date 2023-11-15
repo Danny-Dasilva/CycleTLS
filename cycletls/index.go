@@ -16,18 +16,19 @@ import (
 
 // Options sets CycleTLS client options
 type Options struct {
-	URL             string            `json:"url"`
-	Method          string            `json:"method"`
-	Headers         map[string]string `json:"headers"`
-	Body            string            `json:"body"`
-	Ja3             string            `json:"ja3"`
-	UserAgent       string            `json:"userAgent"`
-	Proxy           string            `json:"proxy"`
-	Cookies         []Cookie          `json:"cookies"`
-	Timeout         int               `json:"timeout"`
-	DisableRedirect bool              `json:"disableRedirect"`
-	HeaderOrder     []string          `json:"headerOrder"`
-	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
+	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+	URL                string            `json:"url"`
+	Method             string            `json:"method"`
+	Headers            map[string]string `json:"headers"`
+	Body               string            `json:"body"`
+	Ja3                string            `json:"ja3"`
+	UserAgent          string            `json:"userAgent"`
+	Proxy              string            `json:"proxy"`
+	Cookies            []Cookie          `json:"cookies"`
+	Timeout            int               `json:"timeout"`
+	DisableRedirect    bool              `json:"disableRedirect"`
+	HeaderOrder        []string          `json:"headerOrder"`
+	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
 }
 
 type cycleTLSRequest struct {
@@ -48,6 +49,7 @@ type Response struct {
 	Status    int
 	Body      string
 	Headers   map[string]string
+	FinalUrl  string
 }
 
 // JSONBody converts response body to json
@@ -70,9 +72,10 @@ type CycleTLS struct {
 func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	var browser = browser{
-		JA3:       request.Options.Ja3,
-		UserAgent: request.Options.UserAgent,
-		Cookies:   request.Options.Cookies,
+		JA3:                request.Options.Ja3,
+		UserAgent:          request.Options.UserAgent,
+		Cookies:            request.Options.Cookies,
+		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 	}
 
 	client, err := newClient(
@@ -170,6 +173,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 func dispatcher(res fullRequest) (response Response, err error) {
 	defer res.client.CloseIdleConnections()
+	finalUrl := res.options.Options.URL
 
 	resp, err := res.client.Do(res.req)
 	if err != nil {
@@ -177,10 +181,14 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}, nil //normally return error here
+		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers, finalUrl}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
+
+	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+		finalUrl = resp.Request.URL.String()
+	}
 
 	encoding := resp.Header["Content-Encoding"]
 	content := resp.Header["Content-Type"]
@@ -203,7 +211,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-	return Response{res.options.RequestID, resp.StatusCode, Body, headers}, nil
+	return Response{res.options.RequestID, resp.StatusCode, Body, headers, finalUrl}, nil
 
 }
 

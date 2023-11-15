@@ -10,9 +10,10 @@ import (
 
 type browser struct {
 	// Return a greeting that embeds the name in a message.
-	JA3       string
-	UserAgent string
-	Cookies   []Cookie
+	JA3                string
+	UserAgent          string
+	Cookies            []Cookie
+	InsecureSkipVerify bool
 }
 
 var disabledRedirect = func(req *http.Request, via []*http.Request) error {
