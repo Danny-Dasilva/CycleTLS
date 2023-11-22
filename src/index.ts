@@ -43,6 +43,7 @@ export interface CycleTLSRequestOptions {
   timeout?: number;
   disableRedirect?: boolean;
   headerOrder?: string[];
+  insecureSkipVerify?: boolean;
 }
 
 export interface CycleTLSResponse {
@@ -53,6 +54,7 @@ export interface CycleTLSResponse {
   headers: {
     [key: string]: any;
   };
+  finalUrl: string;
 }
 
 let child: ChildProcessWithoutNullStreams;
@@ -362,6 +364,7 @@ const initCycleTLS = async (
               options.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36";
             if (!options?.body) options.body = "";
             if (!options?.proxy) options.proxy = "";
+            if (!options?.insecureSkipVerify) options.insecureSkipVerify = true;
             
             //convert simple cookies
             const cookies = options?.cookies;
@@ -393,7 +396,7 @@ const initCycleTLS = async (
                 response.Body[util.inspect.custom] = function(){ return JSON.stringify( this, undefined, 2); }
               } catch (e) {}
 
-              const { Status: status, Body: body, Headers: headers } = response;
+              const { Status: status, Body: body, Headers: headers, FinalUrl: finalUrl } = response;
               
               if (headers["Set-Cookie"])
                 headers["Set-Cookie"] = headers["Set-Cookie"].split("/,/");
@@ -401,6 +404,7 @@ const initCycleTLS = async (
                 status,
                 body,
                 headers,
+                finalUrl,
               });
             });
           });
