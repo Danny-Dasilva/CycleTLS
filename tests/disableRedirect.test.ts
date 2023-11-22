@@ -19,6 +19,11 @@ test("Should return a 301 redirect", async () => {
         "get"
     );
     expect(redirectResponse.status).toBe(301);
+    await cycleTLS.exit();
+});
+
+test("Should return a 200 redirect", async () => {
+    const cycleTLS = await initCycleTLS({ port: 9121 });
 
     const normalResponse = await cycleTLS(
         "https://google.com",
@@ -32,6 +37,46 @@ test("Should return a 301 redirect", async () => {
     );
 
     expect(normalResponse.status).toBe(200);
+
+    cycleTLS.exit();
+});
+
+test("Should return final url a 301 redirect", async () => {
+    const cycleTLS = await initCycleTLS({ port: 9122 });
+    const url = "https://rb.gy/3hwz5h";
+    const redirectResponse = await cycleTLS(
+        url,
+        {
+            body: "",
+            ja3: ja3,
+            userAgent: userAgent,
+            disableRedirect: true,
+        },
+        "get"
+    );
+    expect(redirectResponse.status).toBe(301);
+    expect(redirectResponse.finalUrl).toBe(url)
+
+    cycleTLS.exit();
+});
+
+test("Should return final url a 200 redirect", async () => {
+    const cycleTLS = await initCycleTLS({ port: 9124 });
+    const url = "https://rb.gy/3hwz5h";
+
+    const normalResponse = await cycleTLS(
+        url,
+        {
+            body: "",
+            ja3: ja3,
+            userAgent: userAgent,
+            disableRedirect: false,
+        },
+        "get"
+    );
+
+    expect(normalResponse.status).toBe(200);
+    expect(normalResponse.finalUrl).toBe("https://www.google.com/");
 
     cycleTLS.exit();
 });
