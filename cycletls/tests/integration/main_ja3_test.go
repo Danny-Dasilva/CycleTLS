@@ -4,7 +4,6 @@
 package cycletls_test
 
 import (
-	//"fmt"
 	"encoding/json"
 	"log"
 	"testing"

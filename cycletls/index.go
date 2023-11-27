@@ -28,8 +28,8 @@ type Options struct {
 	DisableRedirect    bool              `json:"disableRedirect"`
 	HeaderOrder        []string          `json:"headerOrder"`
 	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
-  InsecureSkipVerify bool              `json:"insecureSkipVerify"`
-  ForceHTTP1      bool              `json:"forceHTTP1"`
+	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+	ForceHTTP1      bool              `json:"forceHTTP1"`
 }
 
 type cycleTLSRequest struct {
@@ -71,13 +71,12 @@ type CycleTLS struct {
 
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
-
-	var browser = browser{
+	var browser = Browser{
 		JA3:                request.Options.Ja3,
 		UserAgent:          request.Options.UserAgent,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
-    forceHTTP1: request.Options.ForceHTTP1,
+    	forceHTTP1: 		request.Options.ForceHTTP1,
 	}
 
 	client, err := newClient(

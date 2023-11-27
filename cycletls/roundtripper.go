@@ -139,7 +139,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		t2 := http2.Transport{
 			DialTLS: rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
-			Navigator:   parsedUserAgent,
+			Navigator:   parsedUserAgent.UserAgent,
 		}
 		rt.cachedTransports[addr] = &t2
 	default:
