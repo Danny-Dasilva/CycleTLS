@@ -23,9 +23,10 @@ type roundTripper struct {
 	JA3       string
 	UserAgent string
 
-	Cookies           []Cookie
-	cachedConnections map[string]net.Conn
-	cachedTransports  map[string]http.RoundTripper
+	InsecureSkipVerify bool
+	Cookies            []Cookie
+	cachedConnections  map[string]net.Conn
+	cachedTransports   map[string]http.RoundTripper
 
 	dialer proxy.ContextDialer
 	forceHTTP1    bool
@@ -34,7 +35,8 @@ type roundTripper struct {
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Fix this later for proper cookie parsing
 	for _, properties := range rt.Cookies {
-		req.AddCookie(&http.Cookie{Name: properties.Name,
+		req.AddCookie(&http.Cookie{
+			Name:       properties.Name,
 			Value:      properties.Value,
 			Path:       properties.Path,
 			Domain:     properties.Domain,
@@ -67,7 +69,7 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
 	}
 
-	_, err := rt.dialTLS(context.Background(), "tcp", addr)
+	_, err := rt.dialTLS(req.Context(), "tcp", addr)
 	switch err {
 	case errProtocolNegotiated:
 	case nil:
@@ -87,7 +89,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	// If we have the connection from when we determined the HTTPS
 	// cachedTransports to use, return that.
 	if conn := rt.cachedConnections[addr]; conn != nil {
-		delete(rt.cachedConnections, addr)
 		return conn, nil
 	}
 	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
@@ -106,7 +107,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host}, // MinVersion:         tls.VersionTLS10,
+	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS13,
 
 		utls.HelloCustom)
@@ -166,29 +167,36 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 	return net.JoinHostPort(req.URL.Host, "443") // we can assume port is 443 at this point
 }
 
+func (rt *roundTripper) CloseIdleConnections() {
+	for addr, conn := range rt.cachedConnections {
+		_ = conn.Close()
+		delete(rt.cachedConnections, addr)
+	}
+}
+
 func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
 	if len(dialer) > 0 {
 
 		return &roundTripper{
 			dialer: dialer[0],
-
-			JA3:               browser.JA3,
-			UserAgent:         browser.UserAgent,
-			Cookies:           browser.Cookies,
-			cachedTransports:  make(map[string]http.RoundTripper),
-			cachedConnections: make(map[string]net.Conn),
-			forceHTTP1:        browser.forceHTTP1,
+			JA3:                browser.JA3,
+			UserAgent:          browser.UserAgent,
+			Cookies:            browser.Cookies,
+			cachedTransports:   make(map[string]http.RoundTripper),
+			cachedConnections:  make(map[string]net.Conn),
+			InsecureSkipVerify: browser.InsecureSkipVerify,
+      forceHTTP1:        browser.forceHTTP1,
 		}
 	}
 
 	return &roundTripper{
 		dialer: proxy.Direct,
-
-		JA3:               browser.JA3,
-		UserAgent:         browser.UserAgent,
-		Cookies:           browser.Cookies,
-		cachedTransports:  make(map[string]http.RoundTripper),
-		cachedConnections: make(map[string]net.Conn),
-		forceHTTP1:        browser.forceHTTP1,
+		JA3:                browser.JA3,
+		UserAgent:          browser.UserAgent,
+		Cookies:            browser.Cookies,
+		cachedTransports:   make(map[string]http.RoundTripper),
+		cachedConnections:  make(map[string]net.Conn),
+		InsecureSkipVerify: browser.InsecureSkipVerify,
+    forceHTTP1:        browser.forceHTTP1,
 	}
 }

@@ -19,19 +19,22 @@ const (
 	chrome  = "chrome"  //chrome User agent enum
 	firefox = "firefox" //firefox User agent enum
 )
+type UserAgent struct {
+    UserAgent string; HeaderOrder []string
+}
 
-func parseUserAgent(userAgent string) string {
+// ParseUserAgent returns the pseudo header order and user agent string for chrome/firefox
+func parseUserAgent(userAgent string) UserAgent {
 	switch {
 	case strings.Contains(strings.ToLower(userAgent), "chrome"):
-		return chrome
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
 	case strings.Contains(strings.ToLower(userAgent), "firefox"):
-		return firefox
+		return UserAgent{firefox, []string{":method", ":path", ":authority", ":scheme"}}
 	default:
-		return chrome
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
 	}
 
 }
-
 // DecompressBody unzips compressed data
 func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody string) {
 	if len(encoding) > 0 {
@@ -60,6 +63,8 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 			"image/webp":      true,
 			"image/jpeg":      true,
 			"image/png":       true,
+			"image/gif":       true,
+			"image/avif":      true,
 			"application/pdf": true,
 		}
 		if decodingTypes[content[0]] {
@@ -94,8 +99,6 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	respBody, err := ioutil.ReadAll(br)
 	return respBody, err
 }
-
-// StringToSpec creates a ClientHelloSpec based on a JA3 string
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
@@ -337,11 +340,13 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},
+		"65037": &utls.GenericExtension{Id: 65037},
 	}
 	return
 
 }
 
+// PrettyStruct formats json
 func PrettyStruct(data interface{}) (string, error) {
 	val, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {

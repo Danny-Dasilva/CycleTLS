@@ -4,7 +4,6 @@
 package cycletls_test
 
 import (
-	//"fmt"
 	"log"
 	"testing"
 
@@ -44,4 +43,45 @@ func TestRedirectDisabled(t *testing.T) {
 		t.Fatal("Expected {} Got {} for Status", 301, resp.Status)
 	}
 
+}
+
+func TestRedirectEnabled_NewURL(t *testing.T) {
+	url := "https://rb.gy/3hwz5h"
+	client := cycletls.Init()
+	resp, err := client.Do(url, cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+	if resp.FinalUrl == url {
+		t.Fatal("Expected https://www.google.com Got {} for Url", url, resp.FinalUrl)
+	}
+}
+
+func TestRedirectDisabled_NewURL(t *testing.T) {
+	url := "https://rb.gy/3hwz5h"
+	client := cycletls.Init()
+	resp, err := client.Do(url, cycletls.Options{
+		Body:            "",
+		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		DisableRedirect: true,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 301 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+	if resp.FinalUrl != url {
+		t.Fatal("Expected {} Got {} for Url", url, resp.FinalUrl)
+	}
 }

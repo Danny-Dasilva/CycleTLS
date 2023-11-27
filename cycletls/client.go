@@ -10,10 +10,11 @@ import (
 
 type Browser struct {
 	// Return a greeting that embeds the name in a message.
-	JA3       string
-	UserAgent string
-	Cookies   []Cookie
-	forceHTTP1 bool
+	JA3                string
+	UserAgent          string
+	Cookies            []Cookie
+	InsecureSkipVerify bool
+  forceHTTP1 bool
 }
 
 var disabledRedirect = func(req *http.Request, via []*http.Request) error {
@@ -37,29 +38,20 @@ func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, dis
 }
 
 // newClient creates a new http client
-func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
-	//fix check PR
+func newClient(browser browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
+	var dialer proxy.ContextDialer
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
-		dialer, err := newConnectDialer(proxyURL[0], UserAgent)
+		var err error
+		dialer, err = newConnectDialer(proxyURL[0], UserAgent)
 		if err != nil {
 			return http.Client{
 				Timeout:       time.Duration(timeout) * time.Second,
-				CheckRedirect: disabledRedirect, //fix this fallthrough issue (test for incorrect proxy)
+				CheckRedirect: disabledRedirect,
 			}, err
 		}
-		return clientBuilder(
-			browser,
-			dialer,
-			timeout,
-			disableRedirect,
-		), nil
+	} else {
+		dialer = proxy.Direct
 	}
 
-	return clientBuilder(
-		browser,
-		proxy.Direct,
-		timeout,
-		disableRedirect,
-	), nil
-
+	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
 }

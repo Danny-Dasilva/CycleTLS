@@ -16,19 +16,20 @@ import (
 
 // Options sets CycleTLS client options
 type Options struct {
-	URL             string            `json:"url"`
-	Method          string            `json:"method"`
-	Headers         map[string]string `json:"headers"`
-	Body            string            `json:"body"`
-	Ja3             string            `json:"ja3"`
-	UserAgent       string            `json:"userAgent"`
-	Proxy           string            `json:"proxy"`
-	Cookies         []Cookie          `json:"cookies"`
-	Timeout         int               `json:"timeout"`
-	DisableRedirect bool              `json:"disableRedirect"`
-	HeaderOrder     []string          `json:"headerOrder"`
-	OrderAsProvided bool              `json:"orderAsProvided"` //TODO
-	ForceHTTP1      bool              `json:"forceHTTP1"`
+	URL                string            `json:"url"`
+	Method             string            `json:"method"`
+	Headers            map[string]string `json:"headers"`
+	Body               string            `json:"body"`
+	Ja3                string            `json:"ja3"`
+	UserAgent          string            `json:"userAgent"`
+	Proxy              string            `json:"proxy"`
+	Cookies            []Cookie          `json:"cookies"`
+	Timeout            int               `json:"timeout"`
+	DisableRedirect    bool              `json:"disableRedirect"`
+	HeaderOrder        []string          `json:"headerOrder"`
+	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
+  InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+  ForceHTTP1      bool              `json:"forceHTTP1"`
 }
 
 type cycleTLSRequest struct {
@@ -36,22 +37,23 @@ type cycleTLSRequest struct {
 	Options   Options `json:"options"`
 }
 
-//rename to request+client+options
+// rename to request+client+options
 type fullRequest struct {
 	req     *http.Request
 	client  http.Client
 	options cycleTLSRequest
 }
 
-//Response contains Cycletls response data
+// Response contains Cycletls response data
 type Response struct {
 	RequestID string
 	Status    int
 	Body      string
 	Headers   map[string]string
+	FinalUrl  string
 }
 
-//JSONBody converts response body to json
+// JSONBody converts response body to json
 func (re Response) JSONBody() map[string]interface{} {
 	var data map[string]interface{}
 	err := json.Unmarshal([]byte(re.Body), &data)
@@ -61,7 +63,7 @@ func (re Response) JSONBody() map[string]interface{} {
 	return data
 }
 
-//CycleTLS creates full request and response
+// CycleTLS creates full request and response
 type CycleTLS struct {
 	ReqChan  chan fullRequest
 	RespChan chan Response
@@ -70,11 +72,12 @@ type CycleTLS struct {
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
 
-	var browser = Browser{
-		JA3:       request.Options.Ja3,
-		UserAgent: request.Options.UserAgent,
-		Cookies:   request.Options.Cookies,
-		forceHTTP1: request.Options.ForceHTTP1,
+	var browser = browser{
+		JA3:                request.Options.Ja3,
+		UserAgent:          request.Options.UserAgent,
+		Cookies:            request.Options.Cookies,
+		InsecureSkipVerify: request.Options.InsecureSkipVerify,
+    forceHTTP1: request.Options.ForceHTTP1,
 	}
 
 	client, err := newClient(
@@ -145,11 +148,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 
 	}
+	headeOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
 		http.HeaderOrderKey:  headerorderkey,
-		http.PHeaderOrderKey: {":method", ":authority", ":scheme", ":path"},
+		http.PHeaderOrderKey: headeOrder,
 	}
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
@@ -170,16 +174,23 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 }
 
 func dispatcher(res fullRequest) (response Response, err error) {
+	defer res.client.CloseIdleConnections()
+	finalUrl := res.options.Options.URL
+
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers}, nil //normally return error here
+		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers, finalUrl}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
+
+	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+		finalUrl = resp.Request.URL.String()
+	}
 
 	encoding := resp.Header["Content-Encoding"]
 	content := resp.Header["Content-Type"]
@@ -202,7 +213,7 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-	return Response{res.options.RequestID, resp.StatusCode, Body, headers}, nil
+	return Response{res.options.RequestID, resp.StatusCode, Body, headers, finalUrl}, nil
 
 }
 
@@ -325,6 +336,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+// WSEndpoint exports the main cycletls function as we websocket connection that clients can connect to
 func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 	upgrader.CheckOrigin = func(r *nhttp.Request) bool { return true }
 

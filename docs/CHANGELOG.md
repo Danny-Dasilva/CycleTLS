@@ -1,5 +1,37 @@
 # CycleTLS Changelog
 
+
+## 1.0.22 - (10-24-2023)
+### Release Highlights
+Support for additional filetypes and memory leak fix
+Update Golang version to 17 
+[New Discord Community](https://discord.gg/gsmxMHrwhu) 
+
+### Enhancements
+- [Missing Gif/Avif/... support in Decoding ](https://github.com/Danny-Dasilva/CycleTLS/issues/262)
+- [Discord Community](https://github.com/Danny-Dasilva/CycleTLS/issues/206)
+### Bug Fixes
+- [Memory leaks builded package on Docker container](https://github.com/Danny-Dasilva/CycleTLS/issues/157)
+- [There are lot's of memory leaks, DDoS and infinite loop if any error in NodeJS](https://github.com/Danny-Dasilva/CycleTLS/issues/264) 
+  * golang request closing memory leak issue [addressed by](https://github.com/Danny-Dasilva/CycleTLS/pull/265) @abler98 
+  * [npm memory leak issue addressed](https://github.com/Danny-Dasilva/CycleTLS/pull/266/commits/7251f03aa0fec15093ff29e21a5aae4064c1aa0b) by @Stephen-PP
+- [is there a way to support socks5 proxy?](https://github.com/Danny-Dasilva/CycleTLS/issues/263) addressed by @ChengHoward
+- [Support Socks5/4](https://github.com/Danny-Dasilva/CycleTLS/issues/77) addressed by @ChengHoward
+
+
+## 1.0.21 - (6-20-2022)
+### Release Highlights
+Json Parse body in response and Cookie examples
+### Enhancements
+- Return Json body instead of string if response is type Json 🚨 BREAKING CHANGE (users no longer need to `JSON.parse` the response request body)
+- Changed basic api to not require CycleTLS `config`
+- Add Cookie examples in readme and update Cookie API
+- WIP golang release tags and dependabot alerts 
+### Bug Fixes
+- [Added support for TLS Certificate Compression (causing cloudflare handshake issues)](https://github.com/Danny-Dasilva/CycleTLS/issues/103)
+- [Send Correct Frame headers](https://github.com/Danny-Dasilva/CycleTLS/issues/101)
+- [Add Temporary support for extension 17](https://github.com/Danny-Dasilva/CycleTLS/issues/100)
+
 ## 0.0.20 - (5-16-2022)
 ### Release Highlights
 Add support for extension 17513 and repo cleanup
