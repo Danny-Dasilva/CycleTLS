@@ -29,7 +29,7 @@ type Options struct {
 	HeaderOrder        []string          `json:"headerOrder"`
 	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
 	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
-	ForceHTTP1      bool              `json:"forceHTTP1"`
+	ForceHTTP1         bool              `json:"forceHTTP1"`
 }
 
 type cycleTLSRequest struct {
@@ -50,6 +50,7 @@ type Response struct {
 	Status    int
 	Body      string
 	Headers   map[string]string
+	Cookies   []*nhttp.Cookie
 	FinalUrl  string
 }
 
@@ -76,7 +77,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		UserAgent:          request.Options.UserAgent,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
-    	forceHTTP1: 		request.Options.ForceHTTP1,
+		forceHTTP1:         request.Options.ForceHTTP1,
 	}
 
 	client, err := newClient(
@@ -182,7 +183,8 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers, finalUrl}, nil //normally return error here
+		var cookies []*nhttp.Cookie
+		return Response{RequestID: res.options.RequestID, Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers, Cookies: cookies, FinalUrl: finalUrl}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
@@ -212,7 +214,15 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-	return Response{res.options.RequestID, resp.StatusCode, Body, headers, finalUrl}, nil
+	cookies := convertFHTTPCookiesToNetHTTPCookies(resp.Cookies())
+	return Response{
+		RequestID: res.options.RequestID,
+		Status:    resp.StatusCode,
+		Body:      Body,
+		Headers:   headers,
+		Cookies:   cookies,
+		FinalUrl:  finalUrl,
+	}, nil
 
 }
 

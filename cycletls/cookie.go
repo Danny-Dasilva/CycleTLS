@@ -1,10 +1,11 @@
 package cycletls
 
 import (
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	http "github.com/Danny-Dasilva/fhttp"
+	nhttp "net/http"
 )
 
 // Time wraps time.Time overriddin the json marshal/unmarshal to pass
@@ -38,7 +39,7 @@ type Cookie struct {
 	MaxAge   int           `json:"maxAge"`
 	Secure   bool          `json:"secure"`
 	HTTPOnly bool          `json:"httpOnly"`
-	SameSite http.SameSite `json:"sameSite"`
+	SameSite nhttp.SameSite `json:"sameSite"`
 	Raw      string
 	Unparsed []string `json:"unparsed"` // Raw text of unparsed attribute-value pairs
 }
@@ -74,4 +75,23 @@ func ParseDateString(dt string) (time.Time, error) {
 	const layout = "Mon, 02-Jan-2006 15:04:05 MST"
 
 	return time.Parse(layout, dt)
+}
+
+// convertFHTTPCookiesToNetHTTPCookies converts a slice of fhttp cookies to net/http cookies.
+func convertFHTTPCookiesToNetHTTPCookies(fhttpCookies []*http.Cookie) []*nhttp.Cookie {
+    var netHTTPCookies []*nhttp.Cookie
+    for _, fhttpCookie := range fhttpCookies {
+        netHTTPCookie := &nhttp.Cookie{
+            Name:     fhttpCookie.Name,
+            Value:    fhttpCookie.Value,
+            Path:     fhttpCookie.Path,
+            Domain:   fhttpCookie.Domain,
+            Expires:  fhttpCookie.Expires,
+            Secure:   fhttpCookie.Secure,
+            HttpOnly: fhttpCookie.HttpOnly,
+            // add other fields as necessary
+        }
+        netHTTPCookies = append(netHTTPCookies, netHTTPCookie)
+    }
+    return netHTTPCookies
 }

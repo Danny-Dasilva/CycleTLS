@@ -493,6 +493,9 @@ Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/ne
 
 <details>
 
+
+### CookieJar in JS
+
 ```js
 const initCycleTLS = require("cycletls");
 
@@ -549,7 +552,67 @@ async function processCookies(response, url, cookieJar) {
 ```
 
 
-**Golang example coming soon** 
+### CookieJar in Golang
+
+```go
+package main
+
+import (
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"net/http/cookiejar"
+	"net/url"
+	"strings"
+)
+
+func main() {
+	client := cycletls.Init()
+	jar, err := cookiejar.New(nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+	// First request to set cookie
+	firstResponse, err := client.Do("https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
+		Body: "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		DisableRedirect: true,
+	},
+		 "GET")
+	if err != nil {
+		log.Fatal(err)
+	}
+	firstURL, _ := url.Parse(firstResponse.FinalUrl)
+    jar.SetCookies( firstURL, firstResponse.Cookies)
+
+
+	// Second request to verify cookies, including the cookies from the first response
+	secondResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body: "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+	    Headers: map[string]string{
+	        "Cookie": getHeadersFromJar(jar, firstURL),
+	    },
+	}, "GET")
+	if err != nil {
+	    log.Fatal(err)
+	}
+
+	log.Println("Second Response body:", secondResponse.Body)
+}
+
+
+func getHeadersFromJar(jar *cookiejar.Jar, url *url.URL) string {
+    cookies := jar.Cookies(url)
+    var cookieStrs []string
+    for _, cookie := range cookies {
+        cookieStrs = append(cookieStrs, cookie.Name+"="+cookie.Value)
+    }
+    return strings.Join(cookieStrs, "; ")
+}
+
+```
 
 </details>
 
