@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/Danny-Dasilva/fhttp v0.0.0-20231127034941-9494939f30fa
-	github.com/Danny-Dasilva/utls v0.0.0-20220418175931-f38e470e04f2 // indirect
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/andybalholm/brotli v1.0.6
 	github.com/cloudflare/circl v1.3.6 // indirect
