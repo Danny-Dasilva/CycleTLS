@@ -24,6 +24,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           registry-url: https://registry.npmjs.org
 
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -39,7 +42,6 @@ jobs:
         run: |
           echo "PACKAGE_NAME=$(node -p "try { require('./package.json').name } catch(e) {}")" >> $GITHUB_ENV
         id: package
-
 
       - name: Retrieve Latest Version
         run: |
@@ -69,11 +71,17 @@ jobs:
       - name: Install npm depencencies
         run: npm ci --unsafe-perm
 
+      - name: Tag Submodule
+        run: |
+          VERSION=$(npm version --json | jq -r '.cycletls')
+          SUBMODULE_VERSION="cycletls/v${VERSION}"
+          git tag $SUBMODULE_VERSION cycletls/
+          git push origin $SUBMODULE_VERSION
 
       - name: 🚀 publish
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN}}
-          
+
       - name: Push git
         run: git add * && git commit -a -m "[RELEASE] %s" && git push
