@@ -8,18 +8,19 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-type browser struct {
+type Browser struct {
 	// Return a greeting that embeds the name in a message.
 	JA3       string
 	UserAgent string
 	Cookies   []Cookie
+	forceHTTP1 bool
 }
 
 var disabledRedirect = func(req *http.Request, via []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
+func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
 	//if timeout is not set in call default to 15
 	if timeout == 0 {
 		timeout = 15
@@ -36,7 +37,7 @@ func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, dis
 }
 
 // newClient creates a new http client
-func newClient(browser browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
+func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
 	//fix check PR
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
 		dialer, err := newConnectDialer(proxyURL[0], UserAgent)
