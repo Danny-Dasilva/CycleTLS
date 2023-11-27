@@ -11,11 +11,6 @@ import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
-type FullResp struct {
-	Method   string `json:"method"`
-	HTTP_Version       string `json:"http_version"`
-}
-
 func TestForceHTTP1_h2(t *testing.T) {
 
 	client := cycletls.Init()

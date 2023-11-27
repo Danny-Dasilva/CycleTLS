@@ -57,6 +57,7 @@ func TestTLS_13(t *testing.T) {
 		response, err := client.Do("https://tls13.1d.pw", cycletls.Options{
 			Ja3:       options.Ja3,
 			UserAgent: options.UserAgent,
+			InsecureSkipVerify: true,
 		}, "GET")
 		if err != nil {
 			t.Fatal(err)
