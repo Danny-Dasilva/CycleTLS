@@ -1,10 +1,15 @@
-import {spawn, exec, ChildProcessWithoutNullStreams} from "child_process";
+import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import * as http from "http";
 import os from 'os';
 import util from "util";
+import FormData from 'form-data';
+import { Readable, Writable } from 'stream';
+import { promisify } from 'util';
+import stream from 'stream';
+const pipeline = promisify(stream.pipeline);
 
 export interface Cookie {
   name: string;
@@ -36,7 +41,7 @@ export interface CycleTLSRequestOptions {
     | {
         [key: string]: string;
       };
-  body?: string;
+  body?: string | URLSearchParams | FormData;  
   ja3?: string;
   userAgent?: string;
   proxy?: string;
@@ -63,26 +68,26 @@ let lastRequestID: string
 
 const cleanExit = async (message?: string | Error, exit?: boolean) => {
   if (message) console.log(message);
-  exit = exit ?? true
+  exit = exit ?? true;
 
   if (process.platform == "win32") {
-    if(child) {
-      new Promise((resolve, reject) => {
+    if (child) {
+      await new Promise((resolve, reject) => {
         exec(
-            "taskkill /pid " + child.pid + " /T /F",
-            (error: any, stdout: any, stderr: any) => {
-              if (error) {
-                console.warn(error);
-              }
-              if (exit) process.exit();
+          "taskkill /pid " + child.pid + " /T /F",
+          (error: any, stdout: any, stderr: any) => {
+            if (error) {
+              console.warn(error);
             }
+            resolve(stdout);
+          }
         );
       });
     }
   } else {
-    if(child) {
-      //linux/darwin os
-      new Promise((resolve, reject) => {
+    if (child) {
+      // For Linux/Darwin OS
+      await new Promise((resolve, reject) => {
         process.kill(-child.pid);
         if (exit) process.exit();
       });
@@ -115,7 +120,20 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
   });
 }
 
-
+// Function to convert a stream into a string
+async function streamToString(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  await pipeline(
+    stream,
+    new Writable({
+      write(chunk: Buffer, encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+        chunks.push(chunk);
+        callback();
+      }
+    })
+  );
+  return Buffer.concat(chunks).toString('utf8');
+}
 class Golang extends EventEmitter {
   server: WebSocket;
   queue: Array<string>;
@@ -213,13 +231,23 @@ class Golang extends EventEmitter {
     }, this.timeout);
   }
 
-  request(
+  async request(
     requestId: string,
     options: {
       [key: string]: any;
     }
-  ) {
+  ): Promise<void> {
     lastRequestID = requestId
+
+    // Check if options.body is URLSearchParams and convert to string
+    if (options.body instanceof URLSearchParams) {
+      options.body = options.body.toString();
+    }
+    // Check if options.body is FormData and convert to string
+    if (options.body instanceof FormData) {
+      options.headers = { ...options.headers, ...options.body.getHeaders() };
+      options.body = await streamToString(options.body as unknown as Readable);
+    }
 
     if (this.server) {
       this.server.send(JSON.stringify({ requestId, options }), (err) => {

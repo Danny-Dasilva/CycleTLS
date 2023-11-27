@@ -553,6 +553,229 @@ async function processCookies(response, url, cookieJar) {
 
 </details>
 
+### How do I send multipart/form-data in CycleTLS
+
+<details>
+
+### Javascript Text form-data
+```js
+const initCycleTLS = require("cycletls");
+const FormData = require('form-data');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const formData = new FormData();
+  formData.append("key1", "value1");
+  formData.append("key2", "value2");
+  
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: formData,
+      headers: {
+          'Content-Type': 'multipart/form-data',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+
+
+### Javascript File form-data
+```js
+const initCycleTLS = require("cycletls");
+const FormData = require('form-data');
+const fs = require('fs');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const formData = new FormData();
+  const fileStream = fs.createReadStream("../go.mod");
+  formData.append('file', fileStream);
+
+  
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: formData,
+      headers: {
+          'Content-Type': 'multipart/form-data',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+
+### Golang Text form-data
+```golang
+package main
+
+import (
+	"bytes"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"mime/multipart"
+)
+
+func main() {
+	client := cycletls.Init()
+
+	// Prepare a buffer to write our multipart form
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	// Add form fields
+	multipartWriter.WriteField("key1", "value1")
+	multipartWriter.WriteField("key2", "value2")
+
+	contentType := multipartWriter.FormDataContentType()
+	// Close the writer before making the request
+	multipartWriter.Close()
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: requestBody.String(),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+	}, "POST")
+
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+
+	log.Println(response.Body)
+}
+```
+
+
+### Golang file upload form-data
+```golang
+package main
+
+import (
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"bytes"
+	"io"
+	"log"
+	"mime/multipart"
+	"os"
+)
+
+func main() {
+  client := cycletls.Init()
+
+  // Prepare a buffer to write our multipart form
+  var requestBody bytes.Buffer
+  multipartWriter := multipart.NewWriter(&requestBody)
+
+  // Add a file
+  fileWriter, err := multipartWriter.CreateFormFile("fieldname", "filename")
+  if err != nil {
+      log.Fatal("CreateFormFile Error: ", err)
+  }
+
+  // Open the file that you want to upload
+  file, err := os.Open("path/to/your/file")
+  if err != nil {
+      log.Fatal("File Open Error: ", err)
+  }
+  defer file.Close()
+
+  // Copy the file to the multipart writer
+  _, err = io.Copy(fileWriter, file)
+  if err != nil {
+      log.Fatal("File Copy Error: ", err)
+  }
+
+  // Close the writer before making the request
+  contentType := multipartWriter.FormDataContentType()
+  multipartWriter.Close()
+
+  response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+      Body: requestBody.String(),
+      Headers: map[string]string{
+          "Content-Type": contentType,
+      },
+  }, "POST")
+
+  if err != nil {
+      log.Print("Request Failed: " + err.Error())
+  }
+
+  log.Println(response.Body)
+}
+```
+
+
+If requested encoding helpers can be added to the repo for golang 
+</details>
+
+### How do I send a application/x-www-form-urlencoded Post request
+
+<details>
+
+### Javascript application/x-www-form-urlencoded form
+```js
+const initCycleTLS = require("cycletls");
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const urlEncodedData = new URLSearchParams();
+  urlEncodedData.append('key1', 'value1');
+  urlEncodedData.append('key2', 'value2');
+
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: urlEncodedData,
+      headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+### Golang application/x-www-form-urlencoded form
+```golang
+package main
+
+import (
+    "log"
+	  "net/url"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+
+	client := cycletls.Init()
+
+	// Prepare form data
+	form := url.Values{}
+	form.Add("key1", "value1")
+	form.Add("key2", "value2")
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: form.Encode(),
+		Headers: map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+		},
+	}, "POST")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	log.Println(response.Body)
+}
+
+```
+</details>
 
 ### How do I download images?
 
