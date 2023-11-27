@@ -3,7 +3,5 @@ dist
 ignore
 .env
 golang/go.sum
-go.mod
-go.sum
 tests/images/output*
 tests/images/source*
