@@ -16,7 +16,6 @@ import (
 
 // Options sets CycleTLS client options
 type Options struct {
-	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
 	URL                string            `json:"url"`
 	Method             string            `json:"method"`
 	Headers            map[string]string `json:"headers"`
@@ -29,6 +28,8 @@ type Options struct {
 	DisableRedirect    bool              `json:"disableRedirect"`
 	HeaderOrder        []string          `json:"headerOrder"`
 	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
+	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+	ForceHTTP1         bool              `json:"forceHTTP1"`
 }
 
 type cycleTLSRequest struct {
@@ -49,6 +50,7 @@ type Response struct {
 	Status    int
 	Body      string
 	Headers   map[string]string
+	Cookies   []*nhttp.Cookie
 	FinalUrl  string
 }
 
@@ -70,12 +72,12 @@ type CycleTLS struct {
 
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
-
-	var browser = browser{
+	var browser = Browser{
 		JA3:                request.Options.Ja3,
 		UserAgent:          request.Options.UserAgent,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
+		forceHTTP1:         request.Options.ForceHTTP1,
 	}
 
 	client, err := newClient(
@@ -181,7 +183,8 @@ func dispatcher(res fullRequest) (response Response, err error) {
 		parsedError := parseError(err)
 
 		headers := make(map[string]string)
-		return Response{res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg + "-> \n" + string(err.Error()), headers, finalUrl}, nil //normally return error here
+		var cookies []*nhttp.Cookie
+		return Response{RequestID: res.options.RequestID, Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers, Cookies: cookies, FinalUrl: finalUrl}, nil //normally return error here
 
 	}
 	defer resp.Body.Close()
@@ -211,7 +214,15 @@ func dispatcher(res fullRequest) (response Response, err error) {
 			}
 		}
 	}
-	return Response{res.options.RequestID, resp.StatusCode, Body, headers, finalUrl}, nil
+	cookies := convertFHTTPCookiesToNetHTTPCookies(resp.Cookies())
+	return Response{
+		RequestID: res.options.RequestID,
+		Status:    resp.StatusCode,
+		Body:      Body,
+		Headers:   headers,
+		Cookies:   cookies,
+		FinalUrl:  finalUrl,
+	}, nil
 
 }
 
@@ -242,8 +253,6 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (response 
 
 	return response, nil
 }
-
-//TODO rename this
 
 // Init starts the worker pool or returns a empty cycletls struct
 func Init(workers ...bool) CycleTLS {

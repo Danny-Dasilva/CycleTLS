@@ -4,9 +4,7 @@
 package cycletls_test
 
 import (
-	//"fmt"
 	"encoding/json"
-	"log"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -20,10 +18,10 @@ type CycleTLSOptions struct {
 }
 
 type Ja3erResp struct {
-	Ja3Hash   string `json:"ja3_hash"`
-	Ja3       string `json:"ja3"`
-	AkamaiHash   string `json:"akamai_hash"`
-	Akamai       string `json:"akamai"`
+	Ja3Hash    string `json:"ja3_hash"`
+	Ja3        string `json:"ja3"`
+	AkamaiHash string `json:"akamai_hash"`
+	Akamai     string `json:"akamai"`
 }
 
 var CycleTLSResults = []CycleTLSOptions{
@@ -96,8 +94,6 @@ func TestHTTP2(t *testing.T) {
 		if response.Status != 502 {
 			if response.Status != options.HTTPResponse {
 				t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
-			} else {
-				log.Println("ja3er: ", response.Status)
 			}
 			ja3resp := new(Ja3erResp)
 
@@ -122,8 +118,6 @@ func TestHTTP2(t *testing.T) {
 		}, "GET")
 		if response.Status != options.HTTPResponse {
 			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash)
-		} else {
-			log.Println("http2: ", response.Status)
 		}
 	}
 }

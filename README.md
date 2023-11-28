@@ -55,7 +55,7 @@ Table of contents
 
 ```
 node ^v14.0
-golang ^v1.17x
+golang ^v1.20x
 ```
 
 ## Installation
@@ -93,7 +93,6 @@ const initCycleTLS = require('cycletls');
     ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
     userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
     proxy: 'http://username:password@hostname.com:443', 
-    insecureSkipVerify: true
   }, 'get');
 
   console.log(response);
@@ -123,7 +122,6 @@ func main() {
 		Body : "",
 		Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
-		InsecureSkipVerify: true,
 	  }, "GET");
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
@@ -132,8 +130,9 @@ func main() {
 }
 
 ```
+#### Example using your own custom http.Client
 
-## Example using your own custom http.Client
+<details>
 
 ```go
 import (
@@ -153,6 +152,7 @@ func main() {
 	...
 }
 ```
+</details>
 
 ## Creating an instance
 
@@ -242,7 +242,9 @@ Url is not optional, config is optional
   // Custom header order to send with request (This value will overwrite default header order)
   headerOrder: ["cache-control", "connection", "host"],
   // Toggle if CycleTLS should skip verify certificate (If InsecureSkipVerify is true, TLS accepts any certificate presented by the server and any host name in that certificate.)
-  insecureSkipVerify: true		
+  insecureSkipVerify: false	
+  // Forces CycleTLS to do a http1 handshake
+  forceHTTP1: false	
 }
 
 ```
@@ -339,7 +341,88 @@ const promises = [];
 })();
 ```
 
+## Multiple Requests Example for Golang
 
+The general expectation for golang packages is to expect the user to implement a worker pool or any other form of goroutine/asynchronous processing. This package includes a built in Queue method that leverages a worker pool/channels for long running asynchronous requests against a set of urls.
+
+```go
+package main
+
+import (
+	"log"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+// Static variables
+var (
+	ja3       = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+	userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36"
+)
+
+// RequestConfig holds the configuration for each request.
+type RequestConfig struct {
+	URL     string
+	Method  string
+	Options cycletls.Options
+}
+
+func main() {
+	client := cycletls.Init(true) // Initialize with worker pool
+
+	// Define the requests
+	requests := []RequestConfig{
+		{
+			URL:    "http://httpbin.org/delay/4",
+			Method: "GET",
+			Options: cycletls.Options{
+				Ja3:       ja3,
+				UserAgent: userAgent,
+			},
+		},
+		{
+			URL:    "http://httpbin.org/post",
+			Method: "POST",
+			Options: cycletls.Options{
+				Body:      `{"field":"POST-VAL"}`,
+				Ja3:       ja3,
+				UserAgent: userAgent,
+			},
+		},
+		{
+			URL:    "http://httpbin.org/cookies",
+			Method: "GET",
+			Options: cycletls.Options{
+				Ja3:       ja3,
+				UserAgent: userAgent,
+				Cookies: []cycletls.Cookie{
+					{
+						Name:  "example1",
+						Value: "aaaaaaa",
+					},
+				},
+			},
+		},
+	}
+
+	// Queue the requests
+	for _, req := range requests {
+		client.Queue(req.URL, req.Options, req.Method)
+	}
+
+	// Asynchronously read responses as soon as they are available
+	// They will return as soon as they are processed
+	// e.g. Delay 3 will be returned last
+	for i := 0; i < len(requests); i++ {
+		response := <-client.RespChan
+		log.Println("Response:", response)
+	}
+
+	// Close the client
+	client.Close()
+}
+
+```
 
 # Dev Setup
 
@@ -514,6 +597,9 @@ Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/ne
 
 <details>
 
+
+### CookieJar in JS
+
 ```js
 const initCycleTLS = require("cycletls");
 
@@ -570,10 +656,293 @@ async function processCookies(response, url, cookieJar) {
 ```
 
 
-**Golang example coming soon** 
+### CookieJar in Golang
+
+```go
+package main
+
+import (
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"net/http/cookiejar"
+	"net/url"
+	"strings"
+)
+
+func main() {
+	client := cycletls.Init()
+	jar, err := cookiejar.New(nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+	// First request to set cookie
+	firstResponse, err := client.Do("https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
+		Body: "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		DisableRedirect: true,
+	},
+		 "GET")
+	if err != nil {
+		log.Fatal(err)
+	}
+	firstURL, _ := url.Parse(firstResponse.FinalUrl)
+    jar.SetCookies( firstURL, firstResponse.Cookies)
+
+
+	// Second request to verify cookies, including the cookies from the first response
+	secondResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body: "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+	    Headers: map[string]string{
+	        "Cookie": getHeadersFromJar(jar, firstURL),
+	    },
+	}, "GET")
+	if err != nil {
+	    log.Fatal(err)
+	}
+
+	log.Println("Second Response body:", secondResponse.Body)
+}
+
+
+func getHeadersFromJar(jar *cookiejar.Jar, url *url.URL) string {
+    cookies := jar.Cookies(url)
+    var cookieStrs []string
+    for _, cookie := range cookies {
+        cookieStrs = append(cookieStrs, cookie.Name+"="+cookie.Value)
+    }
+    return strings.Join(cookieStrs, "; ")
+}
+
+```
 
 </details>
 
+### How do I send multipart/form-data in CycleTLS
+
+<details>
+
+### Javascript Text form-data
+```js
+const initCycleTLS = require("cycletls");
+const FormData = require('form-data');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const formData = new FormData();
+  formData.append("key1", "value1");
+  formData.append("key2", "value2");
+  
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: formData,
+      headers: {
+          'Content-Type': 'multipart/form-data',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+
+
+### Javascript File form-data
+```js
+const initCycleTLS = require("cycletls");
+const FormData = require('form-data');
+const fs = require('fs');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const formData = new FormData();
+  const fileStream = fs.createReadStream("../go.mod");
+  formData.append('file', fileStream);
+
+  
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: formData,
+      headers: {
+          'Content-Type': 'multipart/form-data',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+
+### Golang Text form-data
+```golang
+package main
+
+import (
+	"bytes"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"mime/multipart"
+)
+
+func main() {
+	client := cycletls.Init()
+
+	// Prepare a buffer to write our multipart form
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	// Add form fields
+	multipartWriter.WriteField("key1", "value1")
+	multipartWriter.WriteField("key2", "value2")
+
+	contentType := multipartWriter.FormDataContentType()
+	// Close the writer before making the request
+	multipartWriter.Close()
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: requestBody.String(),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+	}, "POST")
+
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+
+	log.Println(response.Body)
+}
+```
+
+
+### Golang file upload form-data
+```golang
+package main
+
+import (
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"bytes"
+	"io"
+	"log"
+	"mime/multipart"
+	"os"
+)
+
+func main() {
+  client := cycletls.Init()
+
+  // Prepare a buffer to write our multipart form
+  var requestBody bytes.Buffer
+  multipartWriter := multipart.NewWriter(&requestBody)
+
+  // Add a file
+  fileWriter, err := multipartWriter.CreateFormFile("fieldname", "filename")
+  if err != nil {
+      log.Fatal("CreateFormFile Error: ", err)
+  }
+
+  // Open the file that you want to upload
+  file, err := os.Open("path/to/your/file")
+  if err != nil {
+      log.Fatal("File Open Error: ", err)
+  }
+  defer file.Close()
+
+  // Copy the file to the multipart writer
+  _, err = io.Copy(fileWriter, file)
+  if err != nil {
+      log.Fatal("File Copy Error: ", err)
+  }
+
+  // Close the writer before making the request
+  contentType := multipartWriter.FormDataContentType()
+  multipartWriter.Close()
+
+  response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+      Body: requestBody.String(),
+      Headers: map[string]string{
+          "Content-Type": contentType,
+      },
+  }, "POST")
+
+  if err != nil {
+      log.Print("Request Failed: " + err.Error())
+  }
+
+  log.Println(response.Body)
+}
+```
+
+
+If requested encoding helpers can be added to the repo for golang 
+</details>
+
+### How do I send a application/x-www-form-urlencoded Post request
+
+<details>
+
+### Javascript application/x-www-form-urlencoded form
+```js
+const initCycleTLS = require("cycletls");
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  const urlEncodedData = new URLSearchParams();
+  urlEncodedData.append('key1', 'value1');
+  urlEncodedData.append('key2', 'value2');
+
+  const response = await cycleTLS('http://httpbin.org/post', {
+      body: urlEncodedData,
+      headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+      },
+  }, 'post');
+
+  console.log(response);
+
+  cycleTLS.exit();
+})();
+
+```
+### Golang application/x-www-form-urlencoded form
+```golang
+package main
+
+import (
+    "log"
+	  "net/url"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+
+	client := cycletls.Init()
+
+	// Prepare form data
+	form := url.Values{}
+	form.Add("key1", "value1")
+	form.Add("key2", "value2")
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: form.Encode(),
+		Headers: map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+		},
+	}, "POST")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	log.Println(response.Body)
+}
+
+```
+</details>
 
 ### How do I download images?
 

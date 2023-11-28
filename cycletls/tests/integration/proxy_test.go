@@ -5,17 +5,17 @@ package cycletls_test
 
 import (
 	//"fmt"
-	"log"
-	"testing"
-	"runtime"
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"runtime"
+	"testing"
 )
 
 func TestProxySuccess(t *testing.T) {
 	if runtime.GOOS != "linux" {
-        t.Skip("Skipping this test on non-linux platforms")
-        return
-    }
+		t.Skip("Skipping this test on non-linux platforms")
+		return
+	}
 	client := cycletls.Init()
 	resp, err := client.Do("https://ipinfo.io/json", cycletls.Options{
 		Body:      "",

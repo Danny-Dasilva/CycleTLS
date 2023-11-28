@@ -8,19 +8,20 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-type browser struct {
+type Browser struct {
 	// Return a greeting that embeds the name in a message.
 	JA3                string
 	UserAgent          string
 	Cookies            []Cookie
 	InsecureSkipVerify bool
+	forceHTTP1         bool
 }
 
 var disabledRedirect = func(req *http.Request, via []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
+func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
 	//if timeout is not set in call default to 15
 	if timeout == 0 {
 		timeout = 15
@@ -55,7 +56,7 @@ func clientBuilder(browser browser, dialer proxy.ContextDialer, timeout int, dis
 //
 // cycleClient.Get("https://tls.peet.ws/")
 func NewTransport(ja3 string, useragent string) http.RoundTripper {
-	return newRoundTripper(browser{
+	return newRoundTripper(Browser{
 		JA3:       ja3,
 		UserAgent: useragent,
 	})
@@ -64,16 +65,15 @@ func NewTransport(ja3 string, useragent string) http.RoundTripper {
 // NewTransport creates a new HTTP client transport that modifies HTTPS requests
 // to imitiate a specific JA3 hash and User-Agent, optionally specifying a proxy via proxy.ContextDialer.
 func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDialer) http.RoundTripper {
-	return newRoundTripper(browser{
+	return newRoundTripper(Browser{
 		JA3:       ja3,
 		UserAgent: useragent,
 	}, proxy)
 }
 
 // newClient creates a new http client
-func newClient(browser browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
+func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
 	var dialer proxy.ContextDialer
-	// Check if a valid proxyURL is provided.
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
 		var err error
 		dialer, err = newConnectDialer(proxyURL[0], UserAgent)
