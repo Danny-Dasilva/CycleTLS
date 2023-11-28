@@ -55,7 +55,7 @@ Table of contents
 
 ```
 node ^v14.0
-golang ^v1.17x
+golang ^v1.20x
 ```
 
 ## Installation
