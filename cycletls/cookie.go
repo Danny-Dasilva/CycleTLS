@@ -89,7 +89,6 @@ func convertFHTTPCookiesToNetHTTPCookies(fhttpCookies []*http.Cookie) []*nhttp.C
 			Expires:  fhttpCookie.Expires,
 			Secure:   fhttpCookie.Secure,
 			HttpOnly: fhttpCookie.HttpOnly,
-			// add other fields as necessary
 		}
 		netHTTPCookies = append(netHTTPCookies, netHTTPCookie)
 	}

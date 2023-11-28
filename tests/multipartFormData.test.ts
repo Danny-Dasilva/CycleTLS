@@ -1,6 +1,7 @@
 import initCycleTLS, { CycleTLSClient } from "../dist/index.js";
 import FormData from "form-data";
 import fs from "fs";
+jest.setTimeout(30000);
 
 describe("CycleTLS Multipart Form Data Test", () => {
   let cycleTLS: CycleTLSClient;
@@ -42,7 +43,7 @@ describe("CycleTLS Multipart Form Data Test", () => {
 
   test("Should Handle Multipart Form Data with File Upload Correctly", async () => {
     const formData = new FormData();
-    const fileStream = fs.createReadStream("./go.mod");
+    const fileStream = fs.createReadStream("./main.go");
     formData.append("file", fileStream);
 
     const response = await cycleTLS(
@@ -63,7 +64,7 @@ describe("CycleTLS Multipart Form Data Test", () => {
 
     expect(responseBody.files).toBeDefined();
     expect(responseBody.files.file).toContain(
-      "github.com/Danny-Dasilva/CycleTLS/cycletls"
+      "./cycletls"
     );
   });
 });

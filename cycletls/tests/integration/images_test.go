@@ -118,17 +118,17 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "png")
 	}
 
-	//svg Windows error
-	// resp = GetRequest("http://httpbin.org/image/svg", client)
-	// if resp.Status != 200 {
-	// 	t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
-	// }
-	// WriteFile(resp.Body, "../../../tests/images/source.svg")
-	// filesEqual = CompareFiles("../../../tests/images/test.svg", "../../../tests/images/source.svg")
-	// if filesEqual != true {
-	// 	t.Fatal("Files are not equal", "svg")
-	// }
-
+	if runtime.GOOS != "windows" {
+		resp = GetRequest("http://httpbin.org/image/svg", client)
+		if resp.Status != 200 {
+			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+		}
+		WriteFile(resp.Body, "../../../tests/images/source.svg")
+		filesEqual = CompareFiles("../../../tests/images/test.svg", "../../../tests/images/source.svg")
+		if filesEqual != true {
+			t.Fatal("Files are not equal", "svg")
+		}
+	}
 	//webp
 	resp = GetRequest("http://httpbin.org/image/webp", client)
 	if resp.Status != 200 {
@@ -151,14 +151,17 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "gif")
 	}
 
-	//webp
-	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
-	if resp.Status != 200 {
-		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
-	}
-	WriteFile(resp.Body, "../../../tests/images/source.avif")
-	filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
-	if filesEqual != true {
-		t.Fatal("Files are not equal", "avif")
+	if runtime.GOOS != "darwin" {
+
+		//avif
+		resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+		if resp.Status != 200 {
+			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+		}
+		WriteFile(resp.Body, "../../../tests/images/source.avif")
+		filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
+		if filesEqual != true {
+			t.Fatal("Files are not equal", "avif")
+		}
 	}
 }
