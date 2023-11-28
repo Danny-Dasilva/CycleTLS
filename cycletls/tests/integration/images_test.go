@@ -1,12 +1,12 @@
 package cycletls_test
 
 import (
-	"runtime"
 	"bytes"
 	"encoding/base64"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
+	"runtime"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -66,13 +66,13 @@ func WriteFile(Body string, Filepath string) {
 }
 
 func CompareFiles(filepath1 string, filepath2 string) bool {
-	f1, err1 := ioutil.ReadFile(filepath1)
+	f1, err1 := io.ReadFile(filepath1)
 
 	if err1 != nil {
 		log.Fatal(err1)
 	}
 
-	f2, err2 := ioutil.ReadFile(filepath2)
+	f2, err2 := io.ReadFile(filepath2)
 
 	if err2 != nil {
 		log.Fatal(err2)
