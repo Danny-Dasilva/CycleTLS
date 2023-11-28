@@ -1,5 +1,25 @@
 # CycleTLS Changelog
 
+## 1.0.23 - (11-27-2023)
+### Release Highlights
+Switch to UTLS
+Add Insecure Skip Verify for proxy bypass
+Add Force HTTP1
+### Enhancements
+-   [Add forceHTTP1 param to configure http version](https://github.com/Danny-Dasilva/CycleTLS/issues/268)
+-  add InsecureSkipVerify configuration option enabling bypassing the SSL certificate verification when making HTTP requests addressed by @lif0 in [this PR](https://github.com/Danny-Dasilva/CycleTLS/pull/279)
+- [Add finalUrl response to track redirects ](https://github.com/Danny-Dasilva/CycleTLS/issues/121) @lif0 in [this PR](https://github.com/Danny-Dasilva/CycleTLS/pull/283)
+- [Add support for application/x-www-form-urlencoded](https://github.com/Danny-Dasilva/CycleTLS/issues/155)
+- [Add support for multipart/form-data](https://github.com/Danny-Dasilva/CycleTLS/issues/89)
+- [Add CycleTLS Queue Example and test](https://github.com/Danny-Dasilva/CycleTLS/issues/128)
+- [Add CookieJar Support in Golang](https://github.com/Danny-Dasilva/CycleTLS/issues/260), [duplicate](https://github.com/Danny-Dasilva/CycleTLS/issues/146), [other duplicate](https://github.com/Danny-Dasilva/CycleTLS/issues/222)
+- [tag submodule cycletls](https://github.com/Danny-Dasilva/CycleTLS/issues/232)
+- [Export transport for http client](https://github.com/Danny-Dasilva/CycleTLS/issues/151), addressed by @deoxykev in [this PR](https://github.com/Danny-Dasilva/CycleTLS/pull/286)
+- Add support for ja3 `24` FakeTokenBindingExtension
+- Add support for ja3 `34` DelegatedCredentialsExtension
+- Add support for ja3 `41` UtlsPreSharedKeyExtension
+- Add support for ja3 `50` SignatureAlgorithmsCertExtension
+- Add support for ja3 `57` QUICTransportParametersExtension
 
 ## 1.0.22 - (10-24-2023)
 ### Release Highlights
