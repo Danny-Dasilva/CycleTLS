@@ -131,6 +131,27 @@ func main() {
 
 ```
 
+## Example using your own custom http.Client
+
+```go
+import (
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	http "github.com/Danny-Dasilva/fhttp" // note this is a drop-in replacement for net/http
+)
+
+func main() {
+	ja3 := "771,52393-52392-52244-52243-49195-49199-49196-49200-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-30032-11-10,29-23-24,0"
+	ua := "Chrome Version 57.0.2987.110 (64-bit) Linux"
+
+ 	 cycleClient := &http.Client{
+ 		Transport:     cycletls.NewTransport(ja3, ua),
+ 	 }
+
+	resp, err := cycleClient.Get("https://tls.peet.ws/")
+	...
+}
+```
+
 ## Creating an instance
 
 In order to create a `cycleTLS` instance, you can run the following:
