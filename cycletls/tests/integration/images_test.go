@@ -3,7 +3,6 @@ package cycletls_test
 import (
 	"bytes"
 	"encoding/base64"
-	"io"
 	"log"
 	"os"
 	"runtime"
