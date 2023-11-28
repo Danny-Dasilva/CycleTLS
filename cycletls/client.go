@@ -38,7 +38,7 @@ func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, dis
 }
 
 // NewTransport creates a new HTTP client transport that modifies HTTPS requests
-// to imitiate a specific JA3 hash and User-Agent.
+// to imitiate a specific JA3 hash and User-Agent. HTTP/2 connections are disallowed.
 // # Example Usage
 // import (
 //
@@ -57,17 +57,20 @@ func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, dis
 // cycleClient.Get("https://tls.peet.ws/")
 func NewTransport(ja3 string, useragent string) http.RoundTripper {
 	return newRoundTripper(Browser{
-		JA3:       ja3,
-		UserAgent: useragent,
+		JA3:        ja3,
+		UserAgent:  useragent,
+		forceHTTP1: true,
 	})
 }
 
 // NewTransport creates a new HTTP client transport that modifies HTTPS requests
 // to imitiate a specific JA3 hash and User-Agent, optionally specifying a proxy via proxy.ContextDialer.
+// HTTP/2 connections are disallowed.
 func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDialer) http.RoundTripper {
 	return newRoundTripper(Browser{
-		JA3:       ja3,
-		UserAgent: useragent,
+		JA3:        ja3,
+		UserAgent:  useragent,
+		forceHTTP1: true,
 	}, proxy)
 }
 
