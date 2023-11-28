@@ -23,7 +23,7 @@ func TestDeflateDecoding(t *testing.T) {
 		log.Print("Request Failed: " + err.Error())
 	}
 	if resp.JSONBody()["deflated"] != true {
-		t.Fatalf("Deflated not found in Reponse Body: %s", resp.Body)
+		t.Fatalf("Deflated not found in Response Body: %s", resp.Body)
 	}
 }
 func TestBrotliDecoding(t *testing.T) {
@@ -38,7 +38,7 @@ func TestBrotliDecoding(t *testing.T) {
 		log.Print("Request Failed: " + err.Error())
 	}
 	if resp.JSONBody()["brotli"] != true {
-		t.Fatalf("brotli not found in Reponse Body: %s", resp.Body)
+		t.Fatalf("brotli not found in Response Body: %s", resp.Body)
 	}
 }
 
@@ -55,6 +55,6 @@ func TestGZIPDecoding(t *testing.T) {
 		log.Print("Request Failed: " + err.Error())
 	}
 	if resp.JSONBody()["gzipped"] != true {
-		t.Fatalf("gzipped not found in Reponse Body: %s", resp.Body)
+		t.Fatalf("gzipped not found in Response Body: %s", resp.Body)
 	}
 }

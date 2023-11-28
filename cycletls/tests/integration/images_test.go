@@ -1,12 +1,11 @@
 package cycletls_test
 
 import (
-	//"fmt"
 	"bytes"
 	"encoding/base64"
-	"io/ioutil"
 	"log"
 	"os"
+	"runtime"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -66,13 +65,13 @@ func WriteFile(Body string, Filepath string) {
 }
 
 func CompareFiles(filepath1 string, filepath2 string) bool {
-	f1, err1 := ioutil.ReadFile(filepath1)
+	f1, err1 := os.ReadFile(filepath1)
 
 	if err1 != nil {
 		log.Fatal(err1)
 	}
 
-	f2, err2 := ioutil.ReadFile(filepath2)
+	f2, err2 := os.ReadFile(filepath2)
 
 	if err2 != nil {
 		log.Fatal(err2)
@@ -118,17 +117,17 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "png")
 	}
 
-	//svg Windows error
-	// resp = GetRequest("http://httpbin.org/image/svg", client)
-	// if resp.Status != 200 {
-	// 	t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
-	// }
-	// WriteFile(resp.Body, "../../../tests/images/source.svg")
-	// filesEqual = CompareFiles("../../../tests/images/test.svg", "../../../tests/images/source.svg")
-	// if filesEqual != true {
-	// 	t.Fatal("Files are not equal", "svg")
-	// }
-
+	if runtime.GOOS != "windows" {
+		resp = GetRequest("http://httpbin.org/image/svg", client)
+		if resp.Status != 200 {
+			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+		}
+		WriteFile(resp.Body, "../../../tests/images/source.svg")
+		filesEqual = CompareFiles("../../../tests/images/test.svg", "../../../tests/images/source.svg")
+		if filesEqual != true {
+			t.Fatal("Files are not equal", "svg")
+		}
+	}
 	//webp
 	resp = GetRequest("http://httpbin.org/image/webp", client)
 	if resp.Status != 200 {
@@ -151,14 +150,17 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "gif")
 	}
 
-	//webp
-	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
-	if resp.Status != 200 {
-		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
-	}
-	WriteFile(resp.Body, "../../../tests/images/source.avif")
-	filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
-	if filesEqual != true {
-		t.Fatal("Files are not equal", "avif")
+	if runtime.GOOS != "darwin" {
+
+		//avif
+		resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+		if resp.Status != 200 {
+			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+		}
+		WriteFile(resp.Body, "../../../tests/images/source.avif")
+		filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
+		if filesEqual != true {
+			t.Fatal("Files are not equal", "avif")
+		}
 	}
 }

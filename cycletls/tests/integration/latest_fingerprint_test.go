@@ -5,7 +5,6 @@ package cycletls_test
 
 import (
 	"encoding/json"
-	"log"
 	"testing"
 
 	// cycletls "../../../cycletls"
@@ -59,8 +58,6 @@ func TestLatestVersions(t *testing.T) {
 		}
 		if response.Status != options.HTTPResponse {
 			t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
-		} else {
-			log.Println("ja3er: ", response.Status)
 		}
 		jsonResp := new(PeetResp)
 
