@@ -254,8 +254,6 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (response 
 	return response, nil
 }
 
-//TODO rename this
-
 // Init starts the worker pool or returns a empty cycletls struct
 func Init(workers ...bool) CycleTLS {
 	if len(workers) > 0 && workers[0] {
