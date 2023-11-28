@@ -1,7 +1,7 @@
 package cycletls_test
 
 import (
-	//"fmt"
+	"runtime"
 	"bytes"
 	"encoding/base64"
 	"io/ioutil"
