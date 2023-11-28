@@ -7,10 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
 	"strconv"
 	"strings"
-
+	"io"
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
 )
@@ -85,7 +84,7 @@ func gUnzipData(data []byte) (resData []byte, err error) {
 		return []byte{}, err
 	}
 	defer gz.Close()
-	respBody, err := ioutil.ReadAll(gz)
+	respBody, err := io.ReadAll(gz)
 	return respBody, err
 }
 func enflateData(data []byte) (resData []byte, err error) {
@@ -94,12 +93,12 @@ func enflateData(data []byte) (resData []byte, err error) {
 		return []byte{}, err
 	}
 	defer zr.Close()
-	enflated, err := ioutil.ReadAll(zr)
+	enflated, err := io.ReadAll(zr)
 	return enflated, err
 }
 func unBrotliData(data []byte) (resData []byte, err error) {
 	br := brotli.NewReader(bytes.NewReader(data))
-	respBody, err := ioutil.ReadAll(br)
+	respBody, err := io.ReadAll(br)
 	return respBody, err
 }
 

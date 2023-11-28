@@ -1,5 +1,16 @@
 # CycleTLS Changelog
 
+## 1.0.24 - (11-27-2023)
+### Release Highlights
+Small bugfixes and ReadMe updates
+
+### Enhancements
+- Update docs
+- Add tests for forceHTTP1
+- update to using io instead of ioutil
+### Bug Fixes
+- Fix issue with keepalives on closed connections when http1 is forced
+
 ## 1.0.23 - (11-27-2023)
 ### Release Highlights
 Switch to UTLS
