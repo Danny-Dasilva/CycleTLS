@@ -14,7 +14,7 @@ type Browser struct {
 	UserAgent          string
 	Cookies            []Cookie
 	InsecureSkipVerify bool
-  	forceHTTP1 bool
+	forceHTTP1         bool
 }
 
 var disabledRedirect = func(req *http.Request, via []*http.Request) error {

@@ -18,10 +18,10 @@ type CycleTLSOptions struct {
 }
 
 type Ja3erResp struct {
-	Ja3Hash   string `json:"ja3_hash"`
-	Ja3       string `json:"ja3"`
-	AkamaiHash   string `json:"akamai_hash"`
-	Akamai       string `json:"akamai"`
+	Ja3Hash    string `json:"ja3_hash"`
+	Ja3        string `json:"ja3"`
+	AkamaiHash string `json:"akamai_hash"`
+	Akamai     string `json:"akamai"`
 }
 
 var CycleTLSResults = []CycleTLSOptions{

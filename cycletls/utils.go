@@ -11,16 +11,18 @@ import (
 	"strconv"
 	"strings"
 
-	utls "github.com/refraction-networking/utls"
 	"github.com/andybalholm/brotli"
+	utls "github.com/refraction-networking/utls"
 )
 
 const (
 	chrome  = "chrome"  //chrome User agent enum
 	firefox = "firefox" //firefox User agent enum
 )
+
 type UserAgent struct {
-    UserAgent string; HeaderOrder []string
+	UserAgent   string
+	HeaderOrder []string
 }
 
 // ParseUserAgent returns the pseudo header order and user agent string for chrome/firefox
@@ -35,6 +37,7 @@ func parseUserAgent(userAgent string) UserAgent {
 	}
 
 }
+
 // DecompressBody unzips compressed data
 func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody string) {
 	if len(encoding) > 0 {

@@ -28,8 +28,8 @@ type roundTripper struct {
 	cachedConnections  map[string]net.Conn
 	cachedTransports   map[string]http.RoundTripper
 
-	dialer proxy.ContextDialer
-	forceHTTP1    bool
+	dialer     proxy.ContextDialer
+	forceHTTP1 bool
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -107,7 +107,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
+	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, OmitEmptyPsk: true, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS13,
 
 		utls.HelloCustom)
@@ -137,7 +137,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
 
 		t2 := http2.Transport{
-			DialTLS: rt.dialTLSHTTP2,
+			DialTLS:     rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
 			Navigator:   parsedUserAgent.UserAgent,
 		}
@@ -178,25 +178,25 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 	if len(dialer) > 0 {
 
 		return &roundTripper{
-			dialer: dialer[0],
+			dialer:             dialer[0],
 			JA3:                browser.JA3,
 			UserAgent:          browser.UserAgent,
 			Cookies:            browser.Cookies,
 			cachedTransports:   make(map[string]http.RoundTripper),
 			cachedConnections:  make(map[string]net.Conn),
 			InsecureSkipVerify: browser.InsecureSkipVerify,
-      forceHTTP1:        browser.forceHTTP1,
+			forceHTTP1:         browser.forceHTTP1,
 		}
 	}
 
 	return &roundTripper{
-		dialer: proxy.Direct,
+		dialer:             proxy.Direct,
 		JA3:                browser.JA3,
 		UserAgent:          browser.UserAgent,
 		Cookies:            browser.Cookies,
 		cachedTransports:   make(map[string]http.RoundTripper),
 		cachedConnections:  make(map[string]net.Conn),
 		InsecureSkipVerify: browser.InsecureSkipVerify,
-    forceHTTP1:        browser.forceHTTP1,
+		forceHTTP1:         browser.forceHTTP1,
 	}
 }

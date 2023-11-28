@@ -50,8 +50,8 @@ func TestCustomHeaderOrder(t *testing.T) {
 	client := cycletls.Init()
 	resp, err := client.Do("https://pgl.yoyo.org/http/browser-headers.php", cycletls.Options{
 		Body:        "",
-		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Ja3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		Headers:     map[string]string{"host": "pgl.yoyo.org", "connection": "keep-alive", "cache-control": "no-cache"},
 		HeaderOrder: []string{"cache-control", "connection", "host"},
 	}, "GET")
@@ -76,8 +76,8 @@ func TestCustomHeaderOrderFailure(t *testing.T) {
 	client := cycletls.Init()
 	resp, err := client.Do("https://pgl.yoyo.org/http/browser-headers.php", cycletls.Options{
 		Body:        "",
-		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Ja3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		Headers:     map[string]string{"host": "pgl.yoyo.org", "connection": "keep-alive", "cache-control": "no-cache"},
 		HeaderOrder: []string{"cache-control", "connection", "host"},
 	}, "GET")
@@ -127,8 +127,8 @@ func TestCustomHeadersCustomOrder(t *testing.T) {
 	client := cycletls.Init()
 	resp, err := client.Do("https://pgl.yoyo.org/http/browser-headers.php", cycletls.Options{
 		Body:        "",
-		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Ja3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		Headers:     map[string]string{"test1": "value1", "test2": "value2"},
 		HeaderOrder: []string{"test2", "test1"},
 	}, "GET")

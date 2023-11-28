@@ -15,7 +15,7 @@ type TLSExtensions struct {
 	PSKKeyExchangeModes          *utls.PSKKeyExchangeModesExtension
 	SignatureAlgorithmsCert      *utls.SignatureAlgorithmsCertExtension
 	KeyShareCurves               *utls.KeyShareExtension
-	UseGREASE                	 bool
+	UseGREASE                    bool
 }
 
 type Extensions struct {
@@ -83,6 +83,7 @@ type Extensions struct {
 	//default is false, default is used grease, if not used grease the UseGREASE param is true
 	UseGREASE bool `json:"UseGREASE"`
 }
+
 var supportedSignatureAlgorithmsExtensions = map[string]utls.SignatureScheme{
 	"PKCS1WithSHA256":                     utls.PKCS1WithSHA256,
 	"PKCS1WithSHA384":                     utls.PKCS1WithSHA384,
@@ -159,8 +160,6 @@ var keyShareCurvesExtensions = map[string]utls.KeyShare{
 	"P521":   utls.KeyShare{Group: utls.CurveP521},
 	"X25519": utls.KeyShare{Group: utls.X25519},
 }
-
-
 
 func ToTLSExtensions(e *Extensions) (extensions *TLSExtensions) {
 	extensions = &TLSExtensions{}

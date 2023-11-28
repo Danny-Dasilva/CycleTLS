@@ -5,8 +5,8 @@ package cycletls_test
 
 import (
 	"encoding/json"
-	"testing"
 	"net/url"
+	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )

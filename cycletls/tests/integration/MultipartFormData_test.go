@@ -5,14 +5,15 @@ package cycletls_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"mime/multipart"
-	"encoding/json"
 	"os"
 	"testing"
 
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
+
 type HttpBinResponse struct {
 	Args    map[string]string `json:"args"`
 	Data    string            `json:"data"`
@@ -98,7 +99,6 @@ func TestMultipartFormDataMixed(t *testing.T) {
 	}
 }
 
-
 func TestMultipartFormDataUpload(t *testing.T) {
 	client := cycletls.Init()
 
@@ -152,7 +152,6 @@ func TestMultipartFormDataUpload(t *testing.T) {
 		t.Fatal("Expected file 'filetype.csv' in response, but it was not found")
 	}
 }
-
 
 func TestMultipartFormDataText(t *testing.T) {
 	client := cycletls.Init()
