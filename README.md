@@ -130,8 +130,9 @@ func main() {
 }
 
 ```
+#### Example using your own custom http.Client
 
-## Example using your own custom http.Client
+<details>
 
 ```go
 import (
@@ -151,6 +152,7 @@ func main() {
 	...
 }
 ```
+</details>
 
 ## Creating an instance
 
