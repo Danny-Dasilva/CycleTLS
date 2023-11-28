@@ -5,7 +5,7 @@ import (
 	"flag"
 	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
-	"io/ioutil"
+	"io"
 	"log"
 	nhttp "net/http"
 	"net/url"
@@ -176,7 +176,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 func dispatcher(res fullRequest) (response Response, err error) {
 	defer res.client.CloseIdleConnections()
 	finalUrl := res.options.Options.URL
-
 	resp, err := res.client.Do(res.req)
 	if err != nil {
 
@@ -195,8 +194,8 @@ func dispatcher(res fullRequest) (response Response, err error) {
 
 	encoding := resp.Header["Content-Encoding"]
 	content := resp.Header["Content-Type"]
+	bodyBytes, err := io.ReadAll(resp.Body)
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("Parse Bytes" + err.Error())
 		return response, err
@@ -353,7 +352,7 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 	if err != nil {
 		//Golang Received a non-standard request to this port, printing request
 		var data map[string]interface{}
-		bodyBytes, err := ioutil.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			log.Print("Invalid Request: Body Read Error" + err.Error())
 		}
