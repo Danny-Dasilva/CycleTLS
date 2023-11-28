@@ -7,6 +7,7 @@ Small bugfixes and ReadMe updates
 ### Enhancements
 - Update docs
 - Add tests for forceHTTP1
+- update to using io instead of ioutil
 ### Bug Fixes
 - Fix issue with keepalives on closed connections when http1 is forced
 
