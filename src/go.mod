@@ -5,7 +5,7 @@ go 1.20
 replace github.com/Danny-Dasilva/CycleTLS/cycletls => ../cycletls
 
 require (
-	github.com/Danny-Dasilva/CycleTLS/cycletls v0.0.0-20231122215647-963daacd9241 // indirect
+	github.com/Danny-Dasilva/CycleTLS/cycletls v0.0.0-20231128002513-4df48e6bd744 // indirect
 	github.com/Danny-Dasilva/fhttp v0.0.0-20231127034941-9494939f30fa // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/cloudflare/circl v1.3.6 // indirect
