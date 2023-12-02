@@ -21,9 +21,9 @@ func TestHttpClientBuilderWithProxyVisitingGoogle(t *testing.T) {
 	}
 
 	builder := cycletls.HttpClientBuilder{
-		Browser:              browser,
-		ClientHelloId:        &utls.HelloRandomized,
-		ProxyUrl:             "http://localhost:8888", // fiddler, watch if max tunnels correct
+		Browser:       browser,
+		ClientHelloId: &utls.HelloRandomized,
+		// ProxyUrl:             "http://localhost:8888", // fiddler, watch if max tunnels reused
 		MaxConnectionPerHost: 4,
 		MaxIdleConnections:   10,
 		Timeout:              time.Second * 5,
