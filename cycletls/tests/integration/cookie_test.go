@@ -36,9 +36,7 @@ func TestCookies(t *testing.T) {
 	}
 
 	eq := reflect.DeepEqual(resp.JSONBody(), data)
-	if eq {
-		log.Println("They're equal.")
-	} else {
+	if !eq {
 		t.Fatalf("Expected %s Got %s, expected cookies not found", data, resp.JSONBody())
 	}
 }
