@@ -71,13 +71,6 @@ jobs:
       - name: Install npm depencencies
         run: npm ci --unsafe-perm
 
-      - name: Tag Submodule
-        run: |
-          VERSION=$(npm version --json | jq -r '.cycletls')
-          SUBMODULE_VERSION="cycletls/v${VERSION}"
-          git tag $SUBMODULE_VERSION cycletls/
-          git push origin $SUBMODULE_VERSION
-
       - name: 🚀 publish
         run: npm publish --access public
         env:
@@ -85,3 +78,10 @@ jobs:
 
       - name: Push git
         run: git add * && git commit -a -m "[RELEASE] %s" && git push
+
+      - name: Tag Submodule
+        run: |
+          VERSION=$(npm version --json | jq -r '.cycletls')
+          SUBMODULE_VERSION="cycletls/v${VERSION}"
+          git tag $SUBMODULE_VERSION
+          git push origin $SUBMODULE_VERSION
