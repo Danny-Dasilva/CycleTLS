@@ -8,15 +8,29 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	http "github.com/Danny-Dasilva/fhttp"
-	http2 "github.com/Danny-Dasilva/fhttp/http2"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/url"
 	"strconv"
 	"sync"
+
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
+	"golang.org/x/net/proxy"
+	"h12.io/socks"
 )
+
+type SocksDialer struct {
+	socksDial func(string, string) (net.Conn, error)
+}
+
+func (d *SocksDialer) DialContext(_ context.Context, network, addr string) (net.Conn, error) {
+	return d.socksDial(network, addr)
+}
+
+func (d *SocksDialer) Dial(network, addr string) (net.Conn, error) {
+	return d.socksDial(network, addr)
+}
 
 // connectDialer allows to configure one-time use HTTP CONNECT client
 type connectDialer struct {
@@ -64,7 +78,7 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		if proxyURL.Port() == "" {
 			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "443")
 		}
-	case "socks5":
+	case "socks5", "socks5h":
 		var auth *proxy.Auth
 		if proxyURL.User != nil {
 			if proxyURL.User.Username() != "" {
@@ -73,7 +87,11 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 				auth = &proxy.Auth{User: username, Password: password}
 			}
 		}
-		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, nil)
+		var forward proxy.Dialer
+		if proxyURL.Scheme == "socks5h" {
+			forward = proxy.Direct
+		}
+		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, forward)
 		if err != nil {
 			return nil, fmt.Errorf("Error creating SOCKS5 proxy, reason %s", err)
 		}
@@ -82,6 +100,12 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		} else {
 			return nil, errors.New("failed type assertion to DialContext")
 		}
+		client.DefaultHeader.Set("User-Agent", UserAgent)
+		return client, nil
+	case "socks4":
+		var dialer *SocksDialer
+		dialer = &SocksDialer{socks.DialSocksProxy(socks.SOCKS4, proxyURL.Host)}
+		client.Dialer = dialer
 		client.DefaultHeader.Set("User-Agent", UserAgent)
 		return client, nil
 	case "":
@@ -121,7 +145,7 @@ type ContextKeyHeader struct{}
 // ctx.Value will be inspected for optional ContextKeyHeader{} key, with `http.Header` value,
 // which will be added to outgoing request headers, overriding any colliding c.DefaultHeader
 func (c *connectDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if c.ProxyURL.Scheme == "socks5" {
+	if c.ProxyURL.Scheme == "socks5" || c.ProxyURL.Scheme == "socks4" || c.ProxyURL.Scheme == "socks5h" {
 		return c.Dialer.DialContext(ctx, network, address)
 	}
 

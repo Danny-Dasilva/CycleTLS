@@ -6,7 +6,7 @@
 	<img src="docs/media/Banner.png" alt="CycleTLS"/>
 	<br>
 	
-Currently a WIP and in Active development. See the ![Projects](https://github.com/Danny-Dasilva/CycleTLS/projects/1) Tab for more info
+Accepting Community Support and PR's
 
 	
 	
@@ -29,7 +29,7 @@ If you have a API change or feature request feel free to open an [Issue](https:/
 
 - [High-performance](#-performance) Built-in goroutine pool used for handling asynchronous requests
 - Custom header ordering via [fhttp](https://github.com/useflyent/fhttp)
-- Proxy support
+- Proxy support | Socks4, Socks5, Socks5h
 - Ja3 Token configuration
 
 
@@ -54,7 +54,7 @@ Table of contents
 ## Dependencies
 
 ```
-node ^v14.0
+node ^v16.0
 golang ^v1.20x
 ```
 

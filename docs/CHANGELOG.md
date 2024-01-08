@@ -1,5 +1,15 @@
 # CycleTLS Changelog
 
+## 1.0.25 - (1-08-2023)
+### Release Highlights
+Support extension 65037 as well as socks5h and socks4 proxies
+
+### Enhancements
+- Support Socks4
+- [Support Socks5H](https://github.com/Danny-Dasilva/CycleTLS/issues/301)
+### Bug Fixes
+-  [Add support for Extension 65037](https://github.com/Danny-Dasilva/CycleTLS/issues/138)
+
 ## 1.0.24 - (11-27-2023)
 ### Release Highlights
 Small bugfixes and ReadMe updates

@@ -320,9 +320,8 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 				utls.PSSWithSHA512,
 				utls.PKCS1WithSHA256,
 				utls.PKCS1WithSHA384,
-				utls.PKCS1WithSHA512,
-				utls.ECDSAWithSHA1,
-				utls.PKCS1WithSHA1,
+				utls.SignatureScheme(0x0806),
+				utls.SignatureScheme(0x0601),
 			},
 		}, // signature_algorithms_cert
 		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
@@ -342,7 +341,7 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},
-		"65037": &utls.GenericExtension{Id: 65037},
+		"65037": utls.BoringGREASEECH(),
 	}
 	return
 
