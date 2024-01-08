@@ -36,7 +36,7 @@ jobs:
       - name: Start SOCKS4 Proxy (only on ubuntu)
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          docker run -d -p 1088:1080 your/socks4-proxy-image
+          docker run -d -p 1088:1080 wzshiming/socks4
 
       - name: Integration Tests
         working-directory: ./cycletls
