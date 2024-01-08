@@ -29,7 +29,7 @@ If you have a API change or feature request feel free to open an [Issue](https:/
 
 - [High-performance](#-performance) Built-in goroutine pool used for handling asynchronous requests
 - Custom header ordering via [fhttp](https://github.com/useflyent/fhttp)
-- Proxy support
+- Proxy support | Socks4, Socks5, Socks5h
 - Ja3 Token configuration
 
 
