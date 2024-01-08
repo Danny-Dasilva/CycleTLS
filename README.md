@@ -54,7 +54,7 @@ Table of contents
 ## Dependencies
 
 ```
-node ^v14.0
+node ^v16.0
 golang ^v1.20x
 ```
 

@@ -78,31 +78,6 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		if proxyURL.Port() == "" {
 			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "443")
 		}
-	// case "socks5h":
-	// 	var auth *Auth
-	// 	if proxyURL.User != nil {
-	// 		if proxyURL.User.Username() != "" {
-	// 			username := proxyURL.User.Username()
-	// 			password, _ := proxyURL.User.Password()
-	// 			auth = &Auth{User: username, Password: password}
-	// 		}
-	// 	}
-	// 	var forward proxy.Dialer
-	// 	if proxyURL.Scheme == "socks5h" {
-	// 		forward = proxy.Direct
-	// 	}
-	// 	dialSocksProxy, err := SOCKS5("tcp", proxyURL.Host, auth, forward)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("Error creating SOCKS5 proxy, reason %s", err)
-	// 	}
-	// 	log.Println("aaaaa")
-	// 	if contextDialer, ok := dialSocksProxy.(proxy.ContextDialer); ok {
-	// 		client.Dialer = contextDialer
-	// 	} else {
-	// 		return nil, errors.New("failed type assertion to DialContext")
-	// 	}
-	// 	client.DefaultHeader.Set("User-Agent", UserAgent)
-	// 	return client, nil
 	case "socks5", "socks5h":
 		var auth *proxy.Auth
 		if proxyURL.User != nil {
