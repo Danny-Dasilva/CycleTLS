@@ -46,7 +46,7 @@
   "devDependencies": {
     "@types/jest": "^27.4.1",
     "@types/ws": "^8.5.3",
-    "@typescript-eslint/eslint-plugin": "^5.19.0",
+    "@typescript-eslint/eslint-plugin": "^6.18.1",
     "@typescript-eslint/parser": "^5.19.0",
     "concurrently": "^7.2.2",
     "cross-env": "^7.0.3",
