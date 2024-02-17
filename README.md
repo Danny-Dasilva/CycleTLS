@@ -1048,6 +1048,7 @@ Additional file type support is planned.
 Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
 </details>
 
+<details>
 
 ### How do I set/force HTTP1
 
