@@ -241,6 +241,14 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (response 
 
 	options.URL = URL
 	options.Method = Method
+	 // Set default values if not provided
+	 if options.Ja3 == "" {
+        options.Ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,18-35-65281-45-17513-27-65037-16-10-11-5-13-0-43-23-51,29-23-24,0"
+    }
+    if options.UserAgent == "" {
+		// Mac OS Chrome 121
+        options.UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    }
 	opt := cycleTLSRequest{"cycleTLSRequest", options}
 
 	res := processRequest(opt)
