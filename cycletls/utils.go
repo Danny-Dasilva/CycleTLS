@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"io"
-	"errors"
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
 )
@@ -173,15 +172,42 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		}
 	}
 
-
+	// custom tls extensions
+	// if tlsExtensions != nil {
+	// 	if ext.SupportedSignatureAlgorithms != nil {
+	// 		extMap["13"] = ext.SupportedSignatureAlgorithms
+	// 	}
+	// 	if ext.CertCompressionAlgo != nil {
+	// 		extMap["27"] = ext.CertCompressionAlgo
+	// 	}
+	// 	if ext.RecordSizeLimit != nil {
+	// 		extMap["28"] = ext.RecordSizeLimit
+	// 	}
+	// 	if ext.DelegatedCredentials != nil {
+	// 		extMap["34"] = ext.DelegatedCredentials
+	// 	}
+	// 	if ext.SupportedVersions != nil {
+	// 		extMap["43"] = ext.SupportedVersions
+	// 	}
+	// 	if ext.PSKKeyExchangeModes != nil {
+	// 		extMap["45"] = ext.PSKKeyExchangeModes
+	// 	}
+	// 	if ext.SignatureAlgorithmsCert != nil {
+	// 		extMap["50"] = ext.SignatureAlgorithmsCert
+	// 	}
+	// 	if ext.KeyShareCurves != nil {
+	// 		if strings.Index(strings.Split(ja3, ",")[2], "-41") == -1 {
+	// 			extMap["51"] = ext.KeyShareCurves
+	// 		}
+	// 	}
+	// }
 
 	// set extension 43
-	ver, err := strconv.ParseUint(version, 10, 16)
+	vid64, err := strconv.ParseUint(version, 10, 16)
 	if err != nil {
 		return nil, err
 	}
-	tlsMaxVersion, tlsMinVersion, tlsExtension, err := createTlsVersion(uint16(ver))
-	extMap["43"] = tlsExtension
+	vid := uint16(vid64)
 
 	// build extenions list
 	var exts []utls.TLSExtension
@@ -217,53 +243,17 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		}
 		suites = append(suites, uint16(cid))
 	}
+	_ = vid
 	return &utls.ClientHelloSpec{
-		TLSVersMin:         tlsMinVersion,
-		TLSVersMax:         tlsMaxVersion,
+		// TLSVersMin:         vid,
+		// TLSVersMax:         vid,
 		CipherSuites:       suites,
 		CompressionMethods: []byte{0},
 		Extensions:         exts,
 		GetSessionID:       sha256.Sum256,
 	}, nil
 }
-// TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
-func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
-	switch ver {
-	case utls.VersionTLS13:
-		tlsMaxVersion = utls.VersionTLS13
-		tlsMinVersion = utls.VersionTLS12
-		tlsSuppor = &utls.SupportedVersionsExtension{
-			Versions: []uint16{
-				utls.GREASE_PLACEHOLDER,
-				utls.VersionTLS13,
-				utls.VersionTLS12,
-			},
-		}
-	case utls.VersionTLS12:
-		tlsMaxVersion = utls.VersionTLS12
-		tlsMinVersion = utls.VersionTLS11
-		tlsSuppor = &utls.SupportedVersionsExtension{
-			Versions: []uint16{
-				utls.GREASE_PLACEHOLDER,
-				utls.VersionTLS12,
-				utls.VersionTLS11,
-			},
-		}
-	case utls.VersionTLS11:
-		tlsMaxVersion = utls.VersionTLS11
-		tlsMinVersion = utls.VersionTLS10
-		tlsSuppor = &utls.SupportedVersionsExtension{
-			Versions: []uint16{
-				utls.GREASE_PLACEHOLDER,
-				utls.VersionTLS11,
-				utls.VersionTLS10,
-			},
-		}
-	default:
-		err = errors.New("ja3Str tls version error")
-	}
-	return
-}
+
 func genMap() (extMap map[string]utls.TLSExtension) {
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
@@ -311,10 +301,10 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		},
 		"35": &utls.SessionTicketExtension{},
 		"41": &utls.UtlsPreSharedKeyExtension{}, //FIXME pre_shared_key
-		// "43": &utls.SupportedVersionsExtension{Versions: []uint16{ this gets set above
-		// 	utls.VersionTLS13,
-		// 	utls.VersionTLS12,
-		// }},
+		"43": &utls.SupportedVersionsExtension{Versions: []uint16{
+			utls.VersionTLS13,
+			utls.VersionTLS12,
+		}},
 		"44": &utls.CookieExtension{},
 		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 			utls.PskModeDHE,

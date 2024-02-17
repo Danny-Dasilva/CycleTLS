@@ -150,7 +150,8 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "gif")
 	}
 
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if runtime.GOOS != "darwin" {
+
 		//avif
 		resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
 		if resp.Status != 200 {
