@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-
 	"strings"
 	"sync"
 
@@ -20,8 +19,9 @@ var errProtocolNegotiated = errors.New("protocol negotiated")
 type roundTripper struct {
 	sync.Mutex
 	// fix typing
-	JA3       string
-	UserAgent string
+	JA3           string
+	UserAgent     string
+	ClientHelloId *utls.ClientHelloID
 
 	InsecureSkipVerify bool
 	Cookies            []Cookie
@@ -91,42 +91,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if conn := rt.cachedConnections[addr]; conn != nil {
 		return conn, nil
 	}
-	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
+
+	conn, err := rt.DoDialTlsContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	var host string
-	if host, _, err = net.SplitHostPort(addr); err != nil {
-		host = addr
-	}
-	//////////////////
-
-	spec, err := StringToSpec(rt.JA3, rt.UserAgent, rt.forceHTTP1)
-	if err != nil {
-		return nil, err
-	}
-
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, OmitEmptyPsk: true, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
-		// MaxVersion:         tls.VersionTLS13,
-
-		utls.HelloCustom)
-
-	if err := conn.ApplyPreset(spec); err != nil {
-		return nil, err
-	}
-
-	if err = conn.Handshake(); err != nil {
-		_ = conn.Close()
-
-		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
-			//fix this
-			return nil, fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
-		}
-		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
-	}
-
-	if rt.cachedTransports[addr] != nil {
+	if rt.cachedTransports[addr] != nil { // Why this code here, since you already do dial tls ?
 		return conn, nil
 	}
 
@@ -135,7 +106,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	switch conn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
-
 		t2 := http2.Transport{
 			DialTLS:     rt.dialTLSHTTP2,
 			PushHandler: &http2.DefaultPushHandler{},
@@ -153,6 +123,38 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	rt.cachedConnections[addr] = conn
 
 	return nil, errProtocolNegotiated
+}
+
+func (rt *roundTripper) DoDialTlsContext(ctx context.Context, network, addr string) (conn *utls.UConn, err error) {
+
+	var host string
+	if host, _, err = net.SplitHostPort(addr); err != nil {
+		host = addr
+	}
+
+	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var spec *utls.ClientHelloSpec
+	if len(rt.JA3) > 0 {
+		spec, err = StringToSpec(rt.JA3, rt.UserAgent, rt.forceHTTP1)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	builder := &tlsConnectionBuilder{
+		rawConn:            rawConn,
+		clientHelloSpec:    spec,
+		clientHelloId:      rt.ClientHelloId,
+		host:               host,
+		insecureSkipVerify: rt.InsecureSkipVerify,
+	}
+	builder.buildTlsConnection()
+
+	return builder.tlsConn, builder.err
 }
 
 func (rt *roundTripper) dialTLSHTTP2(network, addr string, _ *utls.Config) (net.Conn, error) {
@@ -199,4 +201,84 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		InsecureSkipVerify: browser.InsecureSkipVerify,
 		forceHTTP1:         browser.forceHTTP1,
 	}
+}
+
+type tlsConnectionBuilder struct {
+	rawConn net.Conn
+
+	clientHelloSpec *utls.ClientHelloSpec
+	clientHelloId   *utls.ClientHelloID
+
+	host               string
+	insecureSkipVerify bool
+
+	tlsConn *utls.UConn
+	err     error
+}
+
+func (p *tlsConnectionBuilder) buildTlsConnection() {
+
+	if p.clientHelloSpec == nil && p.clientHelloId == nil {
+		p.err = errors.New("either clientHelloSpec or clientHelloId should be specified")
+	}
+
+	if p.clientHelloSpec != nil {
+		p.establishWithClientHelloSpec()
+	} else {
+		p.establishWithClientHelloId()
+	}
+
+	p.performHandshake()
+}
+
+func (p *tlsConnectionBuilder) establishWithClientHelloId() {
+
+	if p.err != nil {
+		return
+	}
+
+	p.tlsConn = utls.UClient(p.rawConn,
+		&utls.Config{ServerName: p.host, InsecureSkipVerify: p.insecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
+		// MaxVersion:         tls.VersionTLS13,
+		*p.clientHelloId)
+
+}
+
+func (p *tlsConnectionBuilder) establishWithClientHelloSpec() {
+	if p.err != nil {
+		return
+	}
+
+	tlsConn := utls.UClient(p.rawConn,
+		&utls.Config{ServerName: p.host, InsecureSkipVerify: p.insecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
+		// MaxVersion:         tls.VersionTLS13,
+		utls.HelloCustom)
+
+	if err := tlsConn.ApplyPreset(p.clientHelloSpec); err != nil {
+		_ = tlsConn.Close()
+		p.err = err
+		return
+	}
+
+	p.tlsConn = tlsConn
+
+}
+
+func (p *tlsConnectionBuilder) performHandshake() {
+	if p.err != nil {
+		return
+	}
+
+	if err := p.tlsConn.Handshake(); err != nil {
+		_ = p.tlsConn.Close()
+		p.tlsConn = nil
+
+		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
+			//fix this
+			p.err = fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
+		}
+
+		p.err = fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
+	}
+
 }
