@@ -17,7 +17,6 @@ require (
 require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
-	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/quic-go/quic-go v0.41.0 // indirect
 	golang.org/x/crypto v0.19.0 // indirect

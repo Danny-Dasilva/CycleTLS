@@ -1,8 +1,8 @@
 # CycleTLS Changelog
 
-## 1.0.25 - (1-08-2023)
+## 1.0.26 - (2-16-2024)
 ### Release Highlights
-Support extension 65037 as well as socks5h and socks4 proxies
+Fix illegal parameter error and location url error
 
 ### Enhancements
 - [Default JA3 and UA](https://github.com/Danny-Dasilva/CycleTLS/issues/322)
@@ -12,7 +12,7 @@ Support extension 65037 as well as socks5h and socks4 proxies
 - Fix error: remote error: tls: illegal parameter based on incorrect TLS version
 
 
-## 1.0.25 - (1-08-2023)
+## 1.0.25 - (1-08-2024)
 ### Release Highlights
 Support extension 65037 as well as socks5h and socks4 proxies
 
