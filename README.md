@@ -55,7 +55,7 @@ Table of contents
 
 ```
 node ^v16.0
-golang ^v1.20x
+golang ^v1.21x
 ```
 
 ## Installation
@@ -1048,9 +1048,10 @@ Additional file type support is planned.
 Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
 </details>
 
-<details>
 
 ### How do I set/force HTTP1
+
+<details>
 
 In golang set `ForceHTTP1` in Options
 
