@@ -480,10 +480,7 @@ const initCycleTLS = async (
         ): Promise<any> => {
           return new Promise((resolveRequest, rejectRequest) => {
             const requestId = `${url}#${Date.now()}-${Math.floor(1000 * Math.random())}`;
-<<<<<<< HEAD
 
-=======
->>>>>>> 75a27b5 (Add an async dispatcher.)
             //set default options
             options ??= {}
 
