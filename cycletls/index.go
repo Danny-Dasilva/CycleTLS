@@ -404,23 +404,14 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 	}
 }
 
-func writeSocket(respChan chan Response, c *websocket.Conn) {
-	for {
-		select {
-		case r := <-respChan:
-			message, err := json.Marshal(r)
-			if err != nil {
-				log.Print("Marshal Json Failed" + err.Error())
-				continue
-			}
-			err = c.WriteMessage(websocket.TextMessage, message)
-			if err != nil {
-				log.Print("Socket WriteMessage Failed" + err.Error())
-				continue
-			}
+func writeSocket(chanWrite chan []byte, wsSocket *websocket.Conn) {
+	for buf := range chanWrite {
+		err := wsSocket.WriteMessage(websocket.BinaryMessage, buf)
 
+		if err != nil {
+			log.Print("Socket WriteMessage Failed" + err.Error())
+			continue
 		}
-
 	}
 }
 
