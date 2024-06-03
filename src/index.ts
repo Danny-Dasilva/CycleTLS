@@ -88,10 +88,9 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
   } else {
     if (child) {
       // For Linux/Darwin OS
-      await new Promise((resolve, reject) => {
-        process.kill(-child.pid);
-        if (exit) process.exit();
-      });
+      process.kill(-child.pid);
+      if (exit)
+        process.exit();
     }
   }
 };
