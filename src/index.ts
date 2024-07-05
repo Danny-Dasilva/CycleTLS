@@ -70,29 +70,8 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
   if (message) console.log(message);
   exit = exit ?? true;
 
-  if (process.platform == "win32") {
-    if (child) {
-      await new Promise((resolve, reject) => {
-        exec(
-          "taskkill /pid " + child.pid + " /T /F",
-          (error: any, stdout: any, stderr: any) => {
-            if (error) {
-              console.warn(error);
-            }
-            resolve(stdout);
-          }
-        );
-      });
-    }
-  } else {
-    if (child) {
-      // For Linux/Darwin OS
-      await new Promise((resolve, reject) => {
-        process.kill(-child.pid);
-        if (exit) process.exit();
-      });
-    }
-  }
+  child?.kill();
+  if (exit) process.exit();
 };
 process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
