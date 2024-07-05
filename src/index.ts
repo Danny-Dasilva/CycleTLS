@@ -80,7 +80,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
   const execPath = filePath ?? path.join(__dirname, fileName);
   child = spawn(execPath, {
     env: { WS_PORT: port.toString() },
-    shell: true,
+    shell: false,
     windowsHide: true,
     detached: process.platform !== "win32"
   });
