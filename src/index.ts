@@ -70,29 +70,8 @@ const cleanExit = async (message?: string | Error, exit?: boolean) => {
   if (message) console.log(message);
   exit = exit ?? true;
 
-  if (process.platform == "win32") {
-    if (child) {
-      await new Promise((resolve, reject) => {
-        exec(
-          "taskkill /pid " + child.pid + " /T /F",
-          (error: any, stdout: any, stderr: any) => {
-            if (error) {
-              console.warn(error);
-            }
-            resolve(stdout);
-          }
-        );
-      });
-    }
-  } else {
-    if (child) {
-      // For Linux/Darwin OS
-      await new Promise((resolve, reject) => {
-        process.kill(-child.pid);
-        if (exit) process.exit();
-      });
-    }
-  }
+  child?.kill();
+  if (exit) process.exit();
 };
 process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
@@ -101,7 +80,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
   const execPath = filePath ? `"${filePath}"` : `"${path.join(__dirname, fileName)}"`;
   child = spawn(execPath, {
     env: { WS_PORT: port.toString() },
-    shell: true,
+    shell: false,
     windowsHide: true,
     detached: process.platform !== "win32"
   });
@@ -302,34 +281,15 @@ class Golang extends EventEmitter {
   }
 
   exit(): Promise<undefined> {
-    if (process.platform == "win32") {
-      return new Promise((resolve, reject) => {
-        this.server.close();
-        if (this.host) {
-          exec(
-            "taskkill /pid " + child.pid + " /T /F",
-            (error: any, stdout: any, stderr: any) => {
-              if (error) {
-                console.warn(error);
-              }
-              resolve(stdout ? stdout : stderr);
-            }
-          );
-        } else {
-          resolve(null);
-        }
-      });
-    } else {
-      return new Promise((resolve, reject) => {
-        this.server.close();
-        if (this.host) {
-          process.kill(-child.pid);
-          resolve(null);
-        } else {
-          resolve(null);
-        }
-      });
-    }
+    return new Promise((resolve, reject) => {
+      this.server.close();
+      if (this.host) {
+        child?.kill();
+        resolve(null);
+      } else {
+        resolve(null);
+      }
+    });
   }
 }
 export interface CycleTLSClient {
