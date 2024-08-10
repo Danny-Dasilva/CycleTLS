@@ -64,7 +64,7 @@ describe("CycleTLS Multipart Form Data Test", () => {
 
     expect(responseBody.files).toBeDefined();
     expect(responseBody.files.file).toContain(
-      "./cycletls"
+      "imports locally per go.mod"
     );
   });
 });
