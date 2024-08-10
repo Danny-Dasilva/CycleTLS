@@ -49,9 +49,10 @@ body:
       description: What Node version are you using? If "other", please provide more details in the "Description" section above.
       multiple: false
       options:
-        - Node 14.x
-        - Node 15.x
         - Node 16.x
+        - Node 18.x
+        - Node 20.x
+        - Node 22.x
         - Other
   - type: dropdown
     id: Go-Version

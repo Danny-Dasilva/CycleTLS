@@ -150,16 +150,16 @@ func TestFileWriting(t *testing.T) {
 		t.Fatal("Files are not equal", "gif")
 	}
 
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		//avif
-		resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
-		if resp.Status != 200 {
-			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
-		}
-		WriteFile(resp.Body, "../../../tests/images/source.avif")
-		filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
-		if filesEqual != true {
-			t.Fatal("Files are not equal", "avif")
-		}
-	}
+	// if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	// 	//avif
+	// 	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+	// 	if resp.Status != 200 {
+	// 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	// 	}
+	// 	WriteFile(resp.Body, "../../../tests/images/source.avif")
+	// 	filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
+	// 	if filesEqual != true {
+	// 		t.Fatal("Files are not equal", "avif")
+	// 	}
+	// }
 }

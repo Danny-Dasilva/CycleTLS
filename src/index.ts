@@ -86,9 +86,10 @@ process.on("SIGTERM", () => cleanExit());
 
 const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: string) => {
   const execPath = filePath ? `"${filePath}"` : `"${path.join(__dirname, fileName)}"`;
+  const shell = process.platform === "win32" ? false : true;
   child = spawn(execPath, {
     env: { WS_PORT: port.toString() },
-    shell: false,
+    shell: shell,
     windowsHide: true,
     detached: process.platform !== "win32"
   });
