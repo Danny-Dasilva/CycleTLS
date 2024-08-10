@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -39,42 +38,29 @@ func parseUserAgent(userAgent string) UserAgent {
 }
 
 // DecompressBody unzips compressed data
-func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody string) {
+func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody []byte) {
 	if len(encoding) > 0 {
 		if encoding[0] == "gzip" {
 			unz, err := gUnzipData(Body)
 			if err != nil {
-				return string(Body)
+				return Body
 			}
-			return string(unz)
+			return unz
 		} else if encoding[0] == "deflate" {
 			unz, err := enflateData(Body)
 			if err != nil {
-				return string(Body)
+				return Body
 			}
-			return string(unz)
+			return unz
 		} else if encoding[0] == "br" {
 			unz, err := unBrotliData(Body)
 			if err != nil {
-				return string(Body)
+				return Body
 			}
-			return string(unz)
-		}
-	} else if len(content) > 0 {
-		decodingTypes := map[string]bool{
-			"image/svg+xml":   true,
-			"image/webp":      true,
-			"image/jpeg":      true,
-			"image/png":       true,
-			"image/gif":       true,
-			"image/avif":      true,
-			"application/pdf": true,
-		}
-		if decodingTypes[content[0]] {
-			return base64.StdEncoding.EncodeToString(Body)
+			return unz
 		}
 	}
-	parsedBody = string(Body)
+
 	return parsedBody
 
 }

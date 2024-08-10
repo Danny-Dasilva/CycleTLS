@@ -23,6 +23,6 @@ func main() {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	log.Println(response.Status,)
+	log.Println(response.Status)
 
 }
