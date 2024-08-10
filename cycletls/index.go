@@ -130,12 +130,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 
 	}
-	headeOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
+	headerOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
 		http.HeaderOrderKey:  headerorderkey,
-		http.PHeaderOrderKey: headeOrder,
+		http.PHeaderOrderKey: headerOrder,
 	}
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
