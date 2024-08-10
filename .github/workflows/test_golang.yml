@@ -36,7 +36,7 @@ jobs:
       - name: Start SOCKS4 Proxy (only on ubuntu)
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          docker run -d -p 9050:9050 clue/psocksd
+          docker run -d -p 9050:9050 dreamacro/clash
 
       - name: Integration Tests
         working-directory: ./cycletls
