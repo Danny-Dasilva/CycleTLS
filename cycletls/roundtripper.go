@@ -2,10 +2,10 @@ package cycletls
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
-
 	"strings"
 	"sync"
 
@@ -27,6 +27,7 @@ type roundTripper struct {
 	Cookies            []Cookie
 	cachedConnections  map[string]net.Conn
 	cachedTransports   map[string]http.RoundTripper
+	Certificates       []tls.Certificate
 
 	dialer     proxy.ContextDialer
 	forceHTTP1 bool
@@ -40,7 +41,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Value:      properties.Value,
 			Path:       properties.Path,
 			Domain:     properties.Domain,
-			Expires:    properties.JSONExpires.Time, //TODO: scuffed af
+			Expires:    properties.JSONExpires.Time, // TODO: scuffed af
 			RawExpires: properties.RawExpires,
 			MaxAge:     properties.MaxAge,
 			HttpOnly:   properties.HTTPOnly,
@@ -107,7 +108,22 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		return nil, err
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, OmitEmptyPsk: true, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
+	// Convert tls.Certificate to utls.Certificate
+	utlsCerts := make([]utls.Certificate, len(rt.Certificates))
+	for i, cert := range rt.Certificates {
+		utlsCerts[i] = utls.Certificate{
+			Certificate: cert.Certificate,
+			PrivateKey:  cert.PrivateKey,
+			Leaf:        cert.Leaf,
+		}
+	}
+
+	conn := utls.UClient(rawConn, &utls.Config{
+		ServerName:         host,
+		OmitEmptyPsk:       true,
+		InsecureSkipVerify: rt.InsecureSkipVerify,
+		Certificates:       utlsCerts,
+	}, // MinVersion:         tls.VersionTLS10,
 		// MaxVersion:         tls.VersionTLS13,
 
 		utls.HelloCustom)
@@ -120,7 +136,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		_ = conn.Close()
 
 		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
-			//fix this
+			// fix this
 			return nil, fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
 		}
 		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
@@ -176,7 +192,6 @@ func (rt *roundTripper) CloseIdleConnections() {
 
 func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
 	if len(dialer) > 0 {
-
 		return &roundTripper{
 			dialer:             dialer[0],
 			JA3:                browser.JA3,
@@ -185,6 +200,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 			cachedTransports:   make(map[string]http.RoundTripper),
 			cachedConnections:  make(map[string]net.Conn),
 			InsecureSkipVerify: browser.InsecureSkipVerify,
+			Certificates:       browser.Certificates,
 			forceHTTP1:         browser.forceHTTP1,
 		}
 	}
@@ -197,6 +213,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		cachedTransports:   make(map[string]http.RoundTripper),
 		cachedConnections:  make(map[string]net.Conn),
 		InsecureSkipVerify: browser.InsecureSkipVerify,
+		Certificates:       browser.Certificates,
 		forceHTTP1:         browser.forceHTTP1,
 	}
 }
