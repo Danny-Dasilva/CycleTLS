@@ -7,10 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
 	"strconv"
 	"strings"
-	"io"
-	"errors"
+
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
 )
@@ -113,7 +114,7 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 	extMap := genMap()
 	tokens := strings.Split(ja3, ",")
 
-	version := tokens[0]
+	version := "772"
 	ciphers := strings.Split(tokens[1], "-")
 	extensions := strings.Split(tokens[2], "-")
 	curves := strings.Split(tokens[3], "-")
@@ -134,11 +135,11 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 				supportedVersions.Versions = append([]uint16{utls.GREASE_PLACEHOLDER}, supportedVersions.Versions...)
 			}
 		}
-		if keyShareExt, ok := extMap["51"]; ok {
-			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
-				keyShare.KeyShares = append([]utls.KeyShare{{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}}}, keyShare.KeyShares...)
-			}
-		}
+		//if keyShareExt, ok := extMap["51"]; ok {
+		//	if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+		//		keyShare.KeyShares = append([]utls.KeyShare{{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}}}, keyShare.KeyShares...)
+		//	}
+		//}
 	} else {
 		if keyShareExt, ok := extMap["51"]; ok {
 			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
@@ -172,8 +173,6 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 			AlpnProtocols: []string{"http/1.1"},
 		}
 	}
-
-
 
 	// set extension 43
 	ver, err := strconv.ParseUint(version, 10, 16)
@@ -226,31 +225,36 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		GetSessionID:       sha256.Sum256,
 	}, nil
 }
+
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
 func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
 	switch ver {
 	case utls.VersionTLS13:
 		tlsMaxVersion = utls.VersionTLS13
-		tlsMinVersion = utls.VersionTLS12
+		tlsMinVersion = utls.VersionTLS10
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
 				utls.GREASE_PLACEHOLDER,
 				utls.VersionTLS13,
 				utls.VersionTLS12,
+				utls.VersionTLS11,
+				utls.VersionTLS10,
 			},
 		}
 	case utls.VersionTLS12:
-		tlsMaxVersion = utls.VersionTLS12
-		tlsMinVersion = utls.VersionTLS11
+		tlsMaxVersion = utls.VersionTLS13
+		tlsMinVersion = utls.VersionTLS10
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
 				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS13,
 				utls.VersionTLS12,
 				utls.VersionTLS11,
+				utls.VersionTLS10,
 			},
 		}
 	case utls.VersionTLS11:
-		tlsMaxVersion = utls.VersionTLS11
+		tlsMaxVersion = utls.VersionTLS13
 		tlsMinVersion = utls.VersionTLS10
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
@@ -264,34 +268,48 @@ func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, t
 	}
 	return
 }
+
 func genMap() (extMap map[string]utls.TLSExtension) {
+	customPadding := func(clientHelloUnpaddedLen int) (paddingLen int, willPad bool) {
+		return 197, true
+	}
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
 		"5": &utls.StatusRequestExtension{},
 		// These are applied later
-		// "10": &tls.SupportedCurvesExtension{...}
-		// "11": &tls.SupportedPointsExtension{...}
+		"10": &utls.SupportedCurvesExtension{
+			Curves: []utls.CurveID{
+				utls.X25519,
+				utls.CurveP256,
+				utls.CurveP384,
+				utls.CurveP521,
+			},
+		},
+		"11": &utls.SupportedPointsExtension{
+			SupportedPoints: []byte{0}, // uncompressed
+		},
 		"13": &utls.SignatureAlgorithmsExtension{
 			SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				utls.ECDSAWithP256AndSHA256,
-				utls.ECDSAWithP384AndSHA384,
-				utls.ECDSAWithP521AndSHA512,
 				utls.PSSWithSHA256,
-				utls.PSSWithSHA384,
-				utls.PSSWithSHA512,
 				utls.PKCS1WithSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.PSSWithSHA384,
 				utls.PKCS1WithSHA384,
+				utls.PSSWithSHA512,
 				utls.PKCS1WithSHA512,
-				utls.ECDSAWithSHA1,
 				utls.PKCS1WithSHA1,
 			},
+		},
+		"15": &utls.ALPNExtension{
+			AlpnProtocols: []string{"h2", "http/1.1"},
 		},
 		"16": &utls.ALPNExtension{
 			AlpnProtocols: []string{"h2", "http/1.1"},
 		},
 		"17": &utls.GenericExtension{Id: 17}, // status_request_v2
 		"18": &utls.SCTExtension{},
-		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
+		"21": &utls.UtlsPaddingExtension{GetPaddingLen: customPadding},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
 		"23": &utls.ExtendedMasterSecretExtension{},
 		"24": &utls.FakeTokenBindingExtension{},
@@ -323,13 +341,14 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 		"50": &utls.SignatureAlgorithmsCertExtension{
 			SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				utls.ECDSAWithP256AndSHA256,
-				utls.ECDSAWithP384AndSHA384,
-				utls.ECDSAWithP521AndSHA512,
 				utls.PSSWithSHA256,
-				utls.PSSWithSHA384,
-				utls.PSSWithSHA512,
 				utls.PKCS1WithSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.PSSWithSHA384,
 				utls.PKCS1WithSHA384,
+				utls.PSSWithSHA512,
+				utls.PKCS1WithSHA512,
+				utls.PKCS1WithSHA1,
 				utls.SignatureScheme(0x0806),
 				utls.SignatureScheme(0x0601),
 			},
