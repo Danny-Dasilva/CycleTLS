@@ -21,7 +21,7 @@ var disabledRedirect = func(req *http.Request, via []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
+func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool, checkRedirect func(req *http.Request, via []*http.Request) error) http.Client {
 	//if timeout is not set in call default to 15
 	if timeout == 0 {
 		timeout = 15
@@ -33,6 +33,8 @@ func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, dis
 	//if disableRedirect is set to true httpclient will not redirect
 	if disableRedirect {
 		client.CheckRedirect = disabledRedirect
+	} else {
+		client.CheckRedirect = checkRedirect
 	}
 	return client
 }
@@ -72,7 +74,7 @@ func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDial
 }
 
 // newClient creates a new http client
-func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
+func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, checkRedirect func(req *http.Request, via []*http.Request) error, proxyURL ...string) (http.Client, error) {
 	var dialer proxy.ContextDialer
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
 		var err error
@@ -87,5 +89,5 @@ func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent str
 		dialer = proxy.Direct
 	}
 
-	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
+	return clientBuilder(browser, dialer, timeout, disableRedirect, checkRedirect), nil
 }
