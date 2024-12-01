@@ -85,28 +85,67 @@ process.on("SIGINT", () => cleanExit());
 process.on("SIGTERM", () => cleanExit());
 
 const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: string) => {
-  const execPath = filePath ? `"${filePath}"` : `"${path.join(__dirname, fileName)}"`;
-  const shell = process.platform === "win32" ? false : true;
-  child = spawn(execPath, {
+  try {
+     // Determine the executable path
+  let execPath: string;
+    
+  if (filePath) {
+    // If filePath is provided, use it directly
+    execPath = filePath;
+  } else {
+    // Otherwise, construct path relative to __dirname
+    execPath = path.join(__dirname, fileName);
+  }
+
+  // Remove quotes as they're not needed and can cause issues on Windows
+  execPath = execPath.replace(/"/g, '');
+
+  // Verify file exists before attempting to spawn
+  if (!require('fs').existsSync(execPath)) {
+    throw new Error(`Executable not found at path: ${execPath}`);
+  }
+
+  const spawnOptions = {
     env: { WS_PORT: port.toString() },
-    shell: shell,
+    shell: process.platform !== "win32", // false for Windows, true for others
     windowsHide: true,
-    detached: process.platform !== "win32"
-  });
+    detached: process.platform !== "win32",
+    // Add cwd option to ensure proper working directory
+    cwd: path.dirname(execPath)
+  };
+  child = spawn(execPath, [], spawnOptions);
   child.stderr.on("data", (stderr) => {
-    if (stderr.toString().includes("Request_Id_On_The_Left")) {
-      const splitRequestIdAndError = stderr.toString().split("Request_Id_On_The_Left");
-      const [requestId, error] = splitRequestIdAndError;
-      //TODO Correctly parse logging messages
-      // this.emit(requestId, { error: new Error(error) });
+    const errorMessage = stderr.toString();
+    if (errorMessage.includes("Request_Id_On_The_Left")) {
+      const [requestId, error] = errorMessage.split("Request_Id_On_The_Left");
+      // Handle request-specific error
     } else {
-      debug
-        ? cleanExit(new Error(stderr))
-        //TODO add Correct error logging url request/ response/
-        : cleanExit(`Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${stderr}`, false).then(() => handleSpawn(debug, fileName, port));
+      if (debug) {
+        cleanExit(new Error(errorMessage));
+      } else {
+        cleanExit(
+          `Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`,
+          false
+        ).then(() => handleSpawn(debug, fileName, port));
+      }
     }
   });
+
+  // Add error handler for spawn errors
+  child.on('error', (error: any) => {
+    console.error(`Failed to start subprocess: ${error.message}`);
+    if (error.code === 'ENOENT') {
+      console.error(`Executable not found at: ${execPath}`);
+      console.error('Please ensure the executable exists and has correct permissions');
+    }
+    throw error;
+  });
+
+} catch (error) {
+  console.error(`Error in handleSpawn: ${error.message}`);
+  throw error;
 }
+};
 
 // Function to convert a stream into a string
 async function streamToString(stream: Readable): Promise<string> {
@@ -335,7 +374,7 @@ const initCycleTLS = async (
 
     if (!port) port = 9119;
     if (!debug) debug = false;
-    if (!timeout) timeout = 4000;
+    if (!timeout) timeout = 20000;
 
     const instance = new Golang(port, debug, timeout, executablePath);
     instance.on("ready", () => {
