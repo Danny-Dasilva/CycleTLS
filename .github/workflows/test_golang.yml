@@ -28,15 +28,10 @@ jobs:
         working-directory: ./cycletls
         run: go test --race -v ./...
 
-      - name: Start SOCKS5 Proxy (only on ubuntu)
+      - name: Start SOCKS Proxy (only on ubuntu)
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          docker run -d -p 1087:1080 serjs/go-socks5-proxy
-
-      - name: Start SOCKS4 Proxy (only on ubuntu)
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          docker run -d -p 9050:9050 clue/psocksd
+          docker run -d -p 9050:9050 dperson/torproxy
 
       - name: Integration Tests
         working-directory: ./cycletls

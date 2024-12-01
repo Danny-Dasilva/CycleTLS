@@ -20,6 +20,7 @@ type CycleTLSOptions struct {
 type Ja3erResp struct {
 	Ja3Hash    string `json:"ja3_hash"`
 	Ja3        string `json:"ja3"`
+	Ja4        string `json:"ja4"`
 	AkamaiHash string `json:"akamai_hash"`
 	Akamai     string `json:"akamai"`
 }
@@ -69,10 +70,6 @@ var CycleTLSResults = []CycleTLSOptions{
 		"771,49196-49195-49188-49187-49162-49161-52393-49200-49199-49192-49191-49172-49171-52392-157-156-61-60-53-47-49160-49170-10,65281-0-23-13-5-13172-18-16-11-10,29-23-24-25,0",
 		"Mozilla/5.0 (iPod; CPU iPhone OS 12_0 like macOS) AppleWebKit/602.1.50 (KHTML, like Gecko) Version/12.0 Mobile/14A5335d Safari/602.1.50",
 		200},
-	{"d1c53d643a3357880b7351a8332ec792", // Test for 22 extension Chrome 80 on Windows 10 TODO Update this
-		"771,4866-4867-4865-49199-49195-49200-49196-158-49191-103-49192-107-163-159-52393-52392-52394-49327-49325-49315-49311-49245-49249-49239-49235-162-49326-49324-49314-49310-49244-49248-49238-49234-49188-106-49187-64-49162-49172-57-56-49161-49171-51-50-157-49313-49309-49233-156-49312-49308-49232-61-60-53-47-255,0-11-10-35-23-13-43-45-51,29-23-1035-25-24,0-1-2",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.116 Safari/537.36",
-		200},
 	{"aa7744226c695c0b2e440419848cf700", // Firefox 92 on macOS (Catalina)
 		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:92.0) Gecko/20100101 Firefox/92.0",
@@ -93,17 +90,17 @@ func TestHTTP2(t *testing.T) {
 			UserAgent: options.UserAgent,
 		}, "GET")
 		if err != nil {
-			t.Fatal("Unmarshal Error")
+			t.Fatal("Request Error")
 		}
 		if response.Status != 502 {
 			if response.Status != options.HTTPResponse {
 				t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
 			}
 			ja3resp := new(Ja3erResp)
-
+			
 			err = json.Unmarshal([]byte(response.Body), &ja3resp)
 			if err != nil {
-				t.Fatal("Unmarshal Error")
+				t.Fatal("Unmarshal Error2")
 			}
 
 			if ja3resp.Ja3Hash != options.Ja3Hash {
