@@ -2,6 +2,7 @@ package cycletls
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 
 	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
@@ -52,8 +54,14 @@ type CycleTLS struct {
 	RespChan chan []byte
 }
 
+var activeRequests = make(map[string]context.CancelFunc)
+var activeRequestsMutex sync.Mutex
+var debugLogger = log.New(os.Stdout, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	var browser = Browser{
 		JA3:                request.Options.Ja3,
 		UserAgent:          request.Options.UserAgent,
@@ -73,7 +81,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		log.Fatal(err)
 	}
 
-	req, err := http.NewRequest(strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,6 +160,11 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
+
+	activeRequestsMutex.Lock()
+	activeRequests[request.RequestID] = cancel
+	activeRequestsMutex.Unlock()
+
 	return fullRequest{req: req, client: client, options: request}
 }
 
@@ -284,6 +297,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 // }
 
 func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
+	defer func() {
+		activeRequestsMutex.Lock()
+		delete(activeRequests, res.options.RequestID)
+		activeRequestsMutex.Unlock()
+	}()
+
 	defer res.client.CloseIdleConnections()
 
 	// @TODO: When does this trigger an error ?
@@ -318,6 +337,8 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 
 		return
 	}
+
+	defer resp.Body.Close()
 
 	{
 		var b bytes.Buffer
@@ -357,41 +378,64 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 		chanWrite <- b.Bytes()
 	}
 
-	defer resp.Body.Close()
-	bodyBytes, err := io.ReadAll(resp.Body)
+	{
+		bufferSize := 8192
+		chunkBuffer := make([]byte, bufferSize)
 
-	if err != nil {
-		log.Print("Parse Bytes" + err.Error())
-		return
+	loop:
+		for {
+			select {
+			case <-res.req.Context().Done():
+				debugLogger.Printf("Request %s was canceled during processing", res.options.RequestID)
+				break loop
+
+			default:
+				n, err := resp.Body.Read(chunkBuffer)
+
+				// Vérifiez si la requête a été annulée avant de traiter l'erreur
+				if res.req.Context().Err() != nil {
+					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)
+					break loop
+				}
+
+				if err != nil && err != io.EOF {
+					log.Printf("Read error: %s", err.Error())
+					break loop
+				}
+
+				if n == 0 {
+					break loop
+				}
+
+				// Préparer le message de chunk
+				var b bytes.Buffer
+				requestIDLength := len(res.options.RequestID)
+				bodyChunkLength := n
+
+				b.WriteByte(byte(requestIDLength >> 8))
+				b.WriteByte(byte(requestIDLength))
+				b.WriteString(res.options.RequestID)
+				b.WriteByte(0)
+				b.WriteByte(4)
+				b.WriteString("data")
+				b.WriteByte(byte(bodyChunkLength >> 24))
+				b.WriteByte(byte(bodyChunkLength >> 16))
+				b.WriteByte(byte(bodyChunkLength >> 8))
+				b.WriteByte(byte(bodyChunkLength))
+				b.Write(chunkBuffer[:n])
+
+				chanWrite <- b.Bytes()
+
+				if err == io.EOF {
+					break loop
+				}
+			}
+		}
 	}
 
 	{
 		var b bytes.Buffer
-		var requestIDLength = len(res.options.RequestID)
-		var bodyBytesLength = len(bodyBytes)
-
-		b.WriteByte(byte(requestIDLength >> 8))
-		b.WriteByte(byte(requestIDLength))
-		b.WriteString(res.options.RequestID)
-		b.WriteByte(0)
-		b.WriteByte(4)
-		b.WriteString("data")
-		b.WriteByte(byte(bodyBytesLength >> 56))
-		b.WriteByte(byte(bodyBytesLength >> 48))
-		b.WriteByte(byte(bodyBytesLength >> 40))
-		b.WriteByte(byte(bodyBytesLength >> 32))
-		b.WriteByte(byte(bodyBytesLength >> 24))
-		b.WriteByte(byte(bodyBytesLength >> 16))
-		b.WriteByte(byte(bodyBytesLength >> 8))
-		b.WriteByte(byte(bodyBytesLength))
-		b.Write(bodyBytes)
-
-		chanWrite <- b.Bytes()
-	}
-
-	{
-		var b bytes.Buffer
-		var requestIDLength = len(res.options.RequestID)
+		requestIDLength := len(res.options.RequestID)
 
 		b.WriteByte(byte(requestIDLength >> 8))
 		b.WriteByte(byte(requestIDLength))
@@ -427,10 +471,27 @@ func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
 			return
 		}
 
-		request := new(cycleTLSRequest)
-		err = json.Unmarshal(message, &request)
+		var baseMessage map[string]interface{}
+		if err := json.Unmarshal(message, &baseMessage); err != nil {
+			log.Print("Unmarshal Error", err)
+			return
+		}
 
-		if err != nil {
+		if action, ok := baseMessage["action"]; ok && action == "cancel" {
+			requestId, _ := baseMessage["requestId"].(string)
+			activeRequestsMutex.Lock()
+
+			if cancel, exists := activeRequests[requestId]; exists {
+				cancel()
+				delete(activeRequests, requestId)
+			}
+
+			activeRequestsMutex.Unlock()
+			continue
+		}
+
+		request := new(cycleTLSRequest)
+		if err := json.Unmarshal(message, &request); err != nil {
 			log.Print("Unmarshal Error", err)
 			return
 		}

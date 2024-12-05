@@ -1,4 +1,4 @@
-import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
 import WebSocket from "ws";
@@ -105,7 +105,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
     throw new Error(`Executable not found at path: ${execPath}`);
   }
 
-  const spawnOptions = {
+  const spawnOptions: SpawnOptionsWithoutStdio = {
     env: { WS_PORT: port.toString() },
     shell: process.platform !== "win32", // false for Windows, true for others
     windowsHide: true,
@@ -114,6 +114,9 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
     cwd: path.dirname(execPath)
   };
   child = spawn(execPath, [], spawnOptions);
+  child.stdout.on("data", (stdout) => {
+    console.log(stdout.toString());
+  });
   child.stderr.on("data", (stderr) => {
     const errorMessage = stderr.toString();
     if (errorMessage.includes("Request_Id_On_The_Left")) {
@@ -180,6 +183,13 @@ class PacketBuffer {
       | this.readU8();
   }
 
+  readU32(): number {
+    return this.readU8() << 24
+      | this.readU8() << 16
+      | this.readU8() << 8
+      | this.readU8();
+  }
+
   readU64(): number {
     return this.readU8() << 56
       | this.readU8() << 48
@@ -191,8 +201,8 @@ class PacketBuffer {
       | this.readU8();
   }
 
-  readBytes(): Buffer {
-    const len   = this.readU64();
+  readBytes(is64: boolean): Buffer {
+    const len   = is64 ? this.readU64() : this.readU32();
     const bytes = this._data.subarray(this._index, this._index + len);
 
     this._index += len;
@@ -309,7 +319,7 @@ class Golang extends EventEmitter {
           if (method === "data") {
             this.emit(requestID, {
               method,
-              data: packetBuffer.readBytes(),
+              data: packetBuffer.readBytes(false),
             });
           }
 
@@ -351,6 +361,12 @@ class Golang extends EventEmitter {
       this.failedInitialization = true;
       this.emit("failure", `Could not connect to the CycleTLS instance within ${this.timeout}ms`);
     }, this.timeout);
+  }
+
+  async cancelRequest(requestId: string) {
+    if (this.server) {
+      this.server.send(JSON.stringify({ action: "cancel", requestId }));
+    }
   }
 
   async request(
@@ -531,21 +547,55 @@ const initCycleTLS = async (
                 rejectRequest(response.data);
 
               } else {
-                let _resolve: (buf: Buffer | null) => void;
-                let promise: Promise<Buffer | null> = new Promise((resolve) => (_resolve = resolve));
+                const stream = new Readable({ read() {} });
 
-                instance.once(requestId, (response) => {
-                  response.method === "data"
-                    ? _resolve(response.data)
-                    : _resolve(null);
-                });
+                const handleClose = () => {
+                  instance.cancelRequest(requestId);
+                };
+
+                const handleData = (response: any) => {
+                  if (response.method === "data") {
+                    stream.push(Buffer.from(response.data));
+
+                  } else if (response.method === "end") {
+                    stream.push(null);
+                    stream.off("close", handleClose);
+                    instance.off(requestId, handleData);
+                  }
+                };
+
+                stream.on("close", handleClose);
+                instance.on(requestId, handleData);
 
                 resolveRequest({
                   code    : response.data.statusCode,
                   headers : response.data.headers,
-                  raw     : ()                      => promise,
-                  json    : ()                      => promise.then((data) => JSON.parse(data.toString())),
-                  text    : (enc: BufferEncoding)   => promise.then((data) => data.toString(enc)),
+                  stream,
+                  raw: () => {
+                    const chunks: Buffer[] = [];
+                    return new Promise<Buffer>((resolve, reject) => {
+                      stream
+                        .on("data", (chunk) => chunks.push(chunk))
+                        .on("end", () => resolve(Buffer.concat(chunks)))
+                        .on("error", (err) => reject(err));
+                    });
+                  },
+                  json: () =>
+                    new Promise((resolve, reject) => {
+                      let data = "";
+                      stream
+                        .on("data", (chunk) => (data += chunk.toString()))
+                        .on("end", () => resolve(JSON.parse(data)))
+                        .on("error", (err) => reject(err));
+                    }),
+                  text: (enc: BufferEncoding) =>
+                    new Promise((resolve, reject) => {
+                      let data = "";
+                      stream
+                        .on("data", (chunk) => (data += chunk.toString(enc)))
+                        .on("end", () => resolve(data))
+                        .on("error", (err) => reject(err));
+                    }),
                 });
               }
             });
