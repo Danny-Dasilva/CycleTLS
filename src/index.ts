@@ -66,29 +66,35 @@ export interface CycleTLSResponse {
 let child: ChildProcessWithoutNullStreams;
 let lastRequestID: string
 
-const cleanExit = async (message?: string | Error, exit?: boolean) => {
-  if (message) console.log(message);
-  exit = exit ?? true;
+const
+  cleanExit = (message?: string | Error) => {
+    if (message) console.log(message);
 
-  if (child) {
-
-    if (process.platform == "win32") {
-      child?.kill();
-    } else {
-      process.kill(-child.pid);
+    if (child) {
+      if (process.platform === "win32") {
+        child?.kill();
+      } else {
+        try {
+          process.kill(-child.pid);
+        }
+        catch (error) {
+          if (error.code !== "ESRCH")
+            throw Error(error);
+        }
+      }
     }
-    if (exit) process.exit();
+  },
+  close = () => cleanExit();
 
-  }
-};
-process.on("SIGINT", () => cleanExit());
-process.on("SIGTERM", () => cleanExit());
+process
+  .once("SIGINT", close)
+  .once("SIGTERM", close);
 
 const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: string) => {
   try {
      // Determine the executable path
   let execPath: string;
-    
+
   if (filePath) {
     // If filePath is provided, use it directly
     execPath = filePath;
@@ -124,9 +130,9 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
         cleanExit(new Error(errorMessage));
       } else {
         cleanExit(
-          `Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`,
-          false
-        ).then(() => handleSpawn(debug, fileName, port));
+          `Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
+        )
+        handleSpawn(debug, fileName, port);
       }
     }
   });
