@@ -20,7 +20,7 @@
     "build": "tsc",
     "prebuild:go": "cd src && cross-env GO111MODULE=on go get github.com/Danny-Dasilva/CycleTLS/cycletls",
     "prepare": "npm run build && npm run build:go",
-    "test": "jest"
+    "test": "jest --detectOpenHandles"
   },
   "repository": {
     "type": "git",

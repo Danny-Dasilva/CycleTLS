@@ -14,36 +14,28 @@ describe("CycleTLS HTTP Version Tests", () => {
   });
 
   test("Should use HTTP/2 by default", async () => {
-    const response = await cycleTLS(
-      "https://tls.peet.ws/api/all",
-      {
-        body: "",
-        ja3: ja3,
-        userAgent: userAgent,
-        forceHTTP1: false,
-      },
-      "get"
-    );
+    const response = await cycleTLS('https://tls.peet.ws/api/all', {
+      body: '',
+      ja3: ja3,
+      userAgent: userAgent,
+      forceHTTP1: false,
+    });
 
     expect(response.status).toBe(200);
-    let fullResp = response.body as { http_version: string };
-    expect(fullResp.http_version).toBe("h2");
+    const result = await response.json();
+    expect(result.http_version).toBe('h2');
   });
 
   test("Should force HTTP/1.1 when specified", async () => {
-    const response = await cycleTLS(
-      "https://tls.peet.ws/api/all",
-      {
-        body: "",
-        ja3: ja3,
-        userAgent: userAgent,
-        forceHTTP1: true,
-      },
-      "get"
-    );
+    const response = await cycleTLS('https://tls.peet.ws/api/all', {
+      body: '',
+      ja3: ja3,
+      userAgent: userAgent,
+      forceHTTP1: true,
+    });
 
     expect(response.status).toBe(200);
-    let fullResp = response.body as { http_version: string };
-    expect(fullResp.http_version).toBe("HTTP/1.1");
+    const result = await response.json();
+    expect(result.http_version).toBe('HTTP/1.1');
   });
 });

@@ -28,4 +28,5 @@ const initCycleTLS = require('../dist/index.js');
 
     response.stream.pipe(fs.createWriteStream("output.mp3"));
   }
+  await cycleTLS.exit()
 })();

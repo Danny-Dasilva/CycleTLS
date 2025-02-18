@@ -10,7 +10,6 @@ const initCycleTLS = require("../dist/index.js");
       "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
   });
 
-  console.log(response);
-
-  cycleTLS.exit();
+  console.log(await response.json())
+  await cycleTLS.exit();
 })();

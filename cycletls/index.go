@@ -460,46 +460,47 @@ func writeSocket(chanWrite chan []byte, wsSocket *websocket.Conn) {
 }
 
 func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
-	for {
-		_, message, err := wsSocket.ReadMessage()
-
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				return
-			}
-			log.Print("Socket Error", err)
-			return
-		}
-
-		var baseMessage map[string]interface{}
-		if err := json.Unmarshal(message, &baseMessage); err != nil {
-			log.Print("Unmarshal Error", err)
-			return
-		}
-
-		if action, ok := baseMessage["action"]; ok && action == "cancel" {
-			requestId, _ := baseMessage["requestId"].(string)
-			activeRequestsMutex.Lock()
-
-			if cancel, exists := activeRequests[requestId]; exists {
-				cancel()
-				delete(activeRequests, requestId)
-			}
-
-			activeRequestsMutex.Unlock()
-			continue
-		}
-
-		request := new(cycleTLSRequest)
-		if err := json.Unmarshal(message, &request); err != nil {
-			log.Print("Unmarshal Error", err)
-			return
-		}
-
-		chanRead <- processRequest(*request)
-	}
+    for {
+        _, message, err := wsSocket.ReadMessage()
+        if err != nil {
+            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+                return
+            }
+            log.Print("Socket Error", err)
+            return
+        }
+        var baseMessage map[string]interface{}
+        if err := json.Unmarshal(message, &baseMessage); err != nil {
+            log.Print("Unmarshal Error", err)
+            return
+        }
+        if action, ok := baseMessage["action"]; ok {
+            if action == "exit" {
+                // Respond by sending a close frame and then close the connection.
+                wsSocket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "exit"))
+                wsSocket.Close()
+                return
+            }
+            if action == "cancel" {
+                requestId, _ := baseMessage["requestId"].(string)
+                activeRequestsMutex.Lock()
+                if cancel, exists := activeRequests[requestId]; exists {
+                    cancel()
+                    delete(activeRequests, requestId)
+                }
+                activeRequestsMutex.Unlock()
+                continue
+            }
+        }
+        // (If there was no "action" field, process as usual)
+        request := new(cycleTLSRequest)
+        if err := json.Unmarshal(message, &request); err != nil {
+            log.Print("Unmarshal Error", err)
+            return
+        }
+        chanRead <- processRequest(*request)
+    }
 }
-
 // Worker
 func readProcess(chanRead chan fullRequest, chanWrite chan []byte) {
 	for request := range chanRead {

@@ -30,7 +30,8 @@ const Cookie = tough.Cookie;
   });
   
   //verify cookies were set
-  console.log(secondResponse.body)
+  const result = await secondResponse.json();
+  console.log(result)
   /* Expected
   {
     "cookies": {
