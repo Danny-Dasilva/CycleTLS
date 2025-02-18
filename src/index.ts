@@ -1,10 +1,9 @@
-import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from "child_process";
 import path from "path";
 import { EventEmitter } from "events";
-import WebSocket, { WebSocketServer } from "ws";
+import WebSocket from "ws";
 import * as http from "http";
 import os from 'os';
-import util from "util";
 import FormData from 'form-data';
 import { Readable, Writable } from 'stream';
 import { promisify } from 'util';
@@ -63,6 +62,7 @@ export interface CycleTLSResponse {
   finalUrl: string;
 }
 
+
 let child: ChildProcessWithoutNullStreams;
 let lastRequestID: string
 
@@ -105,7 +105,7 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
     throw new Error(`Executable not found at path: ${execPath}`);
   }
 
-  const spawnOptions = {
+  const spawnOptions: SpawnOptionsWithoutStdio = {
     env: { WS_PORT: port.toString() },
     shell: process.platform !== "win32", // false for Windows, true for others
     windowsHide: true,
@@ -114,6 +114,9 @@ const handleSpawn = (debug: boolean, fileName: string, port: number, filePath?: 
     cwd: path.dirname(execPath)
   };
   child = spawn(execPath, [], spawnOptions);
+  child.stdout.on("data", (stdout) => {
+    console.log(stdout.toString());
+  });
   child.stderr.on("data", (stderr) => {
     const errorMessage = stderr.toString();
     if (errorMessage.includes("Request_Id_On_The_Left")) {
@@ -161,6 +164,62 @@ async function streamToString(stream: Readable): Promise<string> {
   );
   return Buffer.concat(chunks).toString('utf8');
 }
+class PacketBuffer {
+
+  private _data: Buffer;
+  private _index: number;
+
+  constructor(data: Buffer) {
+    this._data = data;
+    this._index = 0;
+  }
+
+  readU8(): number {
+    return this._data[this._index++];
+  }
+
+  readU16(): number {
+    return this.readU8() << 8
+      | this.readU8();
+  }
+
+  readU32(): number {
+    return this.readU8() << 24
+      | this.readU8() << 16
+      | this.readU8() << 8
+      | this.readU8();
+  }
+
+  readU64(): number {
+    return this.readU8() << 56
+      | this.readU8() << 48
+      | this.readU8() << 40
+      | this.readU8() << 32
+      | this.readU8() << 24
+      | this.readU8() << 16
+      | this.readU8() << 8
+      | this.readU8();
+  }
+
+  readBytes(is64: boolean): Buffer {
+    const len   = is64 ? this.readU64() : this.readU32();
+    const bytes = this._data.subarray(this._index, this._index + len);
+
+    this._index += len;
+
+    return bytes;
+  }
+
+  readString(encoding?: BufferEncoding): string {
+    const len   = this.readU16();
+    const bytes = this._data.subarray(this._index, this._index + len);
+
+    this._index += len;
+
+    return bytes.toString(encoding);
+  }
+}
+
 class Golang extends EventEmitter {
   server: WebSocket;
   queue: Array<string>;
@@ -227,9 +286,55 @@ class Golang extends EventEmitter {
         // WebSocket connected - set server and emit ready
         this.server = server;
 
-        this.server.on("message", (data: string) => {
-          const message = JSON.parse(data);
-          this.emit(message.RequestID, message);
+        this.server.on("message", (data: Buffer) => {
+          const packetBuffer  = new PacketBuffer(data);
+          const requestID     = packetBuffer.readString();
+          const method        = packetBuffer.readString();
+
+          if (method === "response") {
+            const statusCode    = packetBuffer.readU16();
+            const headers       = [];
+            const headersLength = packetBuffer.readU16();
+
+            for (let i = 0; i < headersLength; i++) {
+              const headerValues  = [];
+              const headerName    = packetBuffer.readString();
+              const valuesLength  = packetBuffer.readU16();
+
+              for (let j = 0; j < valuesLength; j++)
+                headerValues.push(packetBuffer.readString());
+
+              headers.push([ headerName, headerValues ]);
+            }
+
+            this.emit(requestID, {
+              method,
+              data: {
+                statusCode,
+                headers: Object.fromEntries(headers),
+              },
+            });
+          }
+
+          if (method === "data") {
+            this.emit(requestID, {
+              method,
+              data: packetBuffer.readBytes(false),
+            });
+          }
+
+          // @TODO: Finish this
+          if (method === "error") {
+            console.log(packetBuffer);
+            // this.emit(requestID, {
+            //   method,
+            //   data: packetBuffer.readBytes(),
+            // });
+          }
+
+          if (method === "end") {
+            this.emit(requestID, { method });
+          }
         });
 
         this.emit("ready");
@@ -256,6 +361,12 @@ class Golang extends EventEmitter {
       this.failedInitialization = true;
       this.emit("failure", `Could not connect to the CycleTLS instance within ${this.timeout}ms`);
     }, this.timeout);
+  }
+
+  async cancelRequest(requestId: string) {
+    if (this.server) {
+      this.server.send(JSON.stringify({ action: "cancel", requestId }));
+    }
   }
 
   async request(
@@ -377,6 +488,7 @@ const initCycleTLS = async (
     if (!timeout) timeout = 20000;
 
     const instance = new Golang(port, debug, timeout, executablePath);
+
     instance.on("ready", () => {
       const CycleTLS = (() => {
         const CycleTLS = async (
@@ -392,17 +504,19 @@ const initCycleTLS = async (
             | "options"
             | "connect"
             | "patch" = "get"
-        ): Promise<CycleTLSResponse> => {
+        ): Promise<any> => {
           return new Promise((resolveRequest, rejectRequest) => {
-            const requestId = `${url}${Math.floor(Date.now() * Math.random())}`;
+            const requestId = `${url}#${Date.now()}-${Math.floor(1000 * Math.random())}`;
+
             //set default options
-            options = options ?? {}
+            options ??= {}
 
             //set default ja3, user agent, body and proxy
             if (!options?.ja3)
               options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
             if (!options?.userAgent)
               options.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36";
+
             if (!options?.body) options.body = "";
             if (!options?.proxy) options.proxy = "";
             if (!options?.insecureSkipVerify) options.insecureSkipVerify = false;
@@ -411,19 +525,17 @@ const initCycleTLS = async (
 
             //convert simple cookies
             const cookies = options?.cookies;
-            if (
-              typeof cookies === "object" &&
-              !Array.isArray(cookies) &&
-              cookies !== null
-            ) {
-              const tempArr: {
-                [key: string]: any;
-              } = [];
+
+            if (typeof cookies === "object" && !Array.isArray(cookies) && cookies !== null) {
+              const tempArr: { [key: string]: any; } = [];
+
               for (const [key, value] of Object.entries(options.cookies)) {
                 tempArr.push({ name: key, value: value });
               }
+
               options.cookies = tempArr;
             }
+
             instance.request(requestId, {
               url,
               ...options,
@@ -431,66 +543,114 @@ const initCycleTLS = async (
             });
 
             instance.once(requestId, (response) => {
-              if (response.error) return rejectRequest(response.error);
-              try {
-                //parse json responses
-                response.Body = JSON.parse(response.Body);
-                //override console.log full repl to display full body
-                response.Body[util.inspect.custom] = function () { return JSON.stringify(this, undefined, 2); }
-              } catch (e) { }
+              if (response.method === "error") {
+                rejectRequest(response.data);
 
-              const { Status: status, Body: body, Headers: headers, FinalUrl: finalUrl } = response;
+              } else {
+                const stream = new Readable({ read() {} });
 
-              if (headers["Set-Cookie"])
-                headers["Set-Cookie"] = headers["Set-Cookie"].split("/,/");
-              resolveRequest({
-                status,
-                body,
-                headers,
-                finalUrl,
-              });
+                const handleClose = () => {
+                  instance.cancelRequest(requestId);
+                };
+
+                const handleData = (response: any) => {
+                  if (response.method === "data") {
+                    stream.push(Buffer.from(response.data));
+
+                  } else if (response.method === "end") {
+                    stream.push(null);
+                    stream.off("close", handleClose);
+                    instance.off(requestId, handleData);
+                  }
+                };
+
+                stream.on("close", handleClose);
+                instance.on(requestId, handleData);
+
+                resolveRequest({
+                  code    : response.data.statusCode,
+                  headers : response.data.headers,
+                  stream,
+                  raw: () => {
+                    const chunks: Buffer[] = [];
+                    return new Promise<Buffer>((resolve, reject) => {
+                      stream
+                        .on("data", (chunk) => chunks.push(chunk))
+                        .on("end", () => resolve(Buffer.concat(chunks)))
+                        .on("error", (err) => reject(err));
+                    });
+                  },
+                  json: () =>
+                    new Promise((resolve, reject) => {
+                      let data = "";
+                      stream
+                        .on("data", (chunk) => (data += chunk.toString()))
+                        .on("end", () => resolve(JSON.parse(data)))
+                        .on("error", (err) => reject(err));
+                    }),
+                  text: (enc: BufferEncoding) =>
+                    new Promise((resolve, reject) => {
+                      let data = "";
+                      stream
+                        .on("data", (chunk) => (data += chunk.toString(enc)))
+                        .on("end", () => resolve(data))
+                        .on("error", (err) => reject(err));
+                    }),
+                });
+              }
             });
           });
         };
+
         CycleTLS.head = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "head");
         };
+
         CycleTLS.get = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "get");
         };
+
         CycleTLS.post = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "post");
         };
+
         CycleTLS.put = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "put");
         };
+
         CycleTLS.delete = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "delete");
         };
+
         CycleTLS.trace = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "trace");
         };
+
         CycleTLS.options = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "options");
         };
+
         CycleTLS.connect = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "options");
         };
+
         CycleTLS.patch = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse> => {
           return CycleTLS(url, options, "patch");
         };
+
         CycleTLS.exit = async (): Promise<undefined> => {
           return instance.exit();
         };
 
         return CycleTLS;
       })();
+
       resolveReady(CycleTLS);
     });
 
     instance.on("failure", (reason: string) => {
       reject(reason);
-    })
+    });
   });
 };
 
