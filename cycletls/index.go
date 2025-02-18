@@ -304,9 +304,8 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 	}()
 
 	defer res.client.CloseIdleConnections()
+	finalUrl := res.options.Options.URL
 
-	// @TODO: When does this trigger an error ?
-	// Are we sure that the parsedError will include headers and a satus code ?
 	resp, err := res.client.Do(res.req)
 
 	if err != nil {
@@ -340,10 +339,16 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 
 	defer resp.Body.Close()
 
+	// Update finalUrl if redirect occurred
+	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+		finalUrl = resp.Request.URL.String()
+	}
+
 	{
 		var b bytes.Buffer
 		var headerLength = len(resp.Header)
 		var requestIDLength = len(res.options.RequestID)
+		var finalUrlLength = len(finalUrl)
 
 		b.WriteByte(byte(requestIDLength >> 8))
 		b.WriteByte(byte(requestIDLength))
@@ -353,6 +358,13 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 		b.WriteString("response")
 		b.WriteByte(byte(resp.StatusCode >> 8))
 		b.WriteByte(byte(resp.StatusCode))
+
+		// Write finalUrl length and value
+		b.WriteByte(byte(finalUrlLength >> 8))
+		b.WriteByte(byte(finalUrlLength))
+		b.WriteString(finalUrl)
+
+		// Write headers
 		b.WriteByte(byte(headerLength >> 8))
 		b.WriteByte(byte(headerLength))
 
@@ -392,7 +404,6 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 			default:
 				n, err := resp.Body.Read(chunkBuffer)
 
-				// Vérifiez si la requête a été annulée avant de traiter l'erreur
 				if res.req.Context().Err() != nil {
 					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)
 					break loop
@@ -407,7 +418,6 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 					break loop
 				}
 
-				// Préparer le message de chunk
 				var b bytes.Buffer
 				requestIDLength := len(res.options.RequestID)
 				bodyChunkLength := n
@@ -460,47 +470,48 @@ func writeSocket(chanWrite chan []byte, wsSocket *websocket.Conn) {
 }
 
 func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
-    for {
-        _, message, err := wsSocket.ReadMessage()
-        if err != nil {
-            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-                return
-            }
-            log.Print("Socket Error", err)
-            return
-        }
-        var baseMessage map[string]interface{}
-        if err := json.Unmarshal(message, &baseMessage); err != nil {
-            log.Print("Unmarshal Error", err)
-            return
-        }
-        if action, ok := baseMessage["action"]; ok {
-            if action == "exit" {
-                // Respond by sending a close frame and then close the connection.
-                wsSocket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "exit"))
-                wsSocket.Close()
-                return
-            }
-            if action == "cancel" {
-                requestId, _ := baseMessage["requestId"].(string)
-                activeRequestsMutex.Lock()
-                if cancel, exists := activeRequests[requestId]; exists {
-                    cancel()
-                    delete(activeRequests, requestId)
-                }
-                activeRequestsMutex.Unlock()
-                continue
-            }
-        }
-        // (If there was no "action" field, process as usual)
-        request := new(cycleTLSRequest)
-        if err := json.Unmarshal(message, &request); err != nil {
-            log.Print("Unmarshal Error", err)
-            return
-        }
-        chanRead <- processRequest(*request)
-    }
+	for {
+		_, message, err := wsSocket.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				return
+			}
+			log.Print("Socket Error", err)
+			return
+		}
+		var baseMessage map[string]interface{}
+		if err := json.Unmarshal(message, &baseMessage); err != nil {
+			log.Print("Unmarshal Error", err)
+			return
+		}
+		if action, ok := baseMessage["action"]; ok {
+			if action == "exit" {
+				// Respond by sending a close frame and then close the connection.
+				wsSocket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "exit"))
+				wsSocket.Close()
+				return
+			}
+			if action == "cancel" {
+				requestId, _ := baseMessage["requestId"].(string)
+				activeRequestsMutex.Lock()
+				if cancel, exists := activeRequests[requestId]; exists {
+					cancel()
+					delete(activeRequests, requestId)
+				}
+				activeRequestsMutex.Unlock()
+				continue
+			}
+		}
+		// (If there was no "action" field, process as usual)
+		request := new(cycleTLSRequest)
+		if err := json.Unmarshal(message, &request); err != nil {
+			log.Print("Unmarshal Error", err)
+			return
+		}
+		chanRead <- processRequest(*request)
+	}
 }
+
 // Worker
 func readProcess(chanRead chan fullRequest, chanWrite chan []byte) {
 	for request := range chanRead {

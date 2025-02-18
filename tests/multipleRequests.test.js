@@ -55,6 +55,7 @@ test("Multiple Request example", async () => {
   }
 
   Promise.all(promises).then(async () => {
+    console.log("Done!")
     await cycleTLS.exit();
   }); //Check for all requests to process then exit
 });

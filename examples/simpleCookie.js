@@ -9,7 +9,7 @@ const initCycleTLS = require("../dist/index.js");
       cookie2: "value2",
     },
   });
-  console.log(response.body);
+  console.log(await response.text());
   /* Expected
   {
     "cookies": {
@@ -18,5 +18,5 @@ const initCycleTLS = require("../dist/index.js");
     }
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();

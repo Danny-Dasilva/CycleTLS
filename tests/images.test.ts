@@ -6,16 +6,6 @@ let ja3 =
 let userAgent =
   "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
 var fs = require("fs");
-const writeImage = (filename: string, data: string) => {
-  let writeStream = fs.createWriteStream(filename);
-
-  // write some data with a base64 encoding
-  writeStream.write(data, "base64");
-  writeStream.on("finish", () => {});
-
-  // close the stream
-  writeStream.end();
-};
 
 test("Should Write all Image types to file", async () => {
   const cycleTLS = await initCycleTLS({ port: 1111 });
@@ -29,9 +19,8 @@ test("Should Write all Image types to file", async () => {
     "get"
   );
 
-  if (typeof jpegImage.body === "string") {
-    writeImage("./tests/images/output.jpeg", jpegImage.body);
-  }
+  jpegImage.stream.pipe(fs.createWriteStream('./tests/images/output.jpeg'));
+
   const pngImage = await cycleTLS(
     "http://httpbin.org/image/png",
     {
@@ -41,9 +30,8 @@ test("Should Write all Image types to file", async () => {
     "get"
   );
 
-  if (typeof pngImage.body === "string") {
-    writeImage("./tests/images/output.png", pngImage.body);
-  }
+  pngImage.stream.pipe(fs.createWriteStream('./tests/images/output.png'));
+
   const svgImage = await cycleTLS(
     "http://httpbin.org/image/svg",
     {
@@ -52,9 +40,9 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-  if (typeof svgImage.body === "string") {
-    writeImage("./tests/images/output.svg", svgImage.body);
-  }
+  svgImage.stream.pipe(fs.createWriteStream('./tests/images/output.svg'));
+
+  
   const webpImage = await cycleTLS(
     "http://httpbin.org/image/webp",
     {
@@ -63,10 +51,9 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-  if (typeof webpImage.body === "string") {
-    await writeImage("./tests/images/output.webp", webpImage.body);
-  }
-  cycleTLS.exit();
+  webpImage.stream.pipe(fs.createWriteStream('./tests/images/output.webp'));
+
+  await cycleTLS.exit();
 });
 
 test("Files should be the same", async () => {

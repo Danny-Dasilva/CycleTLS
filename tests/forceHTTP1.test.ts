@@ -9,8 +9,8 @@ describe("CycleTLS HTTP Version Tests", () => {
     cycleTLS = await initCycleTLS({ port: 9134 });
   });
 
-  afterAll(() => {
-    cycleTLS.exit();
+  afterAll(async () => {
+    await cycleTLS.exit();
   });
 
   test("Should use HTTP/2 by default", async () => {

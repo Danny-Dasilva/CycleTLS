@@ -30,5 +30,5 @@ const initCycleTLS = require("../dist/index.js");
     }
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();

@@ -10,8 +10,8 @@ describe("CycleTLS Multipart Form Data Test", () => {
     cycleTLS = await initCycleTLS({ port: 9200 });
   });
 
-  afterAll(() => {
-    cycleTLS.exit();
+  afterAll(async () => {
+    await cycleTLS.exit();
   });
 
   test("Should Handle Multipart Form Data Correctly", async () => {
@@ -29,10 +29,7 @@ describe("CycleTLS Multipart Form Data Test", () => {
 
     expect(response.status).toBe(200); // Check if the status code is 200
 
-    const responseBody =
-      typeof response.body === "string"
-        ? JSON.parse(response.body)
-        : response.body;
+    const responseBody = await response.json();
 
     // Validate the 'form' part of the response
     expect(responseBody.form).toEqual({
@@ -57,10 +54,7 @@ describe("CycleTLS Multipart Form Data Test", () => {
 
     expect(response.status).toBe(200);
 
-    const responseBody =
-      typeof response.body === "string"
-        ? JSON.parse(response.body)
-        : response.body;
+    const responseBody = await response.json();
 
     expect(responseBody.files).toBeDefined();
     expect(responseBody.files.file).toContain(

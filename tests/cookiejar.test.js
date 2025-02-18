@@ -63,7 +63,7 @@ test("Should properly set and configure cookies", async () => {
   const fifthBody = fifthResponse.body;
 
   expect(fifthBody?.cookies).toEqual(expected_cookies);
-  cycleTLS.exit();
+  await cycleTLS.exit();
 });
 
 async function processCookies(response, url, cookieJar) {

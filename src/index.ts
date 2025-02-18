@@ -58,6 +58,7 @@ export interface CycleTLSResponse {
   raw(): Promise<Buffer>;
   json(): Promise<any>;
   text(enc?: BufferEncoding): Promise<string>;
+  finalUrl: string;
 }
 
 let child: ChildProcessWithoutNullStreams;
@@ -323,6 +324,7 @@ class Golang extends EventEmitter {
           if (method === "response") {
             const statusCode = packetBuffer.readU16();
             const headers = [];
+            const finalUrl = packetBuffer.readString();
             const headersLength = packetBuffer.readU16();
 
             for (let i = 0; i < headersLength; i++) {
@@ -341,6 +343,7 @@ class Golang extends EventEmitter {
               method,
               data: {
                 statusCode,
+                finalUrl,
                 headers: Object.fromEntries(headers),
               },
             });
@@ -661,10 +664,10 @@ export interface CycleTLSClient {
 
                   stream.on("close", handleClose);
                   instance.on(requestId, handleData);
-
                   resolveRequest({
                     status: response.data.statusCode,
                     headers: response.data.headers,
+                    finalUrl: response.data.finalUrl,
                     stream,
                     raw: () => {
                       const chunks: Buffer[] = [];

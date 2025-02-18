@@ -82,25 +82,19 @@ test("Response bodies should be decoded", async () => {
   const cycleTLS = await initCycleTLS({ port: 9115 });
 
   for (let request of myRequests) {
-    const response = await cycleTLS(
-      request.url,
-      {
-        ja3: ja3,
-        userAgent: userAgent,
-        headers: { "Accept-Encoding": "gzip, deflate, br" },
-      },
-      "get"
-    );
-    //Remove origin for comparison
-    if (typeof response.body === "object") {
-      delete response.body.origin;
-      delete response.body.headers["X-Amzn-Trace-Id"];
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject(request?.response || {});
-      
-    } else {
-      throw "encoding error";
-    }
+    const response = await cycleTLS(request.url, {
+      ja3: ja3,
+      userAgent: userAgent,
+      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+    });
+
+    const result = await response.json();
+    
+    // Remove origin for comparison
+    delete result.origin;
+    delete result.headers['X-Amzn-Trace-Id'];
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject(request?.response || {});
   }
-  cycleTLS.exit();
+  await cycleTLS.exit();
 });

@@ -1,4 +1,3 @@
-
 import initCycleTLS from '../dist/index.js'
 jest.setTimeout(30000);
 
@@ -88,11 +87,11 @@ test('Should Return 200 for all responses', async () => {
             userAgent: request.userAgent,
             headers: request.headers,
             cookies: request.cookies,
-        }, request.method);
+        });
 
+        const result = await response.json();
         expect(response.status).toBe(200)
     }
-    cycleTLS.exit()
+    await cycleTLS.exit()
 
 });
-

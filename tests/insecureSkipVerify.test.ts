@@ -9,8 +9,8 @@ describe("CycleTLS InsecureSkipVerify Test", () => {
     cycleTLS = await initCycleTLS({ port: 9125 });
   });
 
-  afterAll(() => {
-    cycleTLS.exit();
+  afterAll(async () => {
+    await cycleTLS.exit();
   });
 
   test("Should return a handshake error for insecureSkipVerify", async () => {
@@ -26,7 +26,7 @@ describe("CycleTLS InsecureSkipVerify Test", () => {
       "get"
     );
 
-    expect(response.body).toContain(
+    expect(await response.text()).toContain(
       "uTlsConn.Handshake() error: tls: failed to verify certificate: x509: certificate has expired or is not yet valid"
     );
   });
