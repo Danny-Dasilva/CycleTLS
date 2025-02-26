@@ -3,6 +3,7 @@ package cycletls
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
 	"io"
@@ -66,8 +67,9 @@ func (re Response) JSONBody() map[string]interface{} {
 
 // CycleTLS creates full request and response
 type CycleTLS struct {
-	ReqChan  chan fullRequest
-	RespChan chan Response
+	ReqChan              chan fullRequest
+	RespChan             chan Response
+	queuedRequestCounter int
 }
 
 // ready Request
@@ -225,14 +227,16 @@ func dispatcher(res fullRequest) (response Response, err error) {
 }
 
 // Queue queues request in worker pool
-func (client CycleTLS) Queue(URL string, options Options, Method string) {
+func (client CycleTLS) Queue(URL string, options Options, Method string) string {
 
 	options.URL = URL
 	options.Method = Method
 	//TODO add timestamp to request
-	opt := cycleTLSRequest{"Queued Request", options}
+	opt := cycleTLSRequest{fmt.Sprintf("Queued Request %d", client.queuedRequestCounter), options}
+	client.queuedRequestCounter++
 	response := processRequest(opt)
 	client.ReqChan <- response
+	return opt.RequestID
 }
 
 // Do creates a single request
@@ -267,7 +271,7 @@ func Init(workers ...bool) CycleTLS {
 		go workerPool(reqChan, respChan)
 		log.Println("Worker Pool Started")
 
-		return CycleTLS{ReqChan: reqChan, RespChan: respChan}
+		return CycleTLS{ReqChan: reqChan, RespChan: respChan, queuedRequestCounter: 0}
 	}
 	return CycleTLS{}
 
