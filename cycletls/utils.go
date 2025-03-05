@@ -7,12 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"strconv"
-	"strings"
-	"io"
 	"errors"
 	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 	utls "github.com/refraction-networking/utls"
+	"io"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -59,6 +60,12 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 				return string(Body)
 			}
 			return string(unz)
+		} else if encoding[0] == "zstd" {
+			unz, err := unZstdData(Body)
+			if err != nil {
+				return string(Body)
+			}
+			return string(unz)
 		}
 	} else if len(content) > 0 {
 		decodingTypes := map[string]bool{
@@ -101,6 +108,14 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	br := brotli.NewReader(bytes.NewReader(data))
 	respBody, err := io.ReadAll(br)
 	return respBody, err
+}
+func unZstdData(data []byte) (resData []byte, err error) {
+	dec, err := zstd.NewReader(nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dec.Close()
+	return dec.DecodeAll(data, nil)
 }
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
@@ -173,8 +188,6 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		}
 	}
 
-
-
 	// set extension 43
 	ver, err := strconv.ParseUint(version, 10, 16)
 	if err != nil {
@@ -226,6 +239,7 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		GetSessionID:       sha256.Sum256,
 	}, nil
 }
+
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
 func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
 	switch ver {
