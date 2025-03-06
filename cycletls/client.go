@@ -1,9 +1,10 @@
 package cycletls
 
 import (
-	http "github.com/Danny-Dasilva/fhttp"
-
+	"crypto/tls"
 	"time"
+
+	http "github.com/Danny-Dasilva/fhttp"
 
 	"golang.org/x/net/proxy"
 )
@@ -14,6 +15,7 @@ type Browser struct {
 	UserAgent          string
 	Cookies            []Cookie
 	InsecureSkipVerify bool
+	Certificates       []tls.Certificate
 	forceHTTP1         bool
 }
 
@@ -22,7 +24,7 @@ var disabledRedirect = func(req *http.Request, via []*http.Request) error {
 }
 
 func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
-	//if timeout is not set in call default to 15
+	// if timeout is not set in call default to 15
 	if timeout == 0 {
 		timeout = 15
 	}
@@ -30,7 +32,7 @@ func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, dis
 		Transport: newRoundTripper(browser, dialer),
 		Timeout:   time.Duration(timeout) * time.Second,
 	}
-	//if disableRedirect is set to true httpclient will not redirect
+	// if disableRedirect is set to true httpclient will not redirect
 	if disableRedirect {
 		client.CheckRedirect = disabledRedirect
 	}
