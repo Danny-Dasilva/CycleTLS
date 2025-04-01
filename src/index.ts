@@ -61,6 +61,7 @@ export interface CycleTLSResponse {
     [key: string]: any;
   };
   finalUrl: string;
+  proto: string;
 }
 
 let child: ChildProcessWithoutNullStreams;
@@ -445,7 +446,7 @@ const initCycleTLS = async (
                 response.Body[util.inspect.custom] = function () { return JSON.stringify(this, undefined, 2); }
               } catch (e) { }
 
-              const { Status: status, Body: body, Headers: headers, FinalUrl: finalUrl } = response;
+              const { Status: status, Body: body, Headers: headers, FinalUrl: finalUrl, Proto: proto } = response;
 
               if (headers["Set-Cookie"])
                 headers["Set-Cookie"] = headers["Set-Cookie"].split("/,/");
@@ -454,6 +455,7 @@ const initCycleTLS = async (
                 body,
                 headers,
                 finalUrl,
+                proto,
               });
             });
           });
