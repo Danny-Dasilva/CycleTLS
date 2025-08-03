@@ -39,14 +39,28 @@ export interface CycleTLSRequestOptions {
     [key: string]: string;
   };
   body?: string | URLSearchParams | FormData;
+  
+  // TLS fingerprinting options
   ja3?: string;
+  ja4?: string;
+  http2Fingerprint?: string;
+  quicFingerprint?: string;
+  
+  // Browser identification
   userAgent?: string;
+  
+  // Connection options
   proxy?: string;
   timeout?: number;
   disableRedirect?: boolean;
   headerOrder?: string[];
+  orderAsProvided?: boolean;
   insecureSkipVerify?: boolean;
+  
+  // Protocol options
   forceHTTP1?: boolean;
+  forceHTTP3?: boolean;
+  protocol?: string; // "http1", "http2", "http3", "websocket", "sse"
 }
 
 export interface CycleTLSResponse {
@@ -59,6 +73,35 @@ export interface CycleTLSResponse {
   json(): Promise<any>;
   text(enc?: BufferEncoding): Promise<string>;
   finalUrl: string;
+}
+
+export interface WebSocketMessage {
+  type: 'text' | 'binary' | 'close' | 'ping' | 'pong';
+  data: string | Buffer;
+}
+
+export interface CycleTLSWebSocketResponse extends CycleTLSResponse {
+  // WebSocket specific methods
+  send(data: string | Buffer, isBinary?: boolean): Promise<void>;
+  close(code?: number, reason?: string): Promise<void>;
+  onMessage(callback: (message: WebSocketMessage) => void): void;
+  onClose(callback: (code: number, reason: string) => void): void;
+  onError(callback: (error: Error) => void): void;
+}
+
+export interface SSEEvent {
+  id?: string;
+  event?: string;
+  data: string;
+  retry?: number;
+}
+
+export interface CycleTLSSSEResponse extends CycleTLSResponse {
+  // SSE specific methods
+  events(): AsyncIterableIterator<SSEEvent>;
+  onEvent(callback: (event: SSEEvent) => void): void;
+  onError(callback: (error: Error) => void): void;
+  close(): Promise<void>;
 }
 
 let child: ChildProcessWithoutNullStreams;
@@ -531,6 +574,7 @@ class Golang extends EventEmitter {
 }
 
 export interface CycleTLSClient {
+  // Basic HTTP methods
   (
     url: string,
     options: CycleTLSRequestOptions,
@@ -545,6 +589,16 @@ export interface CycleTLSClient {
   options(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   connect(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
   patch(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSResponse>;
+  
+  // WebSocket methods
+  ws(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSWebSocketResponse>;
+  webSocket(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSWebSocketResponse>;
+  
+  // Server-Sent Events (SSE) methods
+  sse(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSSSEResponse>;
+  eventSource(url: string, options: CycleTLSRequestOptions): Promise<CycleTLSSSEResponse>;
+  
+  // Utility methods
   exit(): Promise<undefined>;
 }const initCycleTLS = async (
   initOptions: {
@@ -593,6 +647,9 @@ export interface CycleTLSClient {
 
     instance.on("ready", () => {
       const CycleTLS = (() => {
+        // Track connections by host for connection reuse
+        const connectionsByHost = new Map<string, boolean>();
+        
         const CycleTLS = async (
           url: string,
           options: CycleTLSRequestOptions,
@@ -602,6 +659,10 @@ export interface CycleTLSClient {
             if (exitTimeout) {
               clearTimeout(exitTimeout);
             }
+            
+            // Track connection reuse by parsing the URL's host
+            const urlObj = new URL(url);
+            const hostKey = urlObj.host;
 
             const response = await new Promise((resolveRequest, rejectRequest) => {
               const requestId = `${url}#${Date.now()}-${Math.floor(1000 * Math.random())}`;
@@ -609,16 +670,26 @@ export interface CycleTLSClient {
               //set default options
               options ??= {}
 
-              //set default ja3, user agent, body and proxy
-              if (!options?.ja3)
+              // Set default fingerprinting options - prefer JA3 if multiple options are provided
+              if (!options?.ja3 && !options?.ja4 && !options?.http2Fingerprint && !options?.quicFingerprint) {
                 options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
-              if (!options?.userAgent)
+              }
+              
+              // Set default user agent
+              if (!options?.userAgent) {
                 options.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36";
+              }
 
+              // Set default request options
               if (!options?.body) options.body = "";
               if (!options?.proxy) options.proxy = "";
               if (!options?.insecureSkipVerify) options.insecureSkipVerify = false;
               if (!options?.forceHTTP1) options.forceHTTP1 = false;
+              if (!options?.forceHTTP3) options.forceHTTP3 = false;
+              if (!options?.protocol) {
+                // Default to standard HTTP protocol
+                options.protocol = ""; // Empty string means standard HTTP/HTTPS
+              }
 
 
               //convert simple cookies
@@ -634,10 +705,20 @@ export interface CycleTLSClient {
                 options.cookies = tempArr;
               }
 
+              // Track if we've connected to this host before for connection reuse
+              const hasExistingConnection = connectionsByHost.has(hostKey);
+              
+              // Set the connection as tracked for this host
+              connectionsByHost.set(hostKey, true);
+              
+              // Add connection reuse hint in the options
               instance.request(requestId, {
                 url,
                 ...options,
                 method,
+                // Add metadata about connection reuse (will be ignored by Go if not implemented)
+                _connectionReuse: hasExistingConnection ? "reuse" : "new",
+                _hostKey: hostKey,
               });
 
               instance.once(requestId, (response) => {
@@ -752,7 +833,29 @@ export interface CycleTLSClient {
           return CycleTLS(url, options, "patch");
         };
 
+        // WebSocket methods
+        CycleTLS.ws = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSWebSocketResponse> => {
+          // Set WebSocket protocol
+          options.protocol = "websocket";
+          return CycleTLS(url, options, "get") as Promise<CycleTLSWebSocketResponse>;
+        };
 
+        CycleTLS.webSocket = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSWebSocketResponse> => {
+          return CycleTLS.ws(url, options);
+        };
+
+        // Server-Sent Events methods
+        CycleTLS.sse = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSSSEResponse> => {
+          // Set SSE protocol
+          options.protocol = "sse";
+          return CycleTLS(url, options, "get") as Promise<CycleTLSSSEResponse>;
+        };
+
+        CycleTLS.eventSource = (url: string, options: CycleTLSRequestOptions): Promise<CycleTLSSSEResponse> => {
+          return CycleTLS.sse(url, options);
+        };
+
+        // Utility methods
         CycleTLS.exit = async (): Promise<undefined> => {
           if (exitTimeout) {
             clearTimeout(exitTimeout);

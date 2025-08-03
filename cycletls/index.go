@@ -24,8 +24,17 @@ type Options struct {
 	Method             string            `json:"method"`
 	Headers            map[string]string `json:"headers"`
 	Body               string            `json:"body"`
+	
+	// TLS fingerprinting options
 	Ja3                string            `json:"ja3"`
+	Ja4                string            `json:"ja4"`
+	HTTP2Fingerprint   string            `json:"http2Fingerprint"`
+	QUICFingerprint    string            `json:"quicFingerprint"`
+	
+	// Browser identification
 	UserAgent          string            `json:"userAgent"`
+	
+	// Connection options
 	Proxy              string            `json:"proxy"`
 	Cookies            []Cookie          `json:"cookies"`
 	Timeout            int               `json:"timeout"`
@@ -33,7 +42,11 @@ type Options struct {
 	HeaderOrder        []string          `json:"headerOrder"`
 	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
 	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+	
+	// Protocol options
 	ForceHTTP1         bool              `json:"forceHTTP1"`
+	ForceHTTP3         bool              `json:"forceHTTP3"`
+	Protocol           string            `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
 }
 
 type cycleTLSRequest struct {
@@ -63,11 +76,35 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var browser = Browser{
+		// TLS fingerprinting options
 		JA3:                request.Options.Ja3,
+		JA4:                request.Options.Ja4,
+		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
+		QUICFingerprint:    request.Options.QUICFingerprint,
+		
+		// Browser identification
 		UserAgent:          request.Options.UserAgent,
+		
+		// Connection options
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
-		forceHTTP1:         request.Options.ForceHTTP1,
+		ForceHTTP1:         request.Options.ForceHTTP1,
+		ForceHTTP3:         request.Options.ForceHTTP3,
+		
+		// Header ordering
+		HeaderOrder:        request.Options.HeaderOrder,
+	}
+
+	// Handle protocol-specific clients
+	if request.Options.Protocol == "websocket" {
+		// WebSocket requests are handled separately and will be implemented later
+		log.Fatal("WebSocket support is not yet fully implemented")
+	} else if request.Options.Protocol == "sse" {
+		// SSE requests are handled separately and will be implemented later
+		log.Fatal("SSE support is not yet fully implemented")
+	} else if request.Options.Protocol == "http3" || request.Options.ForceHTTP3 {
+		// HTTP/3 requests are handled separately and will be implemented later
+		log.Fatal("HTTP/3 support is not yet fully implemented")
 	}
 
 	client, err := newClient(
@@ -303,7 +340,26 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 		activeRequestsMutex.Unlock()
 	}()
 
-	defer res.client.CloseIdleConnections()
+	// Extract host from URL for connection reuse tracking
+	urlObj, _ := url.Parse(res.options.Options.URL)
+	hostPort := urlObj.Host
+	if !strings.Contains(hostPort, ":") {
+		if urlObj.Scheme == "https" {
+			hostPort = hostPort + ":443"  // Default HTTPS port
+		} else {
+			hostPort = hostPort + ":80"   // Default HTTP port
+		}
+	}
+	
+	// Don't close connections when finished - they'll be reused for the same host
+	// Instead, tell the roundtripper to keep this connection but close others
+	defer func() {
+		// Use type assertion to access the roundTripper
+		if transport, ok := res.client.Transport.(*roundTripper); ok {
+			transport.CloseIdleConnections(hostPort)
+		}
+	}()
+	
 	finalUrl := res.options.Options.URL
 
 	resp, err := res.client.Do(res.req)

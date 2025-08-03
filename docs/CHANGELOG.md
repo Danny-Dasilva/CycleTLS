@@ -1,5 +1,33 @@
 # CycleTLS Changelog
 
+## 2.0.0 - (TBD 2024)
+### Release Highlights
+Major release introducing HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, and binary response support. Significant performance improvements through connection reuse and enhanced protocol support.
+
+### New Features
+- **HTTP/3 Support** - Full HTTP/3 protocol implementation with QUIC transport, custom QUIC configuration options, and connection pooling
+- **WebSocket Support** - Native WebSocket client implementation with event-based API (onMessage, onClose, onError callbacks) and TLS fingerprinting integration
+- **Server-Sent Events (SSE)** - SSE client implementation for real-time event streaming with automatic reconnection and AsyncIterableIterator API
+- **JA4 Fingerprinting** - Implementation of JA4 TLS fingerprinting (successor to JA3) combining TLS version, cipher suites, extensions, HTTP headers, and User-Agent
+- **HTTP/2 Fingerprinting** - Enhanced HTTP/2 client fingerprinting with custom settings, stream dependencies, and priority orders
+- **Binary Response Support** - Streaming support for binary responses with async dispatcher and improved memory efficiency [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371)
+- **Connection Reuse** - Persistent connection pooling to reduce TLS handshakes and improve performance
+
+### API Enhancements
+- New protocol-specific methods: `cycleTLS.ws()` / `cycleTLS.webSocket()` for WebSocket connections
+- New SSE methods: `cycleTLS.sse()` / `cycleTLS.eventSource()` for Server-Sent Events
+- `forceHTTP3` option to explicitly use HTTP/3 protocol
+- `protocol` parameter to specify connection type: "http1", "http2", "http3", "websocket", "sse"
+- Stream-based response API with `response.stream` for efficient data handling
+
+### Bug Fixes
+- Fix uncaught `ESRCH` on `SIGINT`/`SIGTERM` signals [#370](https://github.com/Danny-Dasilva/CycleTLS/issues/370)
+- Improved error handling for Windows systems
+- Fixed syntax issues with redirects
+- Resolved deadlock issues on Linux
+- Better proxy header handling
+- General test fixes and stability improvements
+
 ## 1.0.26 - (2-16-2024)
 ### Release Highlights
 Fix illegal parameter error and location url error

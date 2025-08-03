@@ -10,6 +10,9 @@ import (
 	"strings"
 	"io"
 	"errors"
+	"net/http"
+	"crypto/tls"
+	fhttp "github.com/Danny-Dasilva/fhttp"
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
 )
@@ -341,6 +344,55 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 	}
 	return
 
+}
+
+// ConvertFhttpHeader converts fhttp.Header to http.Header
+func ConvertFhttpHeader(fh fhttp.Header) http.Header {
+	h := make(http.Header)
+	for k, v := range fh {
+		h[k] = v
+	}
+	return h
+}
+
+// ConvertUtlsConfig converts utls.Config to tls.Config
+func ConvertUtlsConfig(utlsConfig *utls.Config) *tls.Config {
+	if utlsConfig == nil {
+		return nil
+	}
+	
+	return &tls.Config{
+		Rand:               utlsConfig.Rand,
+		Time:               utlsConfig.Time,
+		RootCAs:            utlsConfig.RootCAs,
+		NextProtos:         utlsConfig.NextProtos,
+		ServerName:         utlsConfig.ServerName,
+		InsecureSkipVerify: utlsConfig.InsecureSkipVerify,
+		CipherSuites:       utlsConfig.CipherSuites,
+		MinVersion:         utlsConfig.MinVersion,
+		MaxVersion:         utlsConfig.MaxVersion,
+	}
+}
+
+// MarshalHeader preserves header order while converting to http.Header
+func MarshalHeader(h fhttp.Header, order []string) http.Header {
+	result := make(http.Header)
+	
+	// Add ordered headers first
+	for _, key := range order {
+		if values, ok := h[key]; ok {
+			result[key] = values
+		}
+	}
+	
+	// Add remaining headers
+	for key, values := range h {
+		if _, exists := result[key]; !exists {
+			result[key] = values
+		}
+	}
+	
+	return result
 }
 
 // PrettyStruct formats json

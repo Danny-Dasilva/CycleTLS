@@ -46,7 +46,6 @@ test("Should return final url a 301 redirect", async () => {
     },
         "get"
     );
-    console.log(redirectResponse, "hello")
     expect(redirectResponse.status).toBe(301);
     expect(redirectResponse.finalUrl).toBe(url)
 

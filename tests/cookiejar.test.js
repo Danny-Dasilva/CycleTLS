@@ -35,7 +35,8 @@ test("Should properly set and configure cookies", async () => {
       cookie: await cookieJar.getCookieString("https://httpbin.org/cookies"),
     },
   });
-  expect(thirdResponse.body?.cookies?.freeform).not.toEqual(null);
+  thirdResponseJson = await thirdResponse.json();
+  expect(thirdResponseJson?.cookies?.freeform).not.toEqual(null);
 
   // Now send a fourth request setting an additional 3 cookies
   const fourthResponse = await cycleTLS.get(
@@ -60,7 +61,7 @@ test("Should properly set and configure cookies", async () => {
     },
   });
   const expected_cookies = { a: "1", b: "2", c: "3", freeform: "test" };
-  const fifthBody = fifthResponse.body;
+  const fifthBody = fifthResponse.json()
 
   expect(fifthBody?.cookies).toEqual(expected_cookies);
   await cycleTLS.exit();
