@@ -1293,6 +1293,14 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		return Response{}, err
 	}
 
+	// Automatic decompression (axios-style) - check Content-Encoding header
+	encoding := resp.Header["Content-Encoding"]
+	content := resp.Header["Content-Type"]
+	if len(encoding) > 0 {
+		// Automatically decompress the body like axios does
+		bodyBytes = DecompressBody(bodyBytes, encoding, content)
+	}
+
 	// Convert headers
 	headers := make(map[string]string)
 	for name, values := range resp.Header {

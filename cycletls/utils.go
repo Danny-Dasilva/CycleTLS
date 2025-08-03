@@ -41,32 +41,42 @@ func parseUserAgent(userAgent string) UserAgent {
 
 }
 
-// DecompressBody unzips compressed data
+// DecompressBody unzips compressed data following axios-style automatic decompression
 func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody []byte) {
-	if len(encoding) > 0 {
-		if encoding[0] == "gzip" {
-			unz, err := gUnzipData(Body)
-			if err != nil {
-				return Body
-			}
-			return unz
-		} else if encoding[0] == "deflate" {
-			unz, err := enflateData(Body)
-			if err != nil {
-				return Body
-			}
-			return unz
-		} else if encoding[0] == "br" {
-			unz, err := unBrotliData(Body)
-			if err != nil {
-				return Body
-			}
-			return unz
-		}
+	// If no encoding specified, return original body
+	if len(encoding) == 0 {
+		return Body
 	}
 
-	return parsedBody
-
+	// Handle multiple encodings (e.g., "gzip, deflate") - process first encoding
+	encodingType := strings.ToLower(strings.TrimSpace(encoding[0]))
+	
+	switch encodingType {
+	case "gzip":
+		unz, err := gUnzipData(Body)
+		if err != nil {
+			// Return original body on decompression failure (axios behavior)
+			return Body
+		}
+		return unz
+	case "deflate":
+		unz, err := enflateData(Body)
+		if err != nil {
+			// Return original body on decompression failure (axios behavior)
+			return Body
+		}
+		return unz
+	case "br", "brotli":
+		unz, err := unBrotliData(Body)
+		if err != nil {
+			// Return original body on decompression failure (axios behavior)
+			return Body
+		}
+		return unz
+	default:
+		// Unknown encoding, return original body
+		return Body
+	}
 }
 
 func gUnzipData(data []byte) (resData []byte, err error) {
@@ -414,6 +424,123 @@ func CreateUSpec(value any) (uquic.QUICSpec, error) {
 		return uquic.QUICSpec{}, errors.New("unsupported type")
 	}
 }
+
+// QUICStringToSpec creates a ClientHelloSpec based on a QUIC fingerprint string
+func QUICStringToSpec(quicFingerprint string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
+	if quicFingerprint == "" {
+		return nil, errors.New("empty QUIC fingerprint")
+	}
+
+	parsedUserAgent := parseUserAgent(userAgent)
+	extMap := genMap()
+
+	// Parse QUIC fingerprint hex string - for now we'll use a simplified approach
+	// The hex string contains TLS ClientHello parameters encoded for QUIC
+	// For the implementation, we'll decode key components and create a spec
+	
+	// Extract TLS version from the beginning of the hex string
+	// Format typically starts with TLS version (e.g., 1603 for TLS 1.2, 1603 for TLS 1.3)
+	if len(quicFingerprint) < 4 {
+		return nil, errors.New("invalid QUIC fingerprint: too short")
+	}
+
+	// Default to TLS 1.3 for QUIC (as QUIC typically uses TLS 1.3)
+	var tlsVersion uint16 = utls.VersionTLS13
+	
+	// Create TLS configuration for QUIC
+	tlsMaxVersion, tlsMinVersion, tlsExtension, err := createTlsVersion(tlsVersion)
+	if err != nil {
+		return nil, err
+	}
+	extMap["43"] = tlsExtension
+
+	// QUIC-specific cipher suites (TLS 1.3 only)
+	var suites []uint16
+	if parsedUserAgent.UserAgent == chrome {
+		suites = append(suites, utls.GREASE_PLACEHOLDER)
+	}
+	
+	// Add TLS 1.3 cipher suites commonly used with QUIC
+	suites = append(suites, []uint16{
+		utls.TLS_AES_128_GCM_SHA256,
+		utls.TLS_AES_256_GCM_SHA384,
+		utls.TLS_CHACHA20_POLY1305_SHA256,
+		utls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		utls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		utls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	}...)
+
+	// Set up curves for QUIC
+	var targetCurves []utls.CurveID
+	if parsedUserAgent.UserAgent == chrome {
+		targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER))
+		if supportedVersionsExt, ok := extMap["43"]; ok {
+			if supportedVersions, ok := supportedVersionsExt.(*utls.SupportedVersionsExtension); ok {
+				supportedVersions.Versions = append([]uint16{utls.GREASE_PLACEHOLDER}, supportedVersions.Versions...)
+			}
+		}
+		if keyShareExt, ok := extMap["51"]; ok {
+			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+				keyShare.KeyShares = append([]utls.KeyShare{{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}}}, keyShare.KeyShares...)
+			}
+		}
+	}
+
+	// Add common curves for QUIC
+	targetCurves = append(targetCurves, []utls.CurveID{
+		utls.X25519,
+		utls.CurveP256,
+		utls.CurveP384,
+		utls.CurveP521,
+	}...)
+	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
+
+	// Set point formats
+	extMap["11"] = &utls.SupportedPointsExtension{SupportedPoints: []byte{0}}
+
+	// Force HTTP/1.1 if requested (though this is unusual for QUIC)
+	if forceHTTP1 {
+		extMap["16"] = &utls.ALPNExtension{
+			AlpnProtocols: []string{"http/1.1"},
+		}
+	} else {
+		// Default ALPN protocols for QUIC/HTTP3
+		extMap["16"] = &utls.ALPNExtension{
+			AlpnProtocols: []string{"h3", "h3-29", "h3-28", "h3-27"},
+		}
+	}
+
+	// Add QUIC transport parameters extension (critical for QUIC)
+	extMap["57"] = &utls.QUICTransportParametersExtension{}
+
+	// Build extensions list with QUIC-appropriate extensions
+	var exts []utls.TLSExtension
+	if parsedUserAgent.UserAgent == chrome {
+		exts = append(exts, &utls.UtlsGREASEExtension{})
+	}
+
+	// QUIC-specific extension order
+	quicExtensions := []string{"0", "23", "65281", "10", "11", "35", "16", "5", "51", "43", "13", "45", "28", "57", "21"}
+	for _, e := range quicExtensions {
+		if te, ok := extMap[e]; ok {
+			if e == "21" && parsedUserAgent.UserAgent == chrome {
+				exts = append(exts, &utls.UtlsGREASEExtension{})
+			}
+			exts = append(exts, te)
+		}
+	}
+
+	return &utls.ClientHelloSpec{
+		TLSVersMin:         tlsMinVersion,
+		TLSVersMax:         tlsMaxVersion,
+		CipherSuites:       suites,
+		CompressionMethods: []byte{0},
+		Extensions:         exts,
+		GetSessionID:       sha256.Sum256,
+	}, nil
+}
+
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
 func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
 	switch ver {

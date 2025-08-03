@@ -125,8 +125,11 @@ func TestWebSocketClient(t *testing.T) {
 }
 
 func TestWebSocketResponse(t *testing.T) {
-	// Create WebSocket response
-	conn, err := websocket.Dial("ws://echo.websocket.org", "", "http://localhost")
+	// Create WebSocket dialer
+	dialer := websocket.DefaultDialer
+	
+	// Create WebSocket connection
+	conn, _, err := dialer.Dial("ws://echo.websocket.org/", nil)
 	if err != nil {
 		t.Skipf("Cannot connect to echo.websocket.org: %v", err)
 		return

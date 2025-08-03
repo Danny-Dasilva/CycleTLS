@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-
 	http "github.com/Danny-Dasilva/fhttp"
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	utls "github.com/refraction-networking/utls"
@@ -95,7 +94,9 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 	switch strings.ToLower(req.URL.Scheme) {
 	case "http":
 		// Allow connection reuse by removing DisableKeepAlives
-		rt.cachedTransports[addr] = &http.Transport{DialContext: rt.dialer.DialContext}
+		rt.cachedTransports[addr] = &http.Transport{
+			DialContext:           rt.dialer.DialContext,
+		}
 		return nil
 	case "https":
 	default:
@@ -141,7 +142,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	var spec *utls.ClientHelloSpec
 	
 	// Determine which fingerprint to use
-	if rt.JA3 != "" {
+	if rt.QUICFingerprint != "" {
+		// Use QUIC fingerprint
+		spec, err = QUICStringToSpec(rt.QUICFingerprint, rt.UserAgent, rt.ForceHTTP1)
+		if err != nil {
+			return nil, err
+		}
+	} else if rt.JA3 != "" {
 		// Use JA3 fingerprint
 		spec, err = StringToSpec(rt.JA3, rt.UserAgent, rt.ForceHTTP1)
 		if err != nil {
@@ -221,7 +228,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	default:
 		// HTTP/1.x transport - enable connection reuse
 		rt.cachedTransports[addr] = &http.Transport{
-			DialTLSContext: rt.dialTLS,
+			DialTLSContext:        rt.dialTLS,
 			// Connection reuse enabled by removing DisableKeepAlives
 		}
 	}
