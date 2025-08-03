@@ -77,7 +77,7 @@ func TestConnectionReuse(t *testing.T) {
 		Ja3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent:          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		InsecureSkipVerify: true, // Required for test server's self-signed certificate
-		// Note: We want connection reuse, so we don't set any options that would disable it
+		EnableConnectionReuse: true, // Enable connection reuse for the test
 	}
 	
 	// Make multiple requests using the same client instance to test connection reuse
@@ -136,26 +136,27 @@ func TestConnectionReuse(t *testing.T) {
 	
 	// For proper connection reuse, we should have:
 	// - 4 total requests (3 regular + 1 stats request)
-	// - Fewer handshakes than unique connections if reuse is working
+	// - Only 1 handshake for all requests to the same host (connection reuse working)
 	if totalRequests != 4 {
 		t.Errorf("Expected 4 total requests, got %d", totalRequests)
 	}
 	
-	// Current behavior: CycleTLS creates a new client for each request
-	// This means no connection reuse (each request = new connection)
-	// In the future, this should be improved to reuse connections
+	// New behavior: CycleTLS now reuses connections across requests
+	// This means connection reuse is working (single connection for all requests to same host)
 	
-	// For now, we test that:
-	// 1. Each request gets its own connection (current behavior)
+	// We test that:
+	// 1. All requests share the same connection (new behavior)
 	// 2. The transport configuration is working (we get responses)
 	// 3. The connection tracking is working correctly
+	// 4. Connection reuse provides better performance
 	
-	expectedHandshakes := 4 // One per request due to current architecture
+	expectedHandshakes := 1 // Only one handshake needed with connection reuse
 	if handshakes != expectedHandshakes {
-		t.Errorf("Expected %d handshakes (current CycleTLS behavior: new client per request), got %d", expectedHandshakes, handshakes)
+		t.Errorf("Expected %d handshake (connection reuse enabled), got %d", expectedHandshakes, handshakes)
+		t.Logf("Connection reuse may not be working properly - each request should reuse the same connection")
 	} else {
-		t.Logf("Connection test passed: %d handshakes for %d requests (current CycleTLS behavior - creates new client per request)", handshakes, totalRequests)
-		t.Logf("NOTE: For better performance, CycleTLS should be improved to reuse connections across requests")
+		t.Logf("Connection reuse test passed: %d handshake for %d requests (connection reuse working correctly)", handshakes, totalRequests)
+		t.Logf("SUCCESS: CycleTLS is now reusing connections across requests for better performance")
 	}
 }
 

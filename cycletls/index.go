@@ -48,6 +48,9 @@ type Options struct {
 	ForceHTTP1         bool              `json:"forceHTTP1"`
 	ForceHTTP3         bool              `json:"forceHTTP3"`
 	Protocol           string            `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
+	
+	// Connection reuse options
+	EnableConnectionReuse bool            `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
 }
 
 type cycleTLSRequest struct {
@@ -111,11 +114,16 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		return dispatchHTTP3Request(request)
 	}
 
-	client, err := newClient(
+	// For now, always enable connection reuse since Go bool defaults to false
+	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	enableConnectionReuse := true
+	
+	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
 		request.Options.DisableRedirect,
 		request.Options.UserAgent,
+		enableConnectionReuse,
 		request.Options.Proxy,
 	)
 	if err != nil {
@@ -234,11 +242,16 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		HeaderOrder:        request.Options.HeaderOrder,
 	}
 
-	client, err := newClient(
+	// For now, always enable connection reuse since Go bool defaults to false
+	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	enableConnectionReuse := true
+	
+	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
 		request.Options.DisableRedirect,
 		request.Options.UserAgent,
+		enableConnectionReuse,
 		request.Options.Proxy,
 	)
 	if err != nil {
@@ -297,11 +310,16 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		HeaderOrder:        request.Options.HeaderOrder,
 	}
 
-	client, err := newClient(
+	// For now, always enable connection reuse since Go bool defaults to false
+	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	enableConnectionReuse := true
+	
+	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
 		request.Options.DisableRedirect,
 		request.Options.UserAgent,
+		enableConnectionReuse,
 		request.Options.Proxy,
 	)
 	if err != nil {
@@ -1254,12 +1272,17 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		HeaderOrder:        options.HeaderOrder,
 	}
 
-	// Create HTTP client
-	httpClient, err := newClient(
+	// Create HTTP client with connection reuse
+	// For now, always enable connection reuse since Go bool defaults to false
+	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	enableConnectionReuse := true
+	
+	httpClient, err := newClientWithReuse(
 		browser,
 		options.Timeout,
 		options.DisableRedirect,
 		options.UserAgent,
+		enableConnectionReuse,
 		options.Proxy,
 	)
 	if err != nil {

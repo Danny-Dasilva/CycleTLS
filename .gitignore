@@ -5,3 +5,4 @@ ignore
 golang/go.sum
 tests/images/output*
 tests/images/source*
+.serena/*

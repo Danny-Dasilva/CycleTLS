@@ -2,12 +2,34 @@ package cycletls
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	fhttp "github.com/Danny-Dasilva/fhttp"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/net/proxy"
 	utls "github.com/refraction-networking/utls"
+)
+
+// Global client pool for connection reuse
+var (
+	clientPool      = make(map[string]fhttp.Client)
+	clientPoolMutex = sync.RWMutex{}
+)
+
+// ClientPoolEntry represents a cached client with metadata
+type ClientPoolEntry struct {
+	Client    fhttp.Client
+	CreatedAt time.Time
+	LastUsed  time.Time
+}
+
+// Global client pool with metadata
+var (
+	advancedClientPool      = make(map[string]*ClientPoolEntry)
+	advancedClientPoolMutex = sync.RWMutex{}
 )
 
 type Browser struct {
@@ -127,14 +149,86 @@ func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDial
 	}, proxy)
 }
 
+// generateClientKey creates a unique key for client pooling based on browser configuration
+func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxyURL string) string {
+	// Create a hash of the configuration that affects connection behavior
+	configStr := fmt.Sprintf("ja3:%s|ja4:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t",
+		browser.JA3,
+		browser.JA4,
+		browser.HTTP2Fingerprint,
+		browser.QUICFingerprint,
+		browser.UserAgent,
+		proxyURL,
+		timeout,
+		disableRedirect,
+		browser.InsecureSkipVerify,
+		browser.ForceHTTP1,
+		browser.ForceHTTP3,
+	)
+	
+	// Generate SHA256 hash for the key
+	hash := sha256.Sum256([]byte(configStr))
+	return fmt.Sprintf("%x", hash[:16]) // Use first 16 bytes for shorter key
+}
 
+// getOrCreateClient retrieves a client from the pool or creates a new one
+func getOrCreateClient(browser Browser, timeout int, disableRedirect bool, userAgent string, enableConnectionReuse bool, proxyURL ...string) (fhttp.Client, error) {
+	// If connection reuse is disabled, always create a new client
+	if !enableConnectionReuse {
+		return createNewClient(browser, timeout, disableRedirect, userAgent, proxyURL...)
+	}
+	
+	proxy := ""
+	if len(proxyURL) > 0 {
+		proxy = proxyURL[0]
+	}
+	
+	clientKey := generateClientKey(browser, timeout, disableRedirect, proxy)
+	
+	// Try to get existing client from pool
+	advancedClientPoolMutex.RLock()
+	if entry, exists := advancedClientPool[clientKey]; exists {
+		// Update last used time
+		entry.LastUsed = time.Now()
+		client := entry.Client
+		advancedClientPoolMutex.RUnlock()
+		return client, nil
+	}
+	advancedClientPoolMutex.RUnlock()
+	
+	// Create new client if not found in pool
+	advancedClientPoolMutex.Lock()
+	defer advancedClientPoolMutex.Unlock()
+	
+	// Double-check in case another goroutine created it while we were waiting for the write lock
+	if entry, exists := advancedClientPool[clientKey]; exists {
+		entry.LastUsed = time.Now()
+		return entry.Client, nil
+	}
+	
+	// Create new client
+	client, err := createNewClient(browser, timeout, disableRedirect, userAgent, proxyURL...)
+	if err != nil {
+		return fhttp.Client{}, err
+	}
+	
+	// Add to pool
+	now := time.Now()
+	advancedClientPool[clientKey] = &ClientPoolEntry{
+		Client:    client,
+		CreatedAt: now,
+		LastUsed:  now,
+	}
+	
+	return client, nil
+}
 
-// newClient creates a new http client
-func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (fhttp.Client, error) {
+// createNewClient creates a new HTTP client (internal function)
+func createNewClient(browser Browser, timeout int, disableRedirect bool, userAgent string, proxyURL ...string) (fhttp.Client, error) {
 	var dialer proxy.ContextDialer
 	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
 		var err error
-		dialer, err = newConnectDialer(proxyURL[0], UserAgent)
+		dialer, err = newConnectDialer(proxyURL[0], userAgent)
 		if err != nil {
 			return fhttp.Client{
 				Timeout:       time.Duration(timeout) * time.Second,
@@ -146,6 +240,30 @@ func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent str
 	}
 
 	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
+}
+
+// cleanupClientPool removes old unused clients from the pool
+func cleanupClientPool(maxAge time.Duration) {
+	advancedClientPoolMutex.Lock()
+	defer advancedClientPoolMutex.Unlock()
+	
+	now := time.Now()
+	for key, entry := range advancedClientPool {
+		if now.Sub(entry.LastUsed) > maxAge {
+			delete(advancedClientPool, key)
+		}
+	}
+}
+
+// newClient creates a new http client (backward compatibility - defaults to no connection reuse)
+func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (fhttp.Client, error) {
+	// Backward compatibility: default to no connection reuse for existing code
+	return getOrCreateClient(browser, timeout, disableRedirect, UserAgent, false, proxyURL...)
+}
+
+// newClientWithReuse creates a new http client with configurable connection reuse
+func newClientWithReuse(browser Browser, timeout int, disableRedirect bool, UserAgent string, enableConnectionReuse bool, proxyURL ...string) (fhttp.Client, error) {
+	return getOrCreateClient(browser, timeout, disableRedirect, UserAgent, enableConnectionReuse, proxyURL...)
 }
 
 // WebSocketConnect establishes a WebSocket connection
@@ -210,8 +328,8 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 
 // SSEConnect establishes an SSE connection
 func (browser Browser) SSEConnect(ctx context.Context, urlStr string) (*SSEResponse, error) {
-	// Create HTTP client
-	httpClient, err := newClient(browser, 30, false, browser.UserAgent)
+	// Create HTTP client with connection reuse enabled
+	httpClient, err := newClientWithReuse(browser, 30, false, browser.UserAgent, true)
 	if err != nil {
 		return nil, err
 	}
