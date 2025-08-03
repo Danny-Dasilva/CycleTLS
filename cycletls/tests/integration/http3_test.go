@@ -1,4 +1,7 @@
-package integration
+//go:build integration
+// +build integration
+
+package cycletls_test
 
 import (
 	"context"

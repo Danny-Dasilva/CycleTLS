@@ -30,6 +30,7 @@ type roundTripper struct {
 	HeaderOrder        []string
 	
 	// Connection options
+	TLSConfig          *utls.Config
 	InsecureSkipVerify bool
 	Cookies            []Cookie
 	ForceHTTP1         bool
@@ -65,7 +66,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	
 	// Apply header order if specified
 	if len(rt.HeaderOrder) > 0 {
-		req.Header = http.Header(Marsh9alHeader(req.Header, rt.HeaderOrder))
+		req.Header = ConvertHttpHeader(MarshalHeader(req.Header, rt.HeaderOrder))
 	}
 	
 	// Get address for dialing
@@ -74,8 +75,9 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Check if we need HTTP/3
 	if rt.ForceHTTP3 {
 		// Use HTTP/3 transport
-		// This is a placeholder - we'll implement the detailed HTTP/3 support later
-		return nil, errors.New("HTTP/3 support is not yet fully implemented")
+		tlsConfig := ConvertUtlsConfig(rt.TLSConfig)
+		transport := NewHTTP3Transport(tlsConfig)
+		return transport.RoundTrip(req)
 	}
 	
 	// Use cached transport if available, otherwise create a new one
@@ -147,8 +149,10 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		}
 	} else if rt.JA4 != "" {
 		// Use JA4 fingerprint
-		// This is a placeholder - we'll implement JA4 support later
-		return nil, errors.New("JA4 fingerprinting is not yet fully implemented")
+		spec, err = JA4StringToSpec(rt.JA4, rt.UserAgent, rt.ForceHTTP1)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		// Default to Chrome fingerprint
 		spec, err = StringToSpec(DefaultChrome_JA3, rt.UserAgent, rt.ForceHTTP1)
@@ -281,6 +285,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		QUICFingerprint:    browser.QUICFingerprint,
 		UserAgent:          browser.UserAgent,
 		HeaderOrder:        browser.HeaderOrder,
+		TLSConfig:          browser.TLSConfig,
 		Cookies:            browser.Cookies,
 		cachedTransports:   make(map[string]http.RoundTripper),
 		cachedConnections:  make(map[string]net.Conn),

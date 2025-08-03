@@ -1,4 +1,7 @@
-package integration
+//go:build integration
+// +build integration
+
+package cycletls_test
 
 import (
 	"context"
@@ -8,6 +11,7 @@ import (
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"github.com/gorilla/websocket"
+	utls "github.com/refraction-networking/utls"
 )
 
 var upgrader = websocket.Upgrader{
@@ -73,13 +77,17 @@ func TestWebSocketClient(t *testing.T) {
 	defer func() { done <- true }()
 	serverURL := startWebSocketServer(t, done)
 	
-	// Create WebSocket client
-	browser := cycletls.Browser{
-		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+	// Create TLS config
+	tlsConfig := &utls.Config{
 		InsecureSkipVerify: true,
 	}
 	
-	wsClient := cycletls.NewWebSocketClient(browser)
+	// Create headers
+	headers := make(http.Header)
+	headers.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+	
+	// Create WebSocket client
+	wsClient := cycletls.NewWebSocketClient(tlsConfig, headers)
 	
 	// Connect to WebSocket server
 	conn, resp, err := wsClient.Connect(serverURL)

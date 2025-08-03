@@ -21,10 +21,10 @@ func GenerateJA4(tlsVersion uint16, cipherSuites []uint16, extensions []uint16, 
 	// Step 1: TLS version
 	tlsVersionStr := getTLSVersionString(tlsVersion)
 	
-	// Step 2: Cipher suites hash (first 2 characters)
+	// Step 2: Cipher suites hash (first 1 character)
 	cipherHash := hashCipherSuites(cipherSuites)
 	
-	// Step 3: Extensions hash (first 2 characters)
+	// Step 3: Extensions hash (first 4 characters)
 	extensionsHash := hashExtensions(extensions)
 	
 	// Step 4: HTTP headers hash (first 4 characters)
@@ -34,7 +34,8 @@ func GenerateJA4(tlsVersion uint16, cipherSuites []uint16, extensions []uint16, 
 	uaHash := hashUserAgent(userAgent)
 	
 	// Format: <TLS version><Cipher hash>_<Extensions hash>_<Headers hash>_<UA hash>
-	return fmt.Sprintf("%s%s_%s_%s_%s", tlsVersionStr, cipherHash[:4], extensionsHash[:4], headersHash[:4], uaHash[:4])
+	// JA4 format: t13d_cd89_1952_bb99 (19 chars total)
+	return fmt.Sprintf("%s%s_%s_%s_%s", tlsVersionStr, cipherHash[:1], extensionsHash[:4], headersHash[:4], uaHash[:4])
 }
 
 // GenerateJA4HTTP generates a JA4 HTTP fingerprint from HTTP headers only

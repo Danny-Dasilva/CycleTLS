@@ -40,6 +40,9 @@ export interface CycleTLSRequestOptions {
   };
   body?: string | URLSearchParams | FormData;
   
+  // Response type (like Axios)
+  responseType?: 'json' | 'text' | 'arraybuffer' | 'blob' | 'stream';
+  
   // TLS fingerprinting options
   ja3?: string;
   ja4?: string;
@@ -68,10 +71,7 @@ export interface CycleTLSResponse {
   headers: {
     [key: string]: any;
   };
-  stream: Readable;
-  raw(): Promise<Buffer>;
-  json(): Promise<any>;
-  text(enc?: BufferEncoding): Promise<string>;
+  data: any; // Axios-style data property
   finalUrl: string;
 }
 
@@ -219,6 +219,54 @@ async function streamToString(stream: Readable): Promise<string> {
     })
   );
   return Buffer.concat(chunks).toString('utf8');
+}
+
+// Utility function to convert stream to buffer
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return new Promise<Buffer>((resolve, reject) => {
+    stream
+      .on("data", (chunk) => chunks.push(chunk))
+      .on("end", () => resolve(Buffer.concat(chunks)))
+      .on("error", (err) => reject(err));
+  });
+}
+
+// Parse response data based on responseType (Axios-style)
+async function parseResponseData(
+  stream: Readable, 
+  responseType: string = 'json', 
+  headers: { [key: string]: any }
+): Promise<any> {
+  const buffer = await streamToBuffer(stream);
+  
+  switch (responseType) {
+    case 'arraybuffer':
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    
+    case 'blob':
+      const contentType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
+      return new Blob([buffer], { type: Array.isArray(contentType) ? contentType[0] : contentType });
+    
+    case 'text':
+      return buffer.toString('utf8');
+    
+    case 'stream':
+      // Return the original stream (though it's already consumed)
+      const newStream = new Readable({ read() {} });
+      newStream.push(buffer);
+      newStream.push(null);
+      return newStream;
+    
+    case 'json':
+    default:
+      try {
+        return JSON.parse(buffer.toString('utf8'));
+      } catch (error) {
+        // If JSON parsing fails, return raw buffer (could be compressed)
+        return buffer;
+      }
+  }
 }
 class PacketBuffer {
 
@@ -686,6 +734,7 @@ export interface CycleTLSClient {
               if (!options?.insecureSkipVerify) options.insecureSkipVerify = false;
               if (!options?.forceHTTP1) options.forceHTTP1 = false;
               if (!options?.forceHTTP3) options.forceHTTP3 = false;
+              if (!options?.responseType) options.responseType = 'json';
               if (!options?.protocol) {
                 // Default to standard HTTP protocol
                 options.protocol = ""; // Empty string means standard HTTP/HTTPS
@@ -721,7 +770,7 @@ export interface CycleTLSClient {
                 _hostKey: hostKey,
               });
 
-              instance.once(requestId, (response) => {
+              instance.once(requestId, async (response) => {
                 if (response.method === "error") {
                   rejectRequest(response.data);
 
@@ -745,37 +794,20 @@ export interface CycleTLSClient {
 
                   stream.on("close", handleClose);
                   instance.on(requestId, handleData);
-                  resolveRequest({
-                    status: response.data.statusCode,
-                    headers: response.data.headers,
-                    finalUrl: response.data.finalUrl,
-                    stream,
-                    raw: () => {
-                      const chunks: Buffer[] = [];
-                      return new Promise<Buffer>((resolve, reject) => {
-                        stream
-                          .on("data", (chunk) => chunks.push(chunk))
-                          .on("end", () => resolve(Buffer.concat(chunks)))
-                          .on("error", (err) => reject(err));
-                      });
-                    },
-                    json: () =>
-                      new Promise((resolve, reject) => {
-                        let data = "";
-                        stream
-                          .on("data", (chunk) => (data += chunk.toString()))
-                          .on("end", () => resolve(JSON.parse(data)))
-                          .on("error", (err) => reject(err));
-                      }),
-                    text: (enc: BufferEncoding) =>
-                      new Promise((resolve, reject) => {
-                        let data = "";
-                        stream
-                          .on("data", (chunk) => (data += chunk.toString(enc)))
-                          .on("end", () => resolve(data))
-                          .on("error", (err) => reject(err));
-                      }),
-                  });
+                  
+                  try {
+                    // Parse data based on responseType (Axios-style)
+                    const data = await parseResponseData(stream, options.responseType, response.data.headers);
+                    
+                    resolveRequest({
+                      status: response.data.statusCode,
+                      headers: response.data.headers,
+                      finalUrl: response.data.finalUrl,
+                      data: data,
+                    });
+                  } catch (error) {
+                    rejectRequest(error);
+                  }
                 }
               });
             });

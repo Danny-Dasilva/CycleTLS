@@ -29,6 +29,9 @@ type Browser struct {
 	// Ordered HTTP header fields
 	HeaderOrder        []string
 
+	// TLS configuration
+	TLSConfig          *utls.Config
+
 	// HTTP client
 	client            *fhttp.Client
 }

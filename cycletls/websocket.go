@@ -45,7 +45,7 @@ func NewWebSocketClient(tlsConfig *utls.Config, headers http.Header) *WebSocketC
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		TLSClientConfig:  tlsConfig,
+		TLSClientConfig:  ConvertUtlsConfig(tlsConfig),
 	}
 
 	return &WebSocketClient{

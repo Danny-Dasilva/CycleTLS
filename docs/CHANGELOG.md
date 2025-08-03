@@ -6,12 +6,12 @@ Major release introducing HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprint
 
 ### New Features
 - **HTTP/3 Support** - Full HTTP/3 protocol implementation with QUIC transport, custom QUIC configuration options, and connection pooling
-- **WebSocket Support** - Native WebSocket client implementation with event-based API (onMessage, onClose, onError callbacks) and TLS fingerprinting integration
-- **Server-Sent Events (SSE)** - SSE client implementation for real-time event streaming with automatic reconnection and AsyncIterableIterator API
-- **JA4 Fingerprinting** - Implementation of JA4 TLS fingerprinting (successor to JA3) combining TLS version, cipher suites, extensions, HTTP headers, and User-Agent
-- **HTTP/2 Fingerprinting** - Enhanced HTTP/2 client fingerprinting with custom settings, stream dependencies, and priority orders
-- **Binary Response Support** - Streaming support for binary responses with async dispatcher and improved memory efficiency [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371)
-- **Connection Reuse** - Persistent connection pooling to reduce TLS handshakes and improve performance
+- **WebSocket Support** - Native WebSocket client implementation with event-based API (onMessage, onClose, onError callbacks) and TLS fingerprinting integration [#34](https://github.com/Danny-Dasilva/CycleTLS/issues/34)
+- **Server-Sent Events (SSE)** - SSE client implementation for real-time event streaming with automatic reconnection and AsyncIterableIterator API [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274)
+- **JA4 Fingerprinting** - Implementation of JA4 TLS fingerprinting (successor to JA3) combining TLS version, cipher suites, extensions, HTTP headers, and User-Agent [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
+- **HTTP/2 Fingerprinting** - Enhanced HTTP/2 client fingerprinting with custom settings, stream dependencies, and priority orders [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
+- **Binary Response Support** - Streaming support for binary responses with async dispatcher and improved memory efficiency [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371), [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274), [#380](https://github.com/Danny-Dasilva/CycleTLS/issues/380)
+- **Connection Reuse** - Persistent connection pooling to reduce TLS handshakes and improve performance [#281](https://github.com/Danny-Dasilva/CycleTLS/issues/281)
 
 ### API Enhancements
 - New protocol-specific methods: `cycleTLS.ws()` / `cycleTLS.webSocket()` for WebSocket connections

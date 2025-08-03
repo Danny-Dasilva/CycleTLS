@@ -5,6 +5,7 @@ package cycletls_test
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,7 +41,7 @@ func TestConnectionReuse(t *testing.T) {
 	
 	// Initialize the server connection monitoring
 	// We need to access the TLS connection state after each request
-	server.Config.ConnState = func(conn http.ConnState, state http.ConnState) {
+	server.Config.ConnState = func(conn net.Conn, state http.ConnState) {
 		if state == http.StateNew {
 			handshakeCount++
 		}

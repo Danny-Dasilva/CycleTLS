@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
+	utls "github.com/refraction-networking/utls"
 )
 
 func TestGenerateJA4(t *testing.T) {
@@ -47,20 +49,11 @@ func TestGenerateJA4(t *testing.T) {
 
 func TestGenerateJA4H2(t *testing.T) {
 	// Create sample HTTP/2 settings
-	settings := []struct {
-		ID  uint32
-		Val uint32
-	}{
+	h2Settings := []http2.Setting{
 		{ID: 1, Val: 65536},       // HEADER_TABLE_SIZE
 		{ID: 2, Val: 0},           // ENABLE_PUSH
 		{ID: 4, Val: 6291456},     // INITIAL_WINDOW_SIZE
 		{ID: 6, Val: 262144},      // MAX_HEADER_LIST_SIZE
-	}
-
-	// Convert to proper type
-	h2Settings := make([]cycletls.HTTP2Setting, len(settings))
-	for i, s := range settings {
-		h2Settings = append(h2Settings, cycletls.HTTP2Setting{ID: s.ID, Val: s.Val})
 	}
 
 	streamDependency := uint32(15663105)
@@ -73,5 +66,105 @@ func TestGenerateJA4H2(t *testing.T) {
 	expected := "1:65536,2:0,4:6291456,6:262144|15663105|0|m,a,s,p"
 	if ja4h2 != expected {
 		t.Errorf("JA4 H2 incorrect: got %s, want %s", ja4h2, expected)
+	}
+}
+
+func TestParseJA4String(t *testing.T) {
+	// Test case 1: Valid JA4 string
+	ja4String := "t13d_cd89_1952_bb99"
+	components, err := cycletls.ParseJA4String(ja4String)
+	if err != nil {
+		t.Errorf("ParseJA4String failed: %v", err)
+	}
+
+	if components.TLSVersion != "t13" {
+		t.Errorf("TLS version incorrect: got %s, want t13", components.TLSVersion)
+	}
+
+	if components.CipherHash != "d" {
+		t.Errorf("Cipher hash incorrect: got %s, want d", components.CipherHash)
+	}
+
+	if components.ExtensionsHash != "cd89" {
+		t.Errorf("Extensions hash incorrect: got %s, want cd89", components.ExtensionsHash)
+	}
+
+	if components.HeadersHash != "1952" {
+		t.Errorf("Headers hash incorrect: got %s, want 1952", components.HeadersHash)
+	}
+
+	if components.UserAgentHash != "bb99" {
+		t.Errorf("User agent hash incorrect: got %s, want bb99", components.UserAgentHash)
+	}
+
+	// Test case 2: Invalid JA4 string - too short
+	_, err = cycletls.ParseJA4String("t13")
+	if err == nil {
+		t.Error("Expected error for short JA4 string")
+	}
+
+	// Test case 3: Invalid JA4 string - wrong format
+	_, err = cycletls.ParseJA4String("t13d_cd89_1952")
+	if err == nil {
+		t.Error("Expected error for malformed JA4 string")
+	}
+}
+
+func TestJA4StringToSpec(t *testing.T) {
+	// Test case 1: TLS 1.3 JA4
+	ja4String := "t13d_cd89_1952_bb99"
+	userAgent := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+	
+	spec, err := cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	if err != nil {
+		t.Errorf("JA4StringToSpec failed: %v", err)
+	}
+
+	if spec == nil {
+		t.Error("Spec should not be nil")
+	}
+
+	// Check TLS version
+	if spec.TLSVersMax != 0x0304 { // TLS 1.3
+		t.Errorf("TLS max version incorrect: got %x, want %x", spec.TLSVersMax, 0x0304)
+	}
+
+	// Test case 2: TLS 1.2 JA4
+	ja4String = "t12d_cd89_1952_bb99"
+	
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	if err != nil {
+		t.Errorf("JA4StringToSpec failed for TLS 1.2: %v", err)
+	}
+
+	if spec.TLSVersMax != 0x0303 { // TLS 1.2
+		t.Errorf("TLS max version incorrect for TLS 1.2: got %x, want %x", spec.TLSVersMax, 0x0303)
+	}
+
+	// Test case 3: Force HTTP/1
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, true)
+	if err != nil {
+		t.Errorf("JA4StringToSpec failed with forceHTTP1: %v", err)
+	}
+
+	// Check that ALPN extension contains only http/1.1
+	found := false
+	for _, ext := range spec.Extensions {
+		if alpn, ok := ext.(*utls.ALPNExtension); ok {
+			if len(alpn.AlpnProtocols) == 1 && alpn.AlpnProtocols[0] == "http/1.1" {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected ALPN extension with http/1.1 when forceHTTP1 is true")
+	}
+
+	// Test case 4: Invalid TLS version
+	ja4String = "t99d_cd89_1952_bb99"
+	_, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	if err == nil {
+		t.Error("Expected error for invalid TLS version")
 	}
 }

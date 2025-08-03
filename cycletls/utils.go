@@ -15,6 +15,7 @@ import (
 	fhttp "github.com/Danny-Dasilva/fhttp"
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
+	uquic "github.com/refraction-networking/uquic"
 )
 
 const (
@@ -215,6 +216,204 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		GetSessionID:       sha256.Sum256,
 	}, nil
 }
+
+// JA4Components represents the parsed components of a JA4 string
+type JA4Components struct {
+	TLSVersion       string
+	CipherHash       string
+	ExtensionsHash   string
+	HeadersHash      string
+	UserAgentHash    string
+}
+
+// ParseJA4String parses a JA4 string into its components
+// JA4 format: <TLS version><cipher hash>_<extensions hash>_<headers hash>_<UA hash>
+// Example: t13d_cd89_1952_bb99
+func ParseJA4String(ja4 string) (*JA4Components, error) {
+	if len(ja4) < 19 { // minimum length for JA4
+		return nil, errors.New("invalid JA4 string: too short")
+	}
+
+	// Split by underscores
+	parts := strings.Split(ja4, "_")
+	if len(parts) != 4 {
+		return nil, errors.New("invalid JA4 string: incorrect format")
+	}
+
+	// Extract TLS version and cipher hash from first part
+	// Expected format: t13d (3 chars TLS version + 1 char cipher hash = 4 chars)
+	if len(parts[0]) != 4 { // t13 + 1 char exactly
+		return nil, errors.New("invalid JA4 string: invalid TLS version/cipher part")
+	}
+
+	tlsVersion := parts[0][:3] // t10, t11, t12, t13
+	cipherHash := parts[0][3:] // remainder is cipher hash (1 char)
+
+	return &JA4Components{
+		TLSVersion:       tlsVersion,
+		CipherHash:       cipherHash,
+		ExtensionsHash:   parts[1],
+		HeadersHash:      parts[2], 
+		UserAgentHash:    parts[3],
+	}, nil
+}
+
+// JA4StringToSpec creates a ClientHelloSpec based on a JA4 string
+// Since JA4 uses hashes, we create a spec with common TLS parameters 
+// that would produce a similar fingerprint
+func JA4StringToSpec(ja4 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
+	components, err := ParseJA4String(ja4)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedUserAgent := parseUserAgent(userAgent)
+	extMap := genMap()
+
+	// Map TLS version string to actual version
+	var tlsVersion uint16
+	switch components.TLSVersion {
+	case "t10":
+		tlsVersion = utls.VersionTLS10
+	case "t11":
+		tlsVersion = utls.VersionTLS11
+	case "t12":
+		tlsVersion = utls.VersionTLS12
+	case "t13":
+		tlsVersion = utls.VersionTLS13
+	default:
+		return nil, errors.New("unsupported TLS version in JA4: " + components.TLSVersion)
+	}
+
+	// Create TLS configuration
+	tlsMaxVersion, tlsMinVersion, tlsExtension, err := createTlsVersion(tlsVersion)
+	if err != nil {
+		return nil, err
+	}
+	extMap["43"] = tlsExtension
+
+	// Use common cipher suites based on TLS version
+	var suites []uint16
+	if parsedUserAgent.UserAgent == chrome {
+		suites = append(suites, utls.GREASE_PLACEHOLDER)
+	}
+
+	// Add common cipher suites based on TLS version
+	if tlsVersion == utls.VersionTLS13 {
+		suites = append(suites, []uint16{
+			utls.TLS_AES_128_GCM_SHA256,
+			utls.TLS_AES_256_GCM_SHA384,
+			utls.TLS_CHACHA20_POLY1305_SHA256,
+			utls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		}...)
+	} else {
+		suites = append(suites, []uint16{
+			utls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			utls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+		}...)
+	}
+
+	// Use common extensions and curves
+	var targetCurves []utls.CurveID
+	if parsedUserAgent.UserAgent == chrome {
+		targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER))
+		if supportedVersionsExt, ok := extMap["43"]; ok {
+			if supportedVersions, ok := supportedVersionsExt.(*utls.SupportedVersionsExtension); ok {
+				supportedVersions.Versions = append([]uint16{utls.GREASE_PLACEHOLDER}, supportedVersions.Versions...)
+			}
+		}
+		if keyShareExt, ok := extMap["51"]; ok {
+			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+				keyShare.KeyShares = append([]utls.KeyShare{{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}}}, keyShare.KeyShares...)
+			}
+		}
+	}
+
+	// Add common curves
+	targetCurves = append(targetCurves, []utls.CurveID{
+		utls.CurveP256,
+		utls.CurveP384,
+		utls.CurveP521,
+		utls.X25519,
+	}...)
+	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
+
+	// Add common point formats
+	extMap["11"] = &utls.SupportedPointsExtension{SupportedPoints: []byte{0}}
+
+	// Force HTTP1 if requested
+	if forceHTTP1 {
+		extMap["16"] = &utls.ALPNExtension{
+			AlpnProtocols: []string{"http/1.1"},
+		}
+	}
+
+	// Build extensions list with common extensions
+	var exts []utls.TLSExtension
+	if parsedUserAgent.UserAgent == chrome {
+		exts = append(exts, &utls.UtlsGREASEExtension{})
+	}
+
+	// Add common extensions in typical order
+	commonExtensions := []string{"0", "23", "65281", "10", "11", "35", "16", "5", "51", "43", "13", "45", "28", "21"}
+	for _, e := range commonExtensions {
+		if te, ok := extMap[e]; ok {
+			if e == "21" && parsedUserAgent.UserAgent == chrome {
+				exts = append(exts, &utls.UtlsGREASEExtension{})
+			}
+			exts = append(exts, te)
+		}
+	}
+
+	return &utls.ClientHelloSpec{
+		TLSVersMin:         tlsMinVersion,
+		TLSVersMax:         tlsMaxVersion,
+		CipherSuites:       suites,
+		CompressionMethods: []byte{0},
+		Extensions:         exts,
+		GetSessionID:       sha256.Sum256,
+	}, nil
+}
+
+// QUIC fingerprinting utilities based on reference implementation
+
+// USpec represents a QUIC fingerprint specification
+type USpec struct {
+	QUICID uquic.QUICID
+}
+
+// Spec converts USpec to QUICSpec
+func (obj USpec) Spec() (uquic.QUICSpec, error) {
+	spec, err := uquic.QUICID2Spec(obj.QUICID)
+	if err != nil {
+		return uquic.QUICSpec{}, err
+	}
+	return spec, nil
+}
+
+// CreateUSpec creates a QUIC spec from various input types
+func CreateUSpec(value any) (uquic.QUICSpec, error) {
+	switch data := value.(type) {
+	case bool:
+		if data {
+			return uquic.QUICID2Spec(uquic.QUICFirefox_116)
+		}
+		return uquic.QUICSpec{}, nil
+	case uquic.QUICID:
+		return uquic.QUICID2Spec(data)
+	case USpec:
+		return data.Spec()
+	default:
+		return uquic.QUICSpec{}, errors.New("unsupported type")
+	}
+}
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
 func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
 	switch ver {
@@ -353,6 +552,15 @@ func ConvertFhttpHeader(fh fhttp.Header) http.Header {
 		h[k] = v
 	}
 	return h
+}
+
+// ConvertHttpHeader converts http.Header to fhttp.Header
+func ConvertHttpHeader(h http.Header) fhttp.Header {
+	fh := make(fhttp.Header)
+	for k, v := range h {
+		fh[k] = v
+	}
+	return fh
 }
 
 // ConvertUtlsConfig converts utls.Config to tls.Config

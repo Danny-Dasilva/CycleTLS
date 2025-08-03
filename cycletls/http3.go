@@ -5,11 +5,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"net/http"
+	stdhttp "net/http"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	http "github.com/Danny-Dasilva/fhttp"
 )
 
 // HTTP3Transport represents an HTTP/3 transport with customizable settings
@@ -59,8 +60,33 @@ func NewHTTP3Transport(tlsConfig *tls.Config) *HTTP3Transport {
 
 // RoundTrip implements the http.RoundTripper interface
 func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Convert fhttp.Request to net/http.Request for HTTP/3
+	stdReq := &stdhttp.Request{
+		Method:           req.Method,
+		URL:              req.URL,
+		Proto:            req.Proto,
+		ProtoMajor:       req.ProtoMajor,
+		ProtoMinor:       req.ProtoMinor,
+		Header:           ConvertFhttpHeader(req.Header),
+		Body:             req.Body,
+		GetBody:          req.GetBody,
+		ContentLength:    req.ContentLength,
+		TransferEncoding: req.TransferEncoding,
+		Close:            req.Close,
+		Host:             req.Host,
+		Form:             req.Form,
+		PostForm:         req.PostForm,
+		MultipartForm:    req.MultipartForm,
+		Trailer:          ConvertFhttpHeader(req.Trailer),
+		RemoteAddr:       req.RemoteAddr,
+		RequestURI:       req.RequestURI,
+		TLS:              nil, // TLS state conversion not needed for HTTP/3
+		Cancel:           req.Cancel,
+		Response:         nil,
+	}
+
 	// Create an HTTP/3 client
-	client := &http.Client{
+	client := &stdhttp.Client{
 		Transport: &http3.RoundTripper{
 			TLSClientConfig: t.TLSClientConfig,
 			QuicConfig:      t.QuicConfig,
@@ -72,14 +98,35 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer cancel()
 
 	// Create a new request with the context
-	newReq := req.Clone(ctx)
+	newReq := stdReq.Clone(ctx)
 
 	// Perform the request
-	return client.Do(newReq)
+	stdResp, err := client.Do(newReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert back to fhttp.Response
+	return &http.Response{
+		Status:           stdResp.Status,
+		StatusCode:       stdResp.StatusCode,
+		Proto:            stdResp.Proto,
+		ProtoMajor:       stdResp.ProtoMajor,
+		ProtoMinor:       stdResp.ProtoMinor,
+		Header:           ConvertHttpHeader(stdResp.Header),
+		Body:             stdResp.Body,
+		ContentLength:    stdResp.ContentLength,
+		TransferEncoding: stdResp.TransferEncoding,
+		Close:            stdResp.Close,
+		Uncompressed:     stdResp.Uncompressed,
+		Trailer:          ConvertHttpHeader(stdResp.Trailer),
+		Request:          req,
+		TLS:              nil, // Will be set properly if needed
+	}, nil
 }
 
 // ConfigureHTTP3Client configures an http.Client to use HTTP/3
-func ConfigureHTTP3Client(client *http.Client, tlsConfig *tls.Config) {
+func ConfigureHTTP3Client(client *stdhttp.Client, tlsConfig *tls.Config) {
 	client.Transport = &http3.RoundTripper{
 		TLSClientConfig: tlsConfig,
 		QuicConfig: &quic.Config{
@@ -123,6 +170,31 @@ func NewHTTP3RoundTripper(tlsConfig *tls.Config, quicConfig *quic.Config) *HTTP3
 
 // RoundTrip implements the http.RoundTripper interface
 func (rt *HTTP3RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Convert fhttp.Request to net/http.Request
+	stdReq := &stdhttp.Request{
+		Method:           req.Method,
+		URL:              req.URL,
+		Proto:            req.Proto,
+		ProtoMajor:       req.ProtoMajor,
+		ProtoMinor:       req.ProtoMinor,
+		Header:           ConvertFhttpHeader(req.Header),
+		Body:             req.Body,
+		GetBody:          req.GetBody,
+		ContentLength:    req.ContentLength,
+		TransferEncoding: req.TransferEncoding,
+		Close:            req.Close,
+		Host:             req.Host,
+		Form:             req.Form,
+		PostForm:         req.PostForm,
+		MultipartForm:    req.MultipartForm,
+		Trailer:          ConvertFhttpHeader(req.Trailer),
+		RemoteAddr:       req.RemoteAddr,
+		RequestURI:       req.RequestURI,
+		TLS:              nil, // TLS state conversion not needed for HTTP/3
+		Cancel:           req.Cancel,
+		Response:         nil,
+	}
+
 	// Use the custom dialer if set, otherwise use the forwarder
 	if rt.Dialer != nil {
 		// Check if req.URL.Host includes a port
@@ -139,9 +211,51 @@ func (rt *HTTP3RoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			Dial:            rt.Dialer,
 		}
 
-		return customRT.RoundTrip(req)
+		stdResp, err := customRT.RoundTrip(stdReq)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert back to fhttp.Response
+		return &http.Response{
+			Status:           stdResp.Status,
+			StatusCode:       stdResp.StatusCode,
+			Proto:            stdResp.Proto,
+			ProtoMajor:       stdResp.ProtoMajor,
+			ProtoMinor:       stdResp.ProtoMinor,
+			Header:           ConvertHttpHeader(stdResp.Header),
+			Body:             stdResp.Body,
+			ContentLength:    stdResp.ContentLength,
+			TransferEncoding: stdResp.TransferEncoding,
+			Close:            stdResp.Close,
+			Uncompressed:     stdResp.Uncompressed,
+			Trailer:          ConvertHttpHeader(stdResp.Trailer),
+			Request:          req,
+			TLS:              nil,
+		}, nil
 	}
 
-	// Use the default forwarder
-	return rt.Forwarder.RoundTrip(req)
+	// Use the default forwarder with conversion
+	stdResp, err := rt.Forwarder.RoundTrip(stdReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert back to fhttp.Response
+	return &http.Response{
+		Status:           stdResp.Status,
+		StatusCode:       stdResp.StatusCode,
+		Proto:            stdResp.Proto,
+		ProtoMajor:       stdResp.ProtoMajor,
+		ProtoMinor:       stdResp.ProtoMinor,
+		Header:           ConvertHttpHeader(stdResp.Header),
+		Body:             stdResp.Body,
+		ContentLength:    stdResp.ContentLength,
+		TransferEncoding: stdResp.TransferEncoding,
+		Close:            stdResp.Close,
+		Uncompressed:     stdResp.Uncompressed,
+		Trailer:          ConvertHttpHeader(stdResp.Trailer),
+		Request:          req,
+		TLS:              nil,
+	}, nil
 }
