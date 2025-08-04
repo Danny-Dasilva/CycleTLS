@@ -27,7 +27,7 @@ var requestDict = {
 };
 
 test("Multiple concurrent requests should complete successfully", async () => {
-  const cycleTLS = await initCycleTLS({ port: 9117 });
+  const cycleTLS = await initCycleTLS({ port: 9150, timeout: 30000 });
   
   const promises = Object.entries(requestDict).map(([url, params]) => {
     return cycleTLS(
@@ -56,7 +56,7 @@ test("Multiple concurrent requests should complete successfully", async () => {
 });
 
 test("Sequential requests to same host should reuse connection", async () => {
-  const cycleTLS = await initCycleTLS({ port: 9118 });
+  const cycleTLS = await initCycleTLS({ port: 9151, timeout: 30000 });
   
   // Make multiple requests to same domain
   const url = "https://httpbin.org";

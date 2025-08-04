@@ -1,0 +1,18 @@
+const initCycleTLS = require("../dist/index.js");
+
+jest.setTimeout(10000);
+
+test("Simple connection test to validate basic functionality", async () => {
+  const cycleTLS = await initCycleTLS({ port: 9999 });
+  
+  const response = await cycleTLS.get("https://httpbin.org/get", {
+    ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0"
+  });
+  
+  console.log("Response status:", response.status);
+  console.log("Response headers:", Object.keys(response.headers));
+  
+  expect(response.status).toBe(200);
+  
+  await cycleTLS.exit();
+});
