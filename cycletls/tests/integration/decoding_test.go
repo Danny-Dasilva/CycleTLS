@@ -38,7 +38,7 @@ func TestDeflateDecoding(t *testing.T) {
 		t.Fatalf("Expected deflated=true in response, got: %v", jsonBody)
 	}
 	
-	t.Logf("Deflate decoding test passed - response was automatically decompressed")
+
 }
 func TestBrotliDecoding(t *testing.T) {
 	client := cycletls.Init()
@@ -69,7 +69,7 @@ func TestBrotliDecoding(t *testing.T) {
 		t.Fatalf("Expected brotli=true in response, got: %v", jsonBody)
 	}
 	
-	t.Logf("Brotli decoding test passed - response was automatically decompressed")
+
 }
 
 func TestGZIPDecoding(t *testing.T) {
@@ -101,5 +101,5 @@ func TestGZIPDecoding(t *testing.T) {
 		t.Fatalf("Expected gzipped=true in response, got: %v", jsonBody)
 	}
 	
-	t.Logf("GZIP decoding test passed - response was automatically decompressed")
+
 }

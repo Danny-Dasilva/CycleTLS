@@ -235,18 +235,36 @@ func TestSSE(t *testing.T) {
 		return
 	}
 	
-	// Read events
-	for {
-		event, err := response.NextEvent()
-		if err != nil {
-			if err != io.EOF {
-				t.Error(err)
+	// Read events with timeout protection
+	eventCount := 0
+	maxEvents := 3
+	timeout := time.After(10 * time.Second)
+	
+	for eventCount < maxEvents {
+		select {
+		case <-timeout:
+			t.Fatal("Test timeout: didn't receive expected events in time")
+			return
+		default:
+			event, err := response.NextEvent()
+			if err != nil {
+				if err == io.EOF {
+					t.Log("SSE stream ended")
+					break
+				}
+				t.Error("SSE read error:", err)
+				return
 			}
-			break
-		}
-		
-		if event.Data != "testing" {
-			t.Error("expected 'testing', got:", event.Data)
+			
+			// Check if event is nil (can happen when no event data is available)
+			if event == nil {
+				continue
+			}
+			
+			eventCount++
+			if event.Data != "testing" {
+				t.Error("expected 'testing', got:", event.Data)
+			}
 		}
 	}
 }

@@ -42,10 +42,17 @@ func NewWebSocketClient(tlsConfig *utls.Config, headers http.Header) *WebSocketC
 		Transport: transport,
 	}
 
+	// Convert TLS config but ensure HTTP/1.1 for WebSocket
+	tlsConf := ConvertUtlsConfig(tlsConfig)
+	if tlsConf != nil {
+		// WebSocket requires HTTP/1.1, so remove HTTP/2 protocols
+		tlsConf.NextProtos = []string{"http/1.1"}
+	}
+
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		TLSClientConfig:  ConvertUtlsConfig(tlsConfig),
+		TLSClientConfig:  tlsConf,
 	}
 
 	return &WebSocketClient{

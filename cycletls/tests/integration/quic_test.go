@@ -5,7 +5,6 @@ package cycletls_test
 
 import (
 	"crypto/tls"
-	"log"
 	"testing"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -37,7 +36,7 @@ func TestQUICHttp3WithRoundTripper(t *testing.T) {
 		return
 	}
 	
-	log.Printf("Status: %d", client.Status)
+
 	
 	if client.Status != 200 {
 		t.Errorf("Expected status 200, got %d", client.Status)
@@ -58,7 +57,7 @@ func TestQUICHttp3WithoutFingerprint(t *testing.T) {
 		return
 	}
 	
-	log.Printf("Status: %d", resp.Status)
+
 	
 	if resp.Status != 200 {
 		t.Errorf("Expected status 200, got %d", resp.Status)
@@ -99,11 +98,11 @@ func TestQUICTransportDirect(t *testing.T) {
 
 	// Check protocol (HTTP/3 typically reports as HTTP/3 or HTTP/3.0)
 	if resp.Proto != "HTTP/3.0" && resp.Proto != "HTTP/3" {
-		t.Logf("HTTP/3 request used protocol %s (expected HTTP/3.0 or HTTP/3)", resp.Proto)
+
 	}
 
 	// Clean up
 	resp.Body.Close()
 	
-	log.Printf("Successfully completed HTTP/3 request with status %d and protocol %s", resp.StatusCode, resp.Proto)
+
 }

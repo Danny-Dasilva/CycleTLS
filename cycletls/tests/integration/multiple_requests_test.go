@@ -63,14 +63,14 @@ func TestDelayResponseOrder(t *testing.T) {
 	// Make requests directly using Do() method
 	responses := make([]cycletls.Response, len(requests))
 	for i, req := range requests {
-		t.Logf("Making %s to %s", req.Name, req.URL)
+
 		resp, err := client.Do(req.URL, req.Options, req.Method)
 		if err != nil {
 			t.Errorf("Request %s failed: %v", req.Name, err)
 			continue
 		}
 		responses[i] = resp
-		t.Logf("Response %s - Status: %d, FinalUrl: %s", req.Name, resp.Status, resp.FinalUrl)
+
 	}
 
 	// Verify all requests completed successfully
@@ -90,7 +90,7 @@ func TestDelayResponseOrder(t *testing.T) {
 		}
 	}
 	
-	t.Logf("All %d requests completed successfully", len(requests))
+
 }
 
 // Helper function to check if final URL contains expected path

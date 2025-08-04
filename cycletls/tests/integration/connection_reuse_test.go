@@ -55,13 +55,9 @@ func TestConnectionReuse(t *testing.T) {
 		case http.StateNew:
 			connectionCount++
 			handshakeCount++
-			t.Logf("New connection established: %s (total: %d)", conn.RemoteAddr(), connectionCount)
 		case http.StateClosed:
-			t.Logf("Connection closed: %s", conn.RemoteAddr())
 		case http.StateIdle:
-			t.Logf("Connection idle: %s", conn.RemoteAddr())
 		case http.StateActive:
-			t.Logf("Connection active: %s", conn.RemoteAddr())
 		}
 	}
 	
@@ -91,7 +87,6 @@ func TestConnectionReuse(t *testing.T) {
 	if resp1.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp1.Status)
 	}
-	t.Logf("First request response: %s", resp1.Body)
 	
 	// Make second request to the same server (should reuse connection)
 	resp2, err := client.Do(serverURL+"/second", options, "GET")
@@ -101,7 +96,6 @@ func TestConnectionReuse(t *testing.T) {
 	if resp2.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp2.Status)
 	}
-	t.Logf("Second request response: %s", resp2.Body)
 	
 	// Make third request to the same server (should reuse connection)
 	resp3, err := client.Do(serverURL+"/third", options, "GET")
@@ -111,7 +105,6 @@ func TestConnectionReuse(t *testing.T) {
 	if resp3.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp3.Status)
 	}
-	t.Logf("Third request response: %s", resp3.Body)
 	
 	// Get connection statistics
 	respStats, err := client.Do(serverURL+"/connection-stats", options, "GET")
@@ -119,7 +112,7 @@ func TestConnectionReuse(t *testing.T) {
 		t.Fatalf("Connection stats request failed: %v", err)
 	}
 	
-	t.Logf("Connection stats: %s", respStats.Body)
+
 	
 	// Parse the stats - format: unique_connections:X,total_requests:Y,handshakes:Z
 	stats := strings.Split(respStats.Body, ",")
@@ -127,12 +120,10 @@ func TestConnectionReuse(t *testing.T) {
 		t.Fatalf("Unexpected stats format: %s", respStats.Body)
 	}
 	
-	uniqueConnections := extractNumber(stats[0])
 	totalRequests := extractNumber(stats[1])
 	handshakes := extractNumber(stats[2])
 	
-	t.Logf("Connection analysis: %d unique connections, %d total requests, %d handshakes", 
-		uniqueConnections, totalRequests, handshakes)
+
 	
 	// For proper connection reuse, we should have:
 	// - 4 total requests (3 regular + 1 stats request)
@@ -153,10 +144,6 @@ func TestConnectionReuse(t *testing.T) {
 	expectedHandshakes := 1 // Only one handshake needed with connection reuse
 	if handshakes != expectedHandshakes {
 		t.Errorf("Expected %d handshake (connection reuse enabled), got %d", expectedHandshakes, handshakes)
-		t.Logf("Connection reuse may not be working properly - each request should reuse the same connection")
-	} else {
-		t.Logf("Connection reuse test passed: %d handshake for %d requests (connection reuse working correctly)", handshakes, totalRequests)
-		t.Logf("SUCCESS: CycleTLS is now reusing connections across requests for better performance")
 	}
 }
 

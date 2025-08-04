@@ -6,7 +6,6 @@ package cycletls_test
 import (
 	"context"
 	"io"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -32,12 +31,10 @@ func TestSSEOnly(t *testing.T) {
 				// Send SSE event
 				_, err := w.Write([]byte("event: " + event + "\n"))
 				if err != nil {
-					log.Println("Error writing SSE event:", err)
 					return
 				}
 				_, err = w.Write([]byte("data: " + data + "\n\n"))
 				if err != nil {
-					log.Println("Error writing SSE data:", err)
 					return
 				}
 				
@@ -78,8 +75,6 @@ func TestSSEOnly(t *testing.T) {
 	}
 	defer response.Close()
 	
-	t.Log("SSE connection established successfully")
-	
 	// Read events with timeout
 	eventCount := 0
 	maxEvents := 3
@@ -88,13 +83,11 @@ func TestSSEOnly(t *testing.T) {
 	for eventCount < maxEvents {
 		select {
 		case <-timeout:
-			t.Log("Test timeout reached")
 			return
 		default:
 			event, err := response.NextEvent()
 			if err != nil {
 				if err == io.EOF {
-					t.Log("SSE stream ended")
 					break
 				}
 				t.Error("SSE read error:", err)
@@ -102,11 +95,9 @@ func TestSSEOnly(t *testing.T) {
 			}
 			
 			if event == nil {
-				t.Log("Received nil event, continuing...")
 				continue
 			}
 			
-			t.Logf("Received SSE event: %+v", event)
 			eventCount++
 			
 			if event.Data != "testing" {
@@ -115,5 +106,4 @@ func TestSSEOnly(t *testing.T) {
 		}
 	}
 	
-	t.Logf("Successfully received %d events", eventCount)
 }

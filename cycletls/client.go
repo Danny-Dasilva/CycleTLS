@@ -151,8 +151,14 @@ func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDial
 
 // generateClientKey creates a unique key for client pooling based on browser configuration
 func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxyURL string) string {
+	// Create cookie signature for the key
+	cookieStr := ""
+	for _, cookie := range browser.Cookies {
+		cookieStr += fmt.Sprintf("|cookie:%s=%s", cookie.Name, cookie.Value)
+	}
+	
 	// Create a hash of the configuration that affects connection behavior
-	configStr := fmt.Sprintf("ja3:%s|ja4:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t",
+	configStr := fmt.Sprintf("ja3:%s|ja4:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
 		browser.JA3,
 		browser.JA4,
 		browser.HTTP2Fingerprint,
@@ -164,6 +170,7 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 		browser.InsecureSkipVerify,
 		browser.ForceHTTP1,
 		browser.ForceHTTP3,
+		cookieStr,
 	)
 	
 	// Generate SHA256 hash for the key

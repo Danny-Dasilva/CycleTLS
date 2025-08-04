@@ -2,7 +2,6 @@ package cycletls_test
 
 import (
 	"bytes"
-	"encoding/base64"
 	"log"
 	"os"
 	"runtime"
@@ -22,19 +21,17 @@ func SimpleFileWriteTest(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	// Decode Base64
-	dec, err := base64.StdEncoding.DecodeString(response.Body)
-	if err != nil {
-		panic(err)
-	}
+	// Convert string body to bytes (raw binary data)
+	bodyBytes := []byte(response.Body)
+	
 	//create file to write
 	f, err := os.Create("test.jpeg")
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	//write b64 to file
-	if _, err := f.Write(dec); err != nil {
+	//write bytes to file
+	if _, err := f.Write(bodyBytes); err != nil {
 		panic(err)
 	}
 	if err := f.Sync(); err != nil {
@@ -43,19 +40,17 @@ func SimpleFileWriteTest(t *testing.T) {
 }
 
 func WriteFile(Body string, Filepath string) {
-	// Decode Base64
-	dec, err := base64.StdEncoding.DecodeString(Body)
-	if err != nil {
-		panic(err)
-	}
+	// Convert string body to bytes (raw binary data)
+	bodyBytes := []byte(Body)
+	
 	//create file to write
 	f, err := os.Create(Filepath)
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	//write b64 to file
-	if _, err := f.Write(dec); err != nil {
+	//write bytes to file
+	if _, err := f.Write(bodyBytes); err != nil {
 		panic(err)
 	}
 	if err := f.Sync(); err != nil {

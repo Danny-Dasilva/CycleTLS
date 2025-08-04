@@ -45,7 +45,7 @@ type roundTripper struct {
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Apply cookies to the request
 	for _, properties := range rt.Cookies {
-		req.AddCookie(&http.Cookie{
+		cookie := &http.Cookie{
 			Name:       properties.Name,
 			Value:      properties.Value,
 			Path:       properties.Path,
@@ -57,15 +57,20 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			Secure:     properties.Secure,
 			Raw:        properties.Raw,
 			Unparsed:   properties.Unparsed,
-		})
+		}
+		req.AddCookie(cookie)
 	}
 	
 	// Apply user agent
 	req.Header.Set("User-Agent", rt.UserAgent)
 	
-	// Apply header order if specified
+	// Apply header order if specified (for regular headers, not pseudo-headers)
 	if len(rt.HeaderOrder) > 0 {
 		req.Header = ConvertHttpHeader(MarshalHeader(req.Header, rt.HeaderOrder))
+		
+		// Note: rt.HeaderOrder contains regular headers like "cache-control", "accept", etc.
+		// Do NOT overwrite http.PHeaderOrderKey which contains pseudo-headers like ":method", ":path"
+		// The pseudo-header order is already set correctly in index.go based on UserAgent parsing
 	}
 	
 	// Get address for dialing
