@@ -262,6 +262,22 @@ func cleanupClientPool(maxAge time.Duration) {
 	}
 }
 
+// clearAllConnections clears all connections from the pool for test isolation
+func clearAllConnections() {
+	advancedClientPoolMutex.Lock()
+	defer advancedClientPoolMutex.Unlock()
+	
+	// Close all connections in the pool before clearing
+	for _, entry := range advancedClientPool {
+		if transport, ok := entry.Client.Transport.(*roundTripper); ok {
+			transport.CloseIdleConnections()
+		}
+	}
+	
+	// Clear the entire pool
+	advancedClientPool = make(map[string]*ClientPoolEntry)
+}
+
 // newClient creates a new http client (backward compatibility - defaults to no connection reuse)
 func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (fhttp.Client, error) {
 	// Backward compatibility: default to no connection reuse for existing code

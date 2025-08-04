@@ -13,6 +13,7 @@ import (
 func TestRedirectEnabled(t *testing.T) {
 
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do("https://ssl.com", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
@@ -30,6 +31,7 @@ func TestRedirectEnabled(t *testing.T) {
 func TestRedirectDisabled(t *testing.T) {
 
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do("https://ssl.com", cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
@@ -48,6 +50,7 @@ func TestRedirectDisabled(t *testing.T) {
 func TestRedirectEnabled_NewURL(t *testing.T) {
 	url := "https://rb.gy/3hwz5h"
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do(url, cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
@@ -68,6 +71,7 @@ func TestRedirectEnabled_NewURL(t *testing.T) {
 func TestRedirectDisabled_NewURL(t *testing.T) {
 	url := "https://rb.gy/3hwz5h"
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do(url, cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",

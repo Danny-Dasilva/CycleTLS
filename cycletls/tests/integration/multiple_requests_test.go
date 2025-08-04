@@ -19,6 +19,7 @@ func TestDelayResponseOrder(t *testing.T) {
 	
 	// Create client without worker pool
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	// Define the requests with both JA3 and JA4 testing
 	requests := []struct {

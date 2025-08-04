@@ -78,6 +78,7 @@ func TestConnectionReuse(t *testing.T) {
 	
 	// Make multiple requests using the same client instance to test connection reuse
 	client := cycletls.Init(false) // Don't use worker pool to focus on connection reuse
+	defer client.Close() // Ensure resources are cleaned up
 	
 	// Make first request
 	resp1, err := client.Do(serverURL+"/first", options, "GET")

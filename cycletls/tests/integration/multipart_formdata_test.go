@@ -27,6 +27,7 @@ type HttpBinResponse struct {
 
 func TestMultipartFormDataMixed(t *testing.T) {
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	// Prepare a buffer to write our multipart form
 	var requestBody bytes.Buffer
@@ -101,6 +102,7 @@ func TestMultipartFormDataMixed(t *testing.T) {
 
 func TestMultipartFormDataUpload(t *testing.T) {
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	// Prepare a buffer to write our multipart form
 	var requestBody bytes.Buffer
@@ -155,6 +157,7 @@ func TestMultipartFormDataUpload(t *testing.T) {
 
 func TestMultipartFormDataText(t *testing.T) {
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	// Prepare a buffer to write our multipart form
 	var requestBody bytes.Buffer

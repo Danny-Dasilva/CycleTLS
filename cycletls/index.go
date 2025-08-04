@@ -1254,6 +1254,8 @@ func (client CycleTLS) Close() {
 	if client.RespChan != nil {
 		close(client.RespChan)
 	}
+	// Clear all connections from the global pool
+	clearAllConnections()
 }
 
 // Do creates a single HTTP request for integration tests
@@ -1271,6 +1273,9 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		ForceHTTP3:         options.ForceHTTP3,
 		HeaderOrder:        options.HeaderOrder,
 	}
+	
+	// Note: Don't automatically set HeaderOrder from UserAgent here as it can interfere with connection management
+	// The pseudo-header order should be set through explicit HTTP2Fingerprint or Options.HeaderOrder
 
 	// Create HTTP client with connection reuse
 	// For now, always enable connection reuse since Go bool defaults to false
@@ -1295,6 +1300,12 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		return Response{}, err
 	}
 
+	// Set pseudo-header order based on UserAgent
+	headerOrder := parseUserAgent(options.UserAgent).HeaderOrder
+	req.Header = http.Header{
+		http.PHeaderOrderKey: headerOrder,
+	}
+
 	// Set headers
 	for k, v := range options.Headers {
 		req.Header.Set(k, v)
@@ -1303,10 +1314,11 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// Make request
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		parsedError := parseError(err)
 		return Response{
-			Status: 0,
-			Body:   err.Error(),
-		}, err
+			Status: parsedError.StatusCode,
+			Body:   parsedError.ErrorMsg + " -> " + err.Error(),
+		}, nil
 	}
 	defer resp.Body.Close()
 
