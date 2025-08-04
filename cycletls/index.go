@@ -701,8 +701,34 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 					break loop
 				}
 
-				if n == 0 {
+				if err == io.EOF {
+					// Handle any remaining data first
+					if n > 0 {
+						var b bytes.Buffer
+						requestIDLength := len(res.options.RequestID)
+						bodyChunkLength := n
+
+						b.WriteByte(byte(requestIDLength >> 8))
+						b.WriteByte(byte(requestIDLength))
+						b.WriteString(res.options.RequestID)
+						b.WriteByte(0)
+						b.WriteByte(4)
+						b.WriteString("data")
+						b.WriteByte(byte(bodyChunkLength >> 24))
+						b.WriteByte(byte(bodyChunkLength >> 16))
+						b.WriteByte(byte(bodyChunkLength >> 8))
+						b.WriteByte(byte(bodyChunkLength))
+						b.Write(chunkBuffer[:n])
+
+						chanWrite <- b.Bytes()
+					}
+					// EOF reached, exit the loop
 					break loop
+				}
+
+				if n == 0 {
+					// No data available right now, continue reading (don't break)
+					continue
 				}
 
 				var b bytes.Buffer
@@ -722,10 +748,6 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 				b.Write(chunkBuffer[:n])
 
 				chanWrite <- b.Bytes()
-
-				if err == io.EOF {
-					break loop
-				}
 			}
 		}
 	}

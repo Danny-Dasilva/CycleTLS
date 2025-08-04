@@ -91,7 +91,6 @@ describe("Streaming Response Tests", () => {
           chunks.push(chunk);
           totalBytes += chunk.length;
           chunkCount++;
-          console.log(`Stream chunk ${chunkCount}: ${chunk.length} bytes`);
         });
 
         response.data.on('end', () => {
@@ -109,7 +108,6 @@ describe("Streaming Response Tests", () => {
               expect(() => JSON.parse(line)).not.toThrow();
             });
             
-            console.log(`Stream test completed: ${chunkCount} chunks, ${totalBytes} total bytes`);
             resolve();
           } catch (error) {
             reject(error);

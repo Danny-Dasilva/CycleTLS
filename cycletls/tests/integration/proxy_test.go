@@ -25,7 +25,7 @@ func TestProxySuccess(t *testing.T) {
 		Proxy:     "socks5://127.0.0.1:9050",
 	}, "GET")
 	if err != nil {
-		t.Fatalf("Request Failed: " + err.Error())
+		t.Fatalf("Request Failed: %s", err.Error())
 	}
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
@@ -46,7 +46,7 @@ func TestSocks4Proxy(t *testing.T) {
 		Proxy:     "socks4://127.0.0.1:9050",
 	}, "GET")
 	if err != nil {
-		t.Fatalf("Request Failed: " + err.Error())
+		t.Fatalf("Request Failed: %s", err.Error())
 	}
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
@@ -69,7 +69,7 @@ func TestSocks5hProxy(t *testing.T) {
 		Proxy:     "socks5h://127.0.0.1:9050",
 	}, "GET")
 	if err != nil {
-		t.Fatalf("Request Failed: " + err.Error())
+		t.Fatalf("Request Failed: %s", err.Error())
 	}
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)

@@ -1,6 +1,7 @@
 package cycletls
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,7 +37,20 @@ func createErrorMessage(StatusCode int, err error, op string) errorMessage {
 func parseError(err error) (errormessage errorMessage) {
 	var op string
 
+	// Check for context.DeadlineExceeded (client timeout)
+	if err == context.DeadlineExceeded {
+		return createErrorMessage(408, err, "timeout")
+	}
+
 	httpError := string(err.Error())
+	
+	// Check for common timeout error messages
+	if strings.Contains(httpError, "context deadline exceeded") || 
+	   strings.Contains(httpError, "Client.Timeout exceeded") ||
+	   strings.Contains(httpError, "timeout") {
+		return createErrorMessage(408, err, "timeout")
+	}
+	
 	status := lastString(strings.Split(httpError, "StatusCode:"))
 	StatusCode, _ := strconv.Atoi(status)
 	if StatusCode != 0 {
