@@ -78,10 +78,26 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	
 	// Check if we need HTTP/3
 	if rt.ForceHTTP3 {
-		// Use HTTP/3 transport
+		// Use HTTP/3 transport with UQuic if QUIC fingerprint is provided
 		tlsConfig := ConvertUtlsConfig(rt.TLSConfig)
-		transport := NewHTTP3Transport(tlsConfig)
-		return transport.RoundTrip(req)
+		
+		if rt.QUICFingerprint != "" {
+			// Create UQuic spec from fingerprint
+			quicSpec, err := CreateUQuicSpecFromFingerprint(rt.QUICFingerprint)
+			if err != nil {
+				// Fallback to standard HTTP/3 transport if UQuic spec creation fails
+				transport := NewHTTP3Transport(tlsConfig)
+				return transport.RoundTrip(req)
+			}
+			
+			// Use UQuic transport
+			transport := NewHTTP3TransportWithUQuic(tlsConfig, quicSpec)
+			return transport.RoundTrip(req)
+		} else {
+			// Use standard HTTP/3 transport
+			transport := NewHTTP3Transport(tlsConfig)
+			return transport.RoundTrip(req)
+		}
 	}
 	
 	// Use cached transport if available, otherwise create a new one

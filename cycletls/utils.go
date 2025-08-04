@@ -6,11 +6,12 @@ import (
 	"compress/zlib"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
-	"io"
-	"errors"
-	"net/http"
 	"crypto/tls"
 	fhttp "github.com/Danny-Dasilva/fhttp"
 	"github.com/andybalholm/brotli"
@@ -423,6 +424,46 @@ func CreateUSpec(value any) (uquic.QUICSpec, error) {
 	default:
 		return uquic.QUICSpec{}, errors.New("unsupported type")
 	}
+}
+
+// CreateUQuicSpecFromFingerprint creates a uquic.QUICSpec from a QUIC fingerprint string
+func CreateUQuicSpecFromFingerprint(quicFingerprint string) (*uquic.QUICSpec, error) {
+	if quicFingerprint == "" {
+		return nil, errors.New("empty QUIC fingerprint")
+	}
+
+	// Todo: we are using a default QUIC specification based on Chrome
+	// In the future, this could be enhanced to parse the actual fingerprint
+	// and create a custom specification once I find a route to test against
+	spec, err := uquic.QUICID2Spec(uquic.QUICChrome_115)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create QUIC spec: %w", err)
+	}
+
+	return &spec, nil
+}
+
+// CreateUQuicSpecFromUserAgent creates a uquic.QUICSpec based on user agent
+func CreateUQuicSpecFromUserAgent(userAgent string) (*uquic.QUICSpec, error) {
+	parsedUA := parseUserAgent(userAgent)
+	
+	var quicID uquic.QUICID
+	switch parsedUA.UserAgent {
+	case chrome:
+		quicID = uquic.QUICChrome_115
+	case firefox:
+		quicID = uquic.QUICFirefox_116
+	default:
+		// Default to Chrome for unknown user agents
+		quicID = uquic.QUICChrome_115
+	}
+
+	spec, err := uquic.QUICID2Spec(quicID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create QUIC spec for user agent: %w", err)
+	}
+
+	return &spec, nil
 }
 
 // QUICStringToSpec creates a ClientHelloSpec based on a QUIC fingerprint string
