@@ -73,6 +73,11 @@ export interface CycleTLSResponse {
   };
   data: any; // Axios-style data property
   finalUrl: string;
+  // Axios/Fetch-like response methods
+  json(): Promise<any>;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  blob(): Promise<Blob>;
 }
 
 export interface WebSocketMessage {
@@ -268,6 +273,32 @@ async function parseResponseData(
       }
   }
 }
+
+// Helper functions to create response parsing methods
+function createResponseMethods(rawBuffer: Buffer, headers: { [key: string]: any }) {
+  return {
+    json: async (): Promise<any> => {
+      try {
+        return JSON.parse(rawBuffer.toString('utf8'));
+      } catch (error) {
+        throw new Error(`Failed to parse response as JSON: ${error.message}`);
+      }
+    },
+    
+    text: async (): Promise<string> => {
+      return rawBuffer.toString('utf8');
+    },
+    
+    arrayBuffer: async (): Promise<ArrayBuffer> => {
+      return rawBuffer.buffer.slice(rawBuffer.byteOffset, rawBuffer.byteOffset + rawBuffer.byteLength);
+    },
+    
+    blob: async (): Promise<Blob> => {
+      const contentType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
+      return new Blob([rawBuffer], { type: Array.isArray(contentType) ? contentType[0] : contentType });
+    }
+  };
+}
 class PacketBuffer {
 
   private _data: Buffer;
@@ -355,6 +386,9 @@ class Golang extends EventEmitter {
     this.httpServer.once('listening', () => {
       // Close the HTTP server immediately after it starts listening
       this.httpServer.close(() => {
+        // Ensure all listeners are removed and server is nulled
+        this.httpServer.removeAllListeners();
+        this.httpServer = null;
         this.spawnServer();
         this.host = true;
       });
@@ -364,11 +398,14 @@ class Golang extends EventEmitter {
       // Ensure the HTTP server is closed if an error occurs
       if (this.httpServer) {
         try {
-          this.httpServer.close();
+          this.httpServer.close(() => {
+            this.httpServer.removeAllListeners();
+            this.httpServer = null;
+          });
         } catch (e) {
           console.error("Error closing server on error:", e);
+          this.httpServer = null;
         }
-        this.httpServer = null;
       }
       this.createClient();
       this.host = false;
@@ -796,15 +833,66 @@ export interface CycleTLSClient {
                   instance.on(requestId, handleData);
                   
                   try {
-                    // Parse data based on responseType (Axios-style)
-                    const data = await parseResponseData(stream, options.responseType, response.data.headers);
-                    
-                    resolveRequest({
-                      status: response.data.statusCode,
-                      headers: response.data.headers,
-                      finalUrl: response.data.finalUrl,
-                      data: data,
-                    });
+                    // For stream responses, return live stream immediately without buffering
+                    if (options.responseType === 'stream') {
+                      // Create response methods that collect data when called
+                      const createStreamResponseMethods = (liveStream: Readable) => ({
+                        json: async (): Promise<any> => {
+                          const buffer = await streamToBuffer(liveStream);
+                          return JSON.parse(buffer.toString('utf8'));
+                        },
+                        text: async (): Promise<string> => {
+                          const buffer = await streamToBuffer(liveStream);
+                          return buffer.toString('utf8');
+                        },
+                        arrayBuffer: async (): Promise<ArrayBuffer> => {
+                          const buffer = await streamToBuffer(liveStream);
+                          return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+                        },
+                        blob: async (): Promise<Blob> => {
+                          const buffer = await streamToBuffer(liveStream);
+                          const contentType = response.data.headers['content-type'] || response.data.headers['Content-Type'] || 'application/octet-stream';
+                          return new Blob([buffer], { type: Array.isArray(contentType) ? contentType[0] : contentType });
+                        }
+                      });
+                      
+                      // Return response immediately with live stream
+                      const streamMethods = createStreamResponseMethods(stream);
+                      
+                      resolveRequest({
+                        status: response.data.statusCode,
+                        headers: response.data.headers,
+                        finalUrl: response.data.finalUrl,
+                        data: stream, // Return live stream directly
+                        ...streamMethods
+                      });
+                    } else {
+                      // Get raw buffer first for response methods (existing behavior)
+                      const rawBuffer = await streamToBuffer(stream);
+                      
+                      // Parse data based on responseType for backward compatibility
+                      const parsedData = await parseResponseData(
+                        new Readable({
+                          read() {
+                            this.push(rawBuffer);
+                            this.push(null);
+                          }
+                        }), 
+                        options.responseType, 
+                        response.data.headers
+                      );
+                      
+                      // Create response methods
+                      const responseMethods = createResponseMethods(rawBuffer, response.data.headers);
+                      
+                      resolveRequest({
+                        status: response.data.statusCode,
+                        headers: response.data.headers,
+                        finalUrl: response.data.finalUrl,
+                        data: parsedData,
+                        ...responseMethods
+                      });
+                    }
                   } catch (error) {
                     rejectRequest(error);
                   }

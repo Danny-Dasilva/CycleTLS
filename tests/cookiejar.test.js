@@ -11,7 +11,7 @@ test("Should properly set and configure cookies", async () => {
   // Send an inital response to demonstrate no cookies being set, and verify it
   const firstResponse = await cycleTLS.get("https://httpbin.org/cookies");
   //check if cookies were returned
-  expect(firstResponse.body.cookies.length).toBe(undefined);
+  expect(firstResponse.data.cookies?.length).toBe(undefined);
 
   // Now set a single cookie and make sure HTTPBin responded with a redirect
   const secondResponse = await cycleTLS.get(
@@ -61,7 +61,7 @@ test("Should properly set and configure cookies", async () => {
     },
   });
   const expected_cookies = { a: "1", b: "2", c: "3", freeform: "test" };
-  const fifthBody = fifthResponse.json()
+  const fifthBody = await fifthResponse.json()
 
   expect(fifthBody?.cookies).toEqual(expected_cookies);
   await cycleTLS.exit();

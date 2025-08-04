@@ -19,7 +19,8 @@ test("Should Write all Image types to file", async () => {
     "get"
   );
 
-  jpegImage.stream.pipe(fs.createWriteStream('./tests/images/output.jpeg'));
+  const jpegBuffer = await jpegImage.arrayBuffer();
+  fs.writeFileSync('./tests/images/output.jpeg', Buffer.from(jpegBuffer));
 
   const pngImage = await cycleTLS(
     "http://httpbin.org/image/png",
@@ -30,7 +31,8 @@ test("Should Write all Image types to file", async () => {
     "get"
   );
 
-  pngImage.stream.pipe(fs.createWriteStream('./tests/images/output.png'));
+  const pngBuffer = await pngImage.arrayBuffer();
+  fs.writeFileSync('./tests/images/output.png', Buffer.from(pngBuffer));
 
   const svgImage = await cycleTLS(
     "http://httpbin.org/image/svg",
@@ -40,7 +42,8 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-  svgImage.stream.pipe(fs.createWriteStream('./tests/images/output.svg'));
+  const svgBuffer = await svgImage.arrayBuffer();
+  fs.writeFileSync('./tests/images/output.svg', Buffer.from(svgBuffer));
 
   
   const webpImage = await cycleTLS(
@@ -51,7 +54,8 @@ test("Should Write all Image types to file", async () => {
     },
     "get"
   );
-  webpImage.stream.pipe(fs.createWriteStream('./tests/images/output.webp'));
+  const webpBuffer = await webpImage.arrayBuffer();
+  fs.writeFileSync('./tests/images/output.webp', Buffer.from(webpBuffer));
 
   await cycleTLS.exit();
 });
