@@ -114,9 +114,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		return dispatchHTTP3Request(request)
 	}
 
-	// For now, always enable connection reuse since Go bool defaults to false
-	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	// Default to true for connection reuse
 	enableConnectionReuse := true
+	if request.Options.EnableConnectionReuse == false {
+		// Only disable if explicitly set to false
+		enableConnectionReuse = false
+	}
 	
 	client, err := newClientWithReuse(
 		browser,
@@ -242,9 +245,12 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		HeaderOrder:        request.Options.HeaderOrder,
 	}
 
-	// For now, always enable connection reuse since Go bool defaults to false
-	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	// Default to true for connection reuse
 	enableConnectionReuse := true
+	if request.Options.EnableConnectionReuse == false {
+		// Only disable if explicitly set to false
+		enableConnectionReuse = false
+	}
 	
 	client, err := newClientWithReuse(
 		browser,
@@ -310,9 +316,12 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		HeaderOrder:        request.Options.HeaderOrder,
 	}
 
-	// For now, always enable connection reuse since Go bool defaults to false
-	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	// Default to true for connection reuse
 	enableConnectionReuse := true
+	if request.Options.EnableConnectionReuse == false {
+		// Only disable if explicitly set to false
+		enableConnectionReuse = false
+	}
 	
 	client, err := newClientWithReuse(
 		browser,
@@ -1278,9 +1287,12 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// The pseudo-header order should be set through explicit HTTP2Fingerprint or Options.HeaderOrder
 
 	// Create HTTP client with connection reuse
-	// For now, always enable connection reuse since Go bool defaults to false
-	// TODO: Consider using a pointer bool or string to allow explicit false setting
+	// Default to true for connection reuse
 	enableConnectionReuse := true
+	if options.EnableConnectionReuse == false {
+		// Only disable if explicitly set to false
+		enableConnectionReuse = false
+	}
 	
 	httpClient, err := newClientWithReuse(
 		browser,

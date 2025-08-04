@@ -89,8 +89,7 @@ func TestHTTP2(t *testing.T) {
 		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
 			Ja3:                   options.Ja3,
 			UserAgent:             options.UserAgent,
-			EnableConnectionReuse: true, // Enable connection reuse to prevent connection issues
-		}, "GET")
+					}, "GET")
 		if err != nil {
 			t.Fatal("Request Error")
 		}
@@ -118,8 +117,7 @@ func TestHTTP2(t *testing.T) {
 			Ja3:                   options.Ja3,
 			UserAgent:             options.UserAgent,
 			Headers:               map[string]string{"Accept-Encoding": "application/json"},
-			EnableConnectionReuse: true, 
-		}, "GET")
+					}, "GET")
 		if response.Status != options.HTTPResponse {
 			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash)
 		}
