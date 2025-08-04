@@ -194,8 +194,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	//ordering the pseudo headers and our normal headers
 	req.Header = http.Header{
-		http.HeaderOrderKey:  headerorderkey,
-		http.PHeaderOrderKey: headerOrder,
+		http.HeaderOrderKey: headerorderkey,
+	}
+	// Only set PHeaderOrderKey for HTTP/2, not HTTP/3
+	// HTTP/3 requests are handled by dispatchHTTP3Request() which doesn't reach this code
+	if !request.Options.ForceHTTP3 && request.Options.Protocol != "http3" {
+		req.Header[http.PHeaderOrderKey] = headerOrder
 	}
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
@@ -1312,10 +1316,13 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		return Response{}, err
 	}
 
-	// Set pseudo-header order based on UserAgent
+	// Set pseudo-header order based on UserAgent - only for HTTP/2, not HTTP/3
 	headerOrder := parseUserAgent(options.UserAgent).HeaderOrder
-	req.Header = http.Header{
-		http.PHeaderOrderKey: headerOrder,
+	req.Header = http.Header{}
+	
+	// Only set PHeaderOrderKey for HTTP/2, not HTTP/3
+	if !options.ForceHTTP3 {
+		req.Header[http.PHeaderOrderKey] = headerOrder
 	}
 
 	// Set headers
