@@ -1,64 +1,64 @@
 import initCycleTLS, { CycleTLSClient } from "../dist/index.js";
 import FormData from "form-data";
 import fs from "fs";
-// jest.setTimeout(30000);
 
-// describe("CycleTLS Multipart Form Data Test", () => {
-//   let cycleTLS: CycleTLSClient;
+describe("CycleTLS Multipart Form Data Test", () => {
+  let cycleTLS: CycleTLSClient;
 
-//   beforeAll(async () => {
-//     cycleTLS = await initCycleTLS({ port: 9200 });
-//   });
+  beforeAll(async () => {
+    cycleTLS = await initCycleTLS({ port: 9160, timeout: 30000 });
+  });
 
-//   afterAll(async () => {
-//     await cycleTLS.exit();
-//   });
+  afterAll(async () => {
+    await cycleTLS.exit();
+  });
 
-//   test("Should Handle Multipart Form Data Correctly", async () => {
-//     const formData = new FormData();
-//     formData.append("key1", "value1");
-//     formData.append("key2", "value2");
+  test("Should Handle Multipart Form Data Correctly", async () => {
+    const formData = new FormData();
+    formData.append("key1", "value1");
+    formData.append("key2", "value2");
 
-//     const response = await cycleTLS(
-//       "http://httpbin.org/post",
-//       {
-//         body: formData,
-//       },
-//       "post"
-//     );
+    const response = await cycleTLS(
+      "http://httpbin.org/post",
+      {
+        body: formData,
+        headers: formData.getHeaders(),
+      },
+      "post"
+    );
 
-//     expect(response.status).toBe(200); // Check if the status code is 200
+    expect(response.status).toBe(200); // Check if the status code is 200
 
-//     const responseBody = await response.json();
+    const responseBody = await response.json();
 
-//     // Validate the 'form' part of the response
-//     expect(responseBody.form).toEqual({
-//       key1: "value1",
-//       key2: "value2",
-//     });
-//   });
+    // Validate the 'form' part of the response
+    expect(responseBody.form).toEqual({
+      key1: "value1",
+      key2: "value2",
+    });
+  });
 
-//   test("Should Handle Multipart Form Data with File Upload Correctly", async () => {
-//     const formData = new FormData();
-//     const fileStream = fs.createReadStream("./main.go");
-//     formData.append("file", fileStream);
+  test("Should Handle Multipart Form Data with File Upload Correctly", async () => {
+    const formData = new FormData();
+    const fileStream = fs.createReadStream("./main.go");
+    formData.append("file", fileStream);
 
-//     const response = await cycleTLS(
-//       "http://httpbin.org/post",
-//       {
-//         body: formData,
-//         headers: formData.getHeaders(),
-//       },
-//       "post"
-//     );
+    const response = await cycleTLS(
+      "http://httpbin.org/post",
+      {
+        body: formData,
+        headers: formData.getHeaders(),
+      },
+      "post"
+    );
 
-//     expect(response.status).toBe(200);
+    expect(response.status).toBe(200);
 
-//     const responseBody = await response.json();
+    const responseBody = await response.json();
 
-//     expect(responseBody.files).toBeDefined();
-//     expect(responseBody.files.file).toContain(
-//       "imports locally per go.mod"
-//     );
-//   });
-// });
+    expect(responseBody.files).toBeDefined();
+    expect(responseBody.files.file).toContain(
+      "imports locally per go.mod"
+    );
+  });
+});

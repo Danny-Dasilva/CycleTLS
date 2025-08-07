@@ -612,7 +612,7 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 			b.WriteByte(byte(parsedError.StatusCode))
 
 			var message = parsedError.ErrorMsg + "-> \n" + string(err.Error())
-			var messageLength = len(res.options.RequestID)
+			var messageLength = len(message)
 
 			b.WriteByte(byte(messageLength >> 8))
 			b.WriteByte(byte(messageLength))

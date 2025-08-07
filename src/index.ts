@@ -364,9 +364,14 @@ class SharedInstance extends EventEmitter {
             }
 
             if (method === "error") {
+              const statusCode = packetBuffer.readU16();
+              const errorMessage = packetBuffer.readString();
               client.emit(requestID, {
                 method,
-                data: packetBuffer.readBytes(false),
+                data: {
+                  statusCode,
+                  message: errorMessage,
+                },
               });
             }
 
@@ -423,10 +428,33 @@ class SharedInstance extends EventEmitter {
     if (options.body instanceof URLSearchParams) {
       options.body = options.body.toString();
     }
-    // Check if options.body is FormData and convert to string
+    // Check if options.body is FormData and convert to multipart format
     if (options.body instanceof FormData) {
-      options.headers = { ...options.headers, ...options.body.getHeaders() };
-      options.body = await streamToString(options.body as unknown as Readable);
+      // Get headers with boundary from FormData
+      const formHeaders = options.body.getHeaders();
+      options.headers = { ...options.headers, ...formHeaders };
+      
+      // Convert FormData to string while preserving multipart format
+      const formDataString = await new Promise<string>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        const form = options.body as unknown as Readable;
+        
+        form.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        
+        form.on('end', () => {
+          const result = Buffer.concat(chunks).toString('utf8');
+          resolve(result);
+        });
+        
+        form.on('error', reject);
+        
+        // Force reading the stream
+        form.resume();
+      });
+      
+      options.body = formDataString;
     }
 
     if (this.server) {
@@ -614,7 +642,18 @@ class CycleTLSClientImpl extends EventEmitter {
     return new Promise((resolveRequest, rejectRequest) => {
       this.once(requestId, async (response) => {
         if (response.method === "error") {
-          rejectRequest(response.data);
+          // Handle error as a response with proper status code
+          const errorResponse = {
+            status: response.data.statusCode,
+            headers: {},
+            finalUrl: url,
+            data: response.data.message,
+            json: async () => Promise.resolve({}),
+            text: async () => Promise.resolve(response.data.message),
+            arrayBuffer: async () => Promise.resolve(new ArrayBuffer(0)),
+            blob: async () => Promise.resolve(new Blob([response.data.message], { type: 'text/plain' }))
+          };
+          resolveRequest(errorResponse);
         } else {
           const stream = new Readable({ read() { } });
 
