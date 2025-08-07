@@ -49,6 +49,12 @@ func logQUICTestDetails(t *testing.T, testName string, err error, status int, re
 }
 
 func TestQUICHttp3WithRoundTripper(t *testing.T) {
+	// Skip QUIC tests in CI environment due to UDP/QUIC restrictions
+	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping QUIC HTTP/3 test in CI environment due to network restrictions")
+		return
+	}
+	
 	// Test HTTP/3 using transport and QUIC fingerprint through the roundtripper
 	// Create browser with QUIC fingerprint
 	browser := cycletls.Browser{
@@ -80,6 +86,12 @@ func TestQUICHttp3WithRoundTripper(t *testing.T) {
 }
 
 func TestQUICHttp3WithoutFingerprint(t *testing.T) {
+	// Skip QUIC tests in CI environment due to UDP/QUIC restrictions
+	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping QUIC HTTP/3 test in CI environment due to network restrictions")
+		return
+	}
+	
 	// Test HTTP/3 without QUIC fingerprint to verify it still works
 	client := cycletls.Init()
 	resp, err := client.Do("https://cloudflare-quic.com/", cycletls.Options{
