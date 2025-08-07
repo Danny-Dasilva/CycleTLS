@@ -46,16 +46,51 @@ Do NOT upgrade to v2.0.0 without reading the migration guide below.
 ✅ Use response.json(), response.text(), etc. instead
 ```
 
-**🚨 IMPORTANT: These changes require code modifications when upgrading from v1.x**
+---
 
-- **⚠️ Response Body Access** - Direct `response.body` access **REMOVED**. Must use `response.json()`, `response.text()`, `response.arrayBuffer()`, or `response.blob()` methods
-- **⚠️ Form Data Headers** - Manual `Content-Type: multipart/form-data` headers **DEPRECATED**. Must use `formData.getHeaders()` instead
-- **⚠️ Async Response Methods** - All response data access is now asynchronous and returns Promises
-- **✨ NEW API Methods** - Added `cycleTLS.ws()`, `cycleTLS.webSocket()`, `cycleTLS.sse()`, `cycleTLS.eventSource()` for real-time connections
+#### 🚨 CRITICAL CHANGES (WILL BREAK YOUR CODE)
+
+| Change Type | Old (v1.x) | New (v2.0.0) | Status |
+|-------------|------------|--------------|--------|
+| **Response Data Access** | `response.body` | `response.json()` / `response.text()` | ❌ **REMOVED** |
+| **Form Data Headers** | Manual `Content-Type` | `formData.getHeaders()` | ⚠️ **DEPRECATED** |
+| **Response Methods** | Synchronous | Asynchronous (returns Promises) | ⚠️ **CHANGED** |
+
+---
+
+#### 📋 DETAILED BREAKING CHANGES
+
+**1. ⚠️ Response Body Access (CRITICAL)**
+- Direct `response.body` access **REMOVED**
+- Must use: `response.json()`, `response.text()`, `response.arrayBuffer()`, or `response.blob()` methods
+- Impact: **ALL existing code that accesses response.body will break**
+
+**2. ⚠️ Form Data Headers (RECOMMENDED)**
+- Manual `Content-Type: multipart/form-data` headers **DEPRECATED**
+- Must use: `formData.getHeaders()` instead
+- Impact: **Form uploads may fail without proper boundary headers**
+
+**3. ⚠️ Async Response Methods (BEHAVIORAL CHANGE)**
+- All response data access is now asynchronous and returns Promises
+- Must use `await` or `.then()` with response methods
+- Impact: **Synchronous response handling will not work**
+
+**4. ✨ NEW API Methods (ADDITIONS - NON-BREAKING)**
+- Added `cycleTLS.ws()`, `cycleTLS.webSocket()` for WebSocket connections
+- Added `cycleTLS.sse()`, `cycleTLS.eventSource()` for Server-Sent Events
+- Added HTTP method shortcuts: `cycleTLS.get()`, `cycleTLS.post()`, etc.
+- Impact: **No breaking changes - these are new features**
+
+---
 
 ### 📝 JavaScript/TypeScript Examples
 
-**⚠️ All examples below show the NEW v2.0.0 API. Update your code accordingly!**
+```
+📚 EXAMPLE LIBRARY - All New v2.0.0 API Patterns
+
+Use these examples as templates for updating your code!
+Each example shows the complete, working v2.0.0 syntax.
+```
 
 #### ✅ Basic Request with New Response API
 ```javascript
@@ -154,87 +189,187 @@ const postResponse = await cycleTLS.post('https://httpbin.org/post', {
 const postData = await postResponse.json(); // ⚠️ Don't forget this!
 ```
 
+---
+
 ### 🔄 MIGRATION GUIDE (v1.x → v2.0.0)
+
+```
+🛠️ STEP-BY-STEP MIGRATION CHECKLIST
+
+□ 1. Update all response.body references
+□ 2. Fix form data headers
+□ 3. Add error handling for async methods
+□ 4. (Optional) Use new API features
+```
 
 **⚠️ REQUIRED CHANGES - Your code will break without these updates:**
 
-#### ⚠️ 1. Update Response Handling (REQUIRED)
-```javascript
-// ❌ Old (v1.x) - THIS WILL NO LONGER WORK
-const response = await cycleTLS(url, options);
-console.log(response.body); // ❌ response.body is removed
+---
 
-// ✅ New (v2.0.0) - REQUIRED CHANGES
+#### ⚠️ STEP 1: Update Response Handling (REQUIRED)
+
+**🚨 CRITICAL: This change affects ALL existing code**
+
+```javascript
+// ❌ OLD (v1.x) - THIS WILL NO LONGER WORK
 const response = await cycleTLS(url, options);
-const data = await response.json(); // ✅ For JSON responses
-// OR
-const text = await response.text(); // ✅ For text responses
-// OR
-const buffer = await response.arrayBuffer(); // ✅ For binary data
-// OR
-const blob = await response.blob(); // ✅ For blob data
+console.log(response.body); // ❌ response.body is REMOVED
+
+// ✅ NEW (v2.0.0) - CHOOSE THE RIGHT METHOD
+const response = await cycleTLS(url, options);
+
+// For JSON APIs (most common)
+const data = await response.json();
 console.log(data);
+
+// For HTML/plain text
+const text = await response.text();
+console.log(text);
+
+// For binary data (images, files)
+const buffer = await response.arrayBuffer();
+console.log(buffer);
+
+// For blob data
+const blob = await response.blob();
+console.log(blob);
 ```
 
-#### ⚠️ 2. Update Form Data Headers (STRONGLY RECOMMENDED)
+**📝 Quick Fix Pattern:**
 ```javascript
-// ⚠️ Old (v1.x) - DEPRECATED, may cause issues
+// Find and replace in your codebase:
+// OLD: response.body
+// NEW: await response.json()  (for JSON)
+// NEW: await response.text()  (for text)
+```
+
+---
+
+#### ⚠️ STEP 2: Update Form Data Headers (STRONGLY RECOMMENDED)
+
+**🔧 ISSUE: Manual Content-Type headers break multipart boundaries**
+
+```javascript
+// ❌ OLD (v1.x) - WILL CAUSE UPLOAD FAILURES
+const formData = new FormData();
+formData.append('file', fileStream);
+
 const response = await cycleTLS(url, {
   body: formData,
   headers: {
-    'Content-Type': 'multipart/form-data' // ⚠️ This is problematic
+    'Content-Type': 'multipart/form-data' // ❌ Missing boundary!
   }
 });
 
-// ✅ New (v2.0.0) - REQUIRED for proper form data handling
+// ✅ NEW (v2.0.0) - PROPER BOUNDARY HANDLING
+const formData = new FormData();
+formData.append('file', fileStream);
+
 const response = await cycleTLS(url, {
   body: formData,
-  headers: formData.getHeaders() // ✅ Correct boundary headers
+  headers: formData.getHeaders() // ✅ Includes proper boundary
 });
-const data = await response.json(); // ✅ Don't forget this too!
+const result = await response.json(); // ✅ Parse response too!
 ```
 
-#### ⚠️ 3. Update Error Handling (RECOMMENDED)
+**📝 Why This Matters:**
+Multipart form data requires unique boundaries. Manual headers miss this critical detail.
+
+---
+
+#### ⚠️ STEP 3: Add Error Handling (RECOMMENDED)
+
+**🛡️ PROTECTION: Response parsing can now fail**
+
 ```javascript
-// ✅ Add error handling for async response methods
+// ✅ ROBUST ERROR HANDLING
 try {
   const response = await cycleTLS(url, options);
-  const data = await response.json(); // ✅ This can throw errors
+  
+  // Check if request was successful
+  if (response.status >= 400) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  
+  // Parse response (can throw parsing errors)
+  const data = await response.json();
   console.log(data);
+  
 } catch (error) {
-  console.error('Request or parsing failed:', error.message);
+  if (error.message.includes('JSON')) {
+    console.error('Response is not valid JSON:', error.message);
+  } else {
+    console.error('Request failed:', error.message);
+  }
 }
 ```
 
-#### ✨ 4. NEW API Methods Available (OPTIONAL)
+**🔍 Common Errors to Handle:**
+- **JSON parsing errors**: Server returned non-JSON data
+- **Network errors**: Connection failed
+- **HTTP errors**: 4xx/5xx status codes
+
+---
+
+#### ✨ STEP 4: Explore New Features (OPTIONAL)
+
+**🎉 BONUS: Take advantage of new capabilities**
+
 ```javascript
-// ✨ NEW: WebSocket connections
+// ✨ HTTP METHOD SHORTCUTS (cleaner code)
+const getResponse = await cycleTLS.get(url, options);
+const postResponse = await cycleTLS.post(url, options);
+const putResponse = await cycleTLS.put(url, options);
+const deleteResponse = await cycleTLS.delete(url, options);
+// ... and more!
+
+// ⚠️ Still need to parse responses!
+const data = await getResponse.json();
+```
+
+```javascript
+// ✨ WEBSOCKET CONNECTIONS
 const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
   ja3: 'your_ja3_string',
   userAgent: 'your_user_agent'
 });
 
-// ✨ NEW: Server-Sent Events
-const sseResponse = await cycleTLS.sse('https://example.com/events', {
-  ja3: 'your_ja3_string',
-  userAgent: 'your_user_agent',
-  responseType: 'stream' // For streaming SSE events
-});
-
-// ✨ NEW: HTTP method shortcuts
-const getResponse = await cycleTLS.get('https://example.com/api', options);
-const postResponse = await cycleTLS.post('https://example.com/api', options);
-const putResponse = await cycleTLS.put('https://example.com/api', options);
-const deleteResponse = await cycleTLS.delete('https://example.com/api', options);
-const headResponse = await cycleTLS.head('https://example.com/api', options);
-const optionsResponse = await cycleTLS.options('https://example.com/api', options);
-const patchResponse = await cycleTLS.patch('https://example.com/api', options);
-
-// ⚠️ Remember: All responses still need .json()/.text()/etc.!
-const data = await getResponse.json();
+// Check connection status
+if (wsResponse.status === 101) {
+  console.log('WebSocket connected!');
+}
 ```
 
-### Bug Fixes
+```javascript
+// ✨ SERVER-SENT EVENTS
+const sseResponse = await cycleTLS.sse('https://example.com/events', {
+  ja3: 'your_ja3_string',
+  userAgent: 'your_user_agent'
+});
+
+// Parse real-time events
+const eventData = await sseResponse.text();
+console.log('SSE events:', eventData);
+```
+
+```javascript
+// ✨ STREAMING RESPONSES (for large data)
+const response = await cycleTLS('https://example.com/large-file', {
+  responseType: 'stream'
+});
+
+const stream = response.data;
+stream.on('data', chunk => {
+  console.log('Received:', chunk.length, 'bytes');
+});
+stream.on('end', () => {
+  console.log('Download complete!');
+});
+```
+
+---
+
+### 🐛 Bug Fixes
 - Fix uncaught `ESRCH` on `SIGINT`/`SIGTERM` signals [#370](https://github.com/Danny-Dasilva/CycleTLS/issues/370)
 - Improved error handling for Windows systems
 - Fixed syntax issues with redirects
@@ -242,12 +377,25 @@ const data = await getResponse.json();
 - Better proxy header handling
 - General test fixes and stability improvements
 
+---
+
 ### ✅ What Remains Unchanged (Backward Compatible)
-- Core request syntax `cycleTLS(url, options, method)` remains unchanged
-- All existing request options (ja3, userAgent, proxy, etc.) fully supported
-- Response properties (`status`, `headers`, `finalUrl`) unchanged
-- `cycleTLS.exit()` method unchanged
-- All Golang API remains 100% backward compatible
+
+**🎯 GOOD NEWS: These parts of your code don't need changes**
+
+| Category | Details | Status |
+|----------|---------|--------|
+| **Core Syntax** | `cycleTLS(url, options, method)` | ✅ **Unchanged** |
+| **Request Options** | `ja3`, `userAgent`, `proxy`, `timeout`, etc. | ✅ **Unchanged** |
+| **Response Properties** | `response.status`, `response.headers`, `response.finalUrl` | ✅ **Unchanged** |
+| **Lifecycle Methods** | `cycleTLS.exit()`, `initCycleTLS()` | ✅ **Unchanged** |
+| **Golang API** | All Go package methods and types | ✅ **100% Compatible** |
+
+**📋 What This Means:**
+- Your request configuration stays the same
+- Your TLS fingerprinting setup works unchanged
+- Your proxy and authentication logic is preserved
+- Only response parsing needs updates
 
 ## 1.0.26 - (2-16-2024)
 ### Release Highlights
