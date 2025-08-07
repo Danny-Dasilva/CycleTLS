@@ -1,0 +1,3939 @@
+Project Path: cycletls
+
+Source Tree:
+
+```
+cycletls
+├── go.mod
+├── index.go
+├── connect.go
+├── client.go
+├── utils.go
+├── cookie.go
+├── errors.go
+├── tests
+│   ├── integration
+│   │   ├── custom_timeout_test.go
+│   │   ├── latest_fingerprint_test.go
+│   │   ├── images_test.go
+│   │   ├── multipart_formdata_test.go
+│   │   ├── tls_13_test.go
+│   │   ├── cookie_jar_test.go
+│   │   ├── ForceHTTP1_test.go
+│   │   ├── disable_redirect_test.go
+│   │   ├── multiple_requests_test.go
+│   │   ├── decoding_test.go
+│   │   ├── UrlEncodedFormData_test.go
+│   │   ├── main_ja3_test.go
+│   │   ├── proxy_test.go
+│   │   ├── InsecureSkipVerify_test.go
+│   │   └── cookie_test.go
+│   └── unit
+│       └── roundtripper_test.go
+├── roundtripper.go
+├── go.sum
+└── extensions.go
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/go.mod`:
+
+```mod
+module github.com/Danny-Dasilva/CycleTLS/cycletls
+
+go 1.21
+
+toolchain go1.21.3
+
+require (
+	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1
+	github.com/andybalholm/brotli v1.1.0
+	github.com/gorilla/websocket v1.5.1
+	github.com/refraction-networking/utls v1.6.2
+	golang.org/x/net v0.21.0
+	h12.io/socks v1.0.3
+)
+
+require (
+	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/klauspost/compress v1.17.6 // indirect
+	github.com/quic-go/quic-go v0.41.0 // indirect
+	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
+)
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/index.go`:
+
+```go
+package cycletls
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"flag"
+	"io"
+	"log"
+	nhttp "net/http"
+	"net/url"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+
+	http "github.com/Danny-Dasilva/fhttp"
+	"github.com/gorilla/websocket"
+)
+
+// Options sets CycleTLS client options
+type Options struct {
+	URL                string            `json:"url"`
+	Method             string            `json:"method"`
+	Headers            map[string]string `json:"headers"`
+	Body               string            `json:"body"`
+	Ja3                string            `json:"ja3"`
+	UserAgent          string            `json:"userAgent"`
+	Proxy              string            `json:"proxy"`
+	Cookies            []Cookie          `json:"cookies"`
+	Timeout            int               `json:"timeout"`
+	DisableRedirect    bool              `json:"disableRedirect"`
+	HeaderOrder        []string          `json:"headerOrder"`
+	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
+	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
+	ForceHTTP1         bool              `json:"forceHTTP1"`
+}
+
+type cycleTLSRequest struct {
+	RequestID string  `json:"requestId"`
+	Options   Options `json:"options"`
+}
+
+// rename to request+client+options
+type fullRequest struct {
+	req     *http.Request
+	client  http.Client
+	options cycleTLSRequest
+}
+
+// CycleTLS creates full request and response
+type CycleTLS struct {
+	ReqChan  chan fullRequest
+	RespChan chan []byte
+}
+
+var activeRequests = make(map[string]context.CancelFunc)
+var activeRequestsMutex sync.Mutex
+var debugLogger = log.New(os.Stdout, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+// ready Request
+func processRequest(request cycleTLSRequest) (result fullRequest) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var browser = Browser{
+		JA3:                request.Options.Ja3,
+		UserAgent:          request.Options.UserAgent,
+		Cookies:            request.Options.Cookies,
+		InsecureSkipVerify: request.Options.InsecureSkipVerify,
+		forceHTTP1:         request.Options.ForceHTTP1,
+	}
+
+	client, err := newClient(
+		browser,
+		request.Options.Timeout,
+		request.Options.DisableRedirect,
+		request.Options.UserAgent,
+		request.Options.Proxy,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	if err != nil {
+		log.Fatal(err)
+	}
+	headerorder := []string{}
+	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
+	//if your site has any custom headers, see the header order chrome uses and then add those headers to this list
+	if len(request.Options.HeaderOrder) > 0 {
+		//lowercase headers
+		for _, v := range request.Options.HeaderOrder {
+			lowercasekey := strings.ToLower(v)
+			headerorder = append(headerorder, lowercasekey)
+		}
+	} else {
+		headerorder = append(headerorder,
+			"host",
+			"connection",
+			"cache-control",
+			"device-memory",
+			"viewport-width",
+			"rtt",
+			"downlink",
+			"ect",
+			"sec-ch-ua",
+			"sec-ch-ua-mobile",
+			"sec-ch-ua-full-version",
+			"sec-ch-ua-arch",
+			"sec-ch-ua-platform",
+			"sec-ch-ua-platform-version",
+			"sec-ch-ua-model",
+			"upgrade-insecure-requests",
+			"user-agent",
+			"accept",
+			"sec-fetch-site",
+			"sec-fetch-mode",
+			"sec-fetch-user",
+			"sec-fetch-dest",
+			"referer",
+			"accept-encoding",
+			"accept-language",
+			"cookie",
+		)
+	}
+
+	headermap := make(map[string]string)
+	//TODO: Shorten this
+	headerorderkey := []string{}
+	for _, key := range headerorder {
+		for k, v := range request.Options.Headers {
+			lowercasekey := strings.ToLower(k)
+			if key == lowercasekey {
+				headermap[k] = v
+				headerorderkey = append(headerorderkey, lowercasekey)
+			}
+		}
+
+	}
+	headerOrder := parseUserAgent(request.Options.UserAgent).HeaderOrder
+
+	//ordering the pseudo headers and our normal headers
+	req.Header = http.Header{
+		http.HeaderOrderKey:  headerorderkey,
+		http.PHeaderOrderKey: headerOrder,
+	}
+	//set our Host header
+	u, err := url.Parse(request.Options.URL)
+	if err != nil {
+		panic(err)
+	}
+
+	//append our normal headers
+	for k, v := range request.Options.Headers {
+		if k != "Content-Length" {
+			req.Header.Set(k, v)
+		}
+	}
+
+	req.Header.Set("Host", u.Host)
+	req.Header.Set("user-agent", request.Options.UserAgent)
+
+	activeRequestsMutex.Lock()
+	activeRequests[request.RequestID] = cancel
+	activeRequestsMutex.Unlock()
+
+	return fullRequest{req: req, client: client, options: request}
+}
+
+// func dispatcher(res fullRequest) (response Response, err error) {
+// 	defer res.client.CloseIdleConnections()
+// 	finalUrl := res.options.Options.URL
+// 	resp, err := res.client.Do(res.req)
+// 	if err != nil {
+
+// 		parsedError := parseError(err)
+
+// 		headers := make(map[string]string)
+// 		var cookies []*nhttp.Cookie
+// 		return Response{RequestID: res.options.RequestID, Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers, Cookies: cookies, FinalUrl: finalUrl}, nil //normally return error here
+
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+// 		finalUrl = resp.Request.URL.String()
+// 	}
+
+// 	encoding := resp.Header["Content-Encoding"]
+// 	content := resp.Header["Content-Type"]
+// 	bodyBytes, err := io.ReadAll(resp.Body)
+
+// 	if err != nil {
+// 		log.Print("Parse Bytes" + err.Error())
+// 		return response, err
+// 	}
+
+// 	Body := DecompressBody(bodyBytes, encoding, content)
+// 	headers := make(map[string]string)
+
+// 	for name, values := range resp.Header {
+// 		if name == "Set-Cookie" {
+// 			headers[name] = strings.Join(values, "/,/")
+// 		} else {
+// 			for _, value := range values {
+// 				headers[name] = value
+// 			}
+// 		}
+// 	}
+// 	cookies := convertFHTTPCookiesToNetHTTPCookies(resp.Cookies())
+// 	return Response{
+// 		RequestID: res.options.RequestID,
+// 		Status:    resp.StatusCode,
+// 		Body:      Body,
+// 		Headers:   headers,
+// 		Cookies:   cookies,
+// 		FinalUrl:  finalUrl,
+// 	}, nil
+
+// }
+
+// // Queue queues request in worker pool
+// func (client CycleTLS) Queue(URL string, options Options, Method string) {
+
+// 	options.URL = URL
+// 	options.Method = Method
+// 	//TODO add timestamp to request
+// 	opt := cycleTLSRequest{"Queued Request", options}
+// 	response := processRequest(opt)
+// 	client.ReqChan <- response
+// }
+
+// // Do creates a single request
+// func (client CycleTLS) Do(URL string, options Options, Method string) (response Response, err error) {
+
+// 	options.URL = URL
+// 	options.Method = Method
+// 	// Set default values if not provided
+// 	if options.Ja3 == "" {
+// 		options.Ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,18-35-65281-45-17513-27-65037-16-10-11-5-13-0-43-23-51,29-23-24,0"
+// 	}
+// 	if options.UserAgent == "" {
+// 		// Mac OS Chrome 121
+// 		options.UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+// 	}
+// 	opt := cycleTLSRequest{"cycleTLSRequest", options}
+
+// 	res := processRequest(opt)
+// 	response, err = dispatcher(res)
+// 	if err != nil {
+// 		log.Print("Request Failed: " + err.Error())
+// 		return response, err
+// 	}
+
+// 	return response, nil
+// }
+
+// Init starts the worker pool or returns a empty cycletls struct
+// func Init(workers ...bool) CycleTLS {
+// 	if len(workers) > 0 && workers[0] {
+// 		reqChan := make(chan fullRequest)
+// 		respChan := make(chan Response)
+// 		go workerPool(reqChan, respChan)
+// 		log.Println("Worker Pool Started")
+
+// 		return CycleTLS{ReqChan: reqChan, RespChan: respChan}
+// 	}
+// 	return CycleTLS{}
+
+// }
+
+// // Close closes channels
+// func (client CycleTLS) Close() {
+// 	close(client.ReqChan)
+// 	close(client.RespChan)
+
+// }
+
+// // Worker Pool
+// func workerPool(reqChan chan fullRequest, respChan chan Response) {
+// 	//MAX
+// 	for i := 0; i < 100; i++ {
+// 		go worker(reqChan, respChan)
+// 	}
+// }
+
+// // Worker
+// func worker(reqChan chan fullRequest, respChan chan Response) {
+// 	for res := range reqChan {
+// 		response, err := dispatcher(res)
+// 		if err != nil {
+// 			log.Print("Request Failed: " + err.Error())
+// 		}
+// 		respChan <- response
+// 	}
+// }
+
+func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
+	defer func() {
+		activeRequestsMutex.Lock()
+		delete(activeRequests, res.options.RequestID)
+		activeRequestsMutex.Unlock()
+	}()
+
+	defer res.client.CloseIdleConnections()
+
+	// @TODO: When does this trigger an error ?
+	// Are we sure that the parsedError will include headers and a satus code ?
+	resp, err := res.client.Do(res.req)
+
+	if err != nil {
+		parsedError := parseError(err)
+
+		{
+			var b bytes.Buffer
+			var requestIDLength = len(res.options.RequestID)
+
+			b.WriteByte(byte(requestIDLength >> 8))
+			b.WriteByte(byte(requestIDLength))
+			b.WriteString(res.options.RequestID)
+			b.WriteByte(0)
+			b.WriteByte(5)
+			b.WriteString("error")
+			b.WriteByte(byte(parsedError.StatusCode >> 8))
+			b.WriteByte(byte(parsedError.StatusCode))
+
+			var message = parsedError.ErrorMsg + "-> \n" + string(err.Error())
+			var messageLength = len(res.options.RequestID)
+
+			b.WriteByte(byte(messageLength >> 8))
+			b.WriteByte(byte(messageLength))
+			b.WriteString(message)
+
+			chanWrite <- b.Bytes()
+		}
+
+		return
+	}
+
+	defer resp.Body.Close()
+
+	{
+		var b bytes.Buffer
+		var headerLength = len(resp.Header)
+		var requestIDLength = len(res.options.RequestID)
+
+		b.WriteByte(byte(requestIDLength >> 8))
+		b.WriteByte(byte(requestIDLength))
+		b.WriteString(res.options.RequestID)
+		b.WriteByte(0)
+		b.WriteByte(8)
+		b.WriteString("response")
+		b.WriteByte(byte(resp.StatusCode >> 8))
+		b.WriteByte(byte(resp.StatusCode))
+		b.WriteByte(byte(headerLength >> 8))
+		b.WriteByte(byte(headerLength))
+
+		for name, values := range resp.Header {
+			var nameLength = len(name)
+			var valuesLength = len(values)
+
+			b.WriteByte(byte(nameLength >> 8))
+			b.WriteByte(byte(nameLength))
+			b.WriteString(name)
+			b.WriteByte(byte(valuesLength >> 8))
+			b.WriteByte(byte(valuesLength))
+
+			for _, value := range values {
+				var valueLength = len(value)
+
+				b.WriteByte(byte(valueLength >> 8))
+				b.WriteByte(byte(valueLength))
+				b.WriteString(value)
+			}
+		}
+
+		chanWrite <- b.Bytes()
+	}
+
+	{
+		bufferSize := 8192
+		chunkBuffer := make([]byte, bufferSize)
+
+	loop:
+		for {
+			select {
+			case <-res.req.Context().Done():
+				debugLogger.Printf("Request %s was canceled during processing", res.options.RequestID)
+				break loop
+
+			default:
+				n, err := resp.Body.Read(chunkBuffer)
+
+				// Vérifiez si la requête a été annulée avant de traiter l'erreur
+				if res.req.Context().Err() != nil {
+					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)
+					break loop
+				}
+
+				if err != nil && err != io.EOF {
+					log.Printf("Read error: %s", err.Error())
+					break loop
+				}
+
+				if n == 0 {
+					break loop
+				}
+
+				// Préparer le message de chunk
+				var b bytes.Buffer
+				requestIDLength := len(res.options.RequestID)
+				bodyChunkLength := n
+
+				b.WriteByte(byte(requestIDLength >> 8))
+				b.WriteByte(byte(requestIDLength))
+				b.WriteString(res.options.RequestID)
+				b.WriteByte(0)
+				b.WriteByte(4)
+				b.WriteString("data")
+				b.WriteByte(byte(bodyChunkLength >> 24))
+				b.WriteByte(byte(bodyChunkLength >> 16))
+				b.WriteByte(byte(bodyChunkLength >> 8))
+				b.WriteByte(byte(bodyChunkLength))
+				b.Write(chunkBuffer[:n])
+
+				chanWrite <- b.Bytes()
+
+				if err == io.EOF {
+					break loop
+				}
+			}
+		}
+	}
+
+	{
+		var b bytes.Buffer
+		requestIDLength := len(res.options.RequestID)
+
+		b.WriteByte(byte(requestIDLength >> 8))
+		b.WriteByte(byte(requestIDLength))
+		b.WriteString(res.options.RequestID)
+		b.WriteByte(0)
+		b.WriteByte(3)
+		b.WriteString("end")
+
+		chanWrite <- b.Bytes()
+	}
+}
+
+func writeSocket(chanWrite chan []byte, wsSocket *websocket.Conn) {
+	for buf := range chanWrite {
+		err := wsSocket.WriteMessage(websocket.BinaryMessage, buf)
+
+		if err != nil {
+			log.Print("Socket WriteMessage Failed" + err.Error())
+			continue
+		}
+	}
+}
+
+func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
+    for {
+        _, message, err := wsSocket.ReadMessage()
+        if err != nil {
+            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+                return
+            }
+            log.Print("Socket Error", err)
+            return
+        }
+        var baseMessage map[string]interface{}
+        if err := json.Unmarshal(message, &baseMessage); err != nil {
+            log.Print("Unmarshal Error", err)
+            return
+        }
+        if action, ok := baseMessage["action"]; ok {
+            if action == "exit" {
+                // Respond by sending a close frame and then close the connection.
+                wsSocket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "exit"))
+                wsSocket.Close()
+                return
+            }
+            if action == "cancel" {
+                requestId, _ := baseMessage["requestId"].(string)
+                activeRequestsMutex.Lock()
+                if cancel, exists := activeRequests[requestId]; exists {
+                    cancel()
+                    delete(activeRequests, requestId)
+                }
+                activeRequestsMutex.Unlock()
+                continue
+            }
+        }
+        // (If there was no "action" field, process as usual)
+        request := new(cycleTLSRequest)
+        if err := json.Unmarshal(message, &request); err != nil {
+            log.Print("Unmarshal Error", err)
+            return
+        }
+        chanRead <- processRequest(*request)
+    }
+}
+// Worker
+func readProcess(chanRead chan fullRequest, chanWrite chan []byte) {
+	for request := range chanRead {
+		go dispatcherAsync(request, chanWrite)
+	}
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+// WSEndpoint exports the main cycletls function as we websocket connection that clients can connect to
+func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
+	upgrader.CheckOrigin = func(r *nhttp.Request) bool { return true }
+
+	// upgrade this connection to a WebSocket
+	// connection
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		//Golang Received a non-standard request to this port, printing request
+		var data map[string]interface{}
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Print("Invalid Request: Body Read Error" + err.Error())
+		}
+		err = json.Unmarshal(bodyBytes, &data)
+		if err != nil {
+			log.Print("Invalid Request: Json Conversion failed ")
+		}
+		body, err := PrettyStruct(data)
+		if err != nil {
+			log.Print("Invalid Request:", err)
+		}
+		headers, err := PrettyStruct(r.Header)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(headers)
+		log.Println(body)
+
+	} else {
+		chanRead := make(chan fullRequest)
+		chanWrite := make(chan []byte)
+
+		go readSocket(chanRead, ws)
+		go readProcess(chanRead, chanWrite)
+
+		// Run as main thread
+		writeSocket(chanWrite, ws)
+	}
+}
+
+func setupRoutes() {
+	nhttp.HandleFunc("/", WSEndpoint)
+}
+
+func main() {
+	port, exists := os.LookupEnv("WS_PORT")
+	var addr *string
+	if exists {
+		addr = flag.String("addr", ":"+port, "http service address")
+	} else {
+		addr = flag.String("addr", ":9112", "http service address")
+	}
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	setupRoutes()
+	log.Fatal(nhttp.ListenAndServe(*addr, nil))
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/connect.go`:
+
+```go
+package cycletls
+
+// borrowed from from https://github.com/caddyserver/forwardproxy/blob/master/httpclient/httpclient.go
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/url"
+	"strconv"
+	"sync"
+
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
+	"golang.org/x/net/proxy"
+	"h12.io/socks"
+)
+
+type SocksDialer struct {
+	socksDial func(string, string) (net.Conn, error)
+}
+
+func (d *SocksDialer) DialContext(_ context.Context, network, addr string) (net.Conn, error) {
+	return d.socksDial(network, addr)
+}
+
+func (d *SocksDialer) Dial(network, addr string) (net.Conn, error) {
+	return d.socksDial(network, addr)
+}
+
+// connectDialer allows to configure one-time use HTTP CONNECT client
+type connectDialer struct {
+	ProxyURL      url.URL
+	DefaultHeader http.Header
+
+	Dialer proxy.ContextDialer // overridden dialer allow to control establishment of TCP connection
+
+	// overridden DialTLS allows user to control establishment of TLS connection
+	// MUST return connection with completed Handshake, and NegotiatedProtocol
+	DialTLS func(network string, address string) (net.Conn, string, error)
+
+	EnableH2ConnReuse  bool
+	cacheH2Mu          sync.Mutex
+	cachedH2ClientConn *http2.ClientConn
+	cachedH2RawConn    net.Conn
+}
+
+// newConnectDialer creates a dialer to issue CONNECT requests and tunnel traffic via HTTP/S proxy.
+// proxyUrlStr must provide Scheme and Host, may provide credentials and port.
+// Example: https://username:password@golang.org:443
+func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer, error) {
+	proxyURL, err := url.Parse(proxyURLStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if proxyURL.Host == "" || proxyURL.Host == "undefined" {
+		return nil, errors.New("invalid url `" + proxyURLStr +
+			"`, make sure to specify full url like https://username:password@hostname.com:443/")
+	}
+
+	client := &connectDialer{
+		ProxyURL:          *proxyURL,
+		DefaultHeader:     make(http.Header),
+		EnableH2ConnReuse: true,
+	}
+
+	switch proxyURL.Scheme {
+	case "http":
+		if proxyURL.Port() == "" {
+			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "80")
+		}
+	case "https":
+		if proxyURL.Port() == "" {
+			proxyURL.Host = net.JoinHostPort(proxyURL.Host, "443")
+		}
+	case "socks5", "socks5h":
+		var auth *proxy.Auth
+		if proxyURL.User != nil {
+			if proxyURL.User.Username() != "" {
+				username := proxyURL.User.Username()
+				password, _ := proxyURL.User.Password()
+				auth = &proxy.Auth{User: username, Password: password}
+			}
+		}
+		var forward proxy.Dialer
+		if proxyURL.Scheme == "socks5h" {
+			forward = proxy.Direct
+		}
+		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, forward)
+		if err != nil {
+			return nil, fmt.Errorf("Error creating SOCKS5 proxy, reason %s", err)
+		}
+		if contextDialer, ok := dialSocksProxy.(proxy.ContextDialer); ok {
+			client.Dialer = contextDialer
+		} else {
+			return nil, errors.New("failed type assertion to DialContext")
+		}
+		client.DefaultHeader.Set("User-Agent", UserAgent)
+		return client, nil
+	case "socks4":
+		var dialer *SocksDialer
+		dialer = &SocksDialer{socks.DialSocksProxy(socks.SOCKS4, proxyURL.Host)}
+		client.Dialer = dialer
+		client.DefaultHeader.Set("User-Agent", UserAgent)
+		return client, nil
+	case "":
+		return nil, errors.New("specify scheme explicitly (https://)")
+	default:
+		return nil, errors.New("scheme " + proxyURL.Scheme + " is not supported")
+	}
+
+	client.Dialer = &net.Dialer{}
+
+	if proxyURL.User != nil {
+		if proxyURL.User.Username() != "" {
+			// password, _ := proxyUrl.User.Password()
+			// transport.DefaultHeader.Set("Proxy-Authorization", "Basic "+
+			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
+
+			username := proxyURL.User.Username()
+			password, _ := proxyURL.User.Password()
+
+			// transport.DefaultHeader.SetBasicAuth(username, password)
+			auth := username + ":" + password
+			basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
+			client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
+		}
+	}
+	client.DefaultHeader.Set("User-Agent", UserAgent)
+	return client, nil
+}
+
+func (c *connectDialer) Dial(network, address string) (net.Conn, error) {
+	return c.DialContext(context.Background(), network, address)
+}
+
+// ContextKeyHeader Users of context.WithValue should define their own types for keys
+type ContextKeyHeader struct{}
+
+// ctx.Value will be inspected for optional ContextKeyHeader{} key, with `http.Header` value,
+// which will be added to outgoing request headers, overriding any colliding c.DefaultHeader
+func (c *connectDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if c.ProxyURL.Scheme == "socks5" || c.ProxyURL.Scheme == "socks4" || c.ProxyURL.Scheme == "socks5h" {
+		return c.Dialer.DialContext(ctx, network, address)
+	}
+
+	req := (&http.Request{
+		Method: "CONNECT",
+		URL:    &url.URL{Host: address},
+		Header: make(http.Header),
+		Host:   address,
+	}).WithContext(ctx)
+	for k, v := range c.DefaultHeader {
+		req.Header[k] = v
+	}
+	if ctxHeader, ctxHasHeader := ctx.Value(ContextKeyHeader{}).(http.Header); ctxHasHeader {
+		for k, v := range ctxHeader {
+			req.Header[k] = v
+		}
+	}
+	connectHTTP2 := func(rawConn net.Conn, h2clientConn *http2.ClientConn) (net.Conn, error) {
+		req.Proto = "HTTP/2.0"
+		req.ProtoMajor = 2
+		req.ProtoMinor = 0
+		pr, pw := io.Pipe()
+		req.Body = pr
+
+		resp, err := h2clientConn.RoundTrip(req)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			_ = rawConn.Close()
+			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status + "StatusCode:" + strconv.Itoa(resp.StatusCode))
+		}
+		return newHTTP2Conn(rawConn, pw, resp.Body), nil
+	}
+
+	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
+		req.Proto = "HTTP/1.1"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 1
+
+		err := req.Write(rawConn)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+
+		resp, err := http.ReadResponse(bufio.NewReader(rawConn), req)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			_ = rawConn.Close()
+			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status + " StatusCode:" + strconv.Itoa(resp.StatusCode))
+		}
+		return rawConn, nil
+	}
+
+	if c.EnableH2ConnReuse {
+		c.cacheH2Mu.Lock()
+		unlocked := false
+		if c.cachedH2ClientConn != nil && c.cachedH2RawConn != nil {
+			if c.cachedH2ClientConn.CanTakeNewRequest() {
+				rc := c.cachedH2RawConn
+				cc := c.cachedH2ClientConn
+				c.cacheH2Mu.Unlock()
+				unlocked = true
+				proxyConn, err := connectHTTP2(rc, cc)
+				if err == nil {
+					return proxyConn, err
+				}
+				// else: carry on and try again
+			}
+		}
+		if !unlocked {
+			c.cacheH2Mu.Unlock()
+		}
+	}
+
+	var err error
+	var rawConn net.Conn
+	negotiatedProtocol := ""
+	switch c.ProxyURL.Scheme {
+	case "http":
+		rawConn, err = c.Dialer.DialContext(ctx, network, c.ProxyURL.Host)
+		if err != nil {
+			return nil, err
+		}
+	case "https":
+		if c.DialTLS != nil {
+			rawConn, negotiatedProtocol, err = c.DialTLS(network, c.ProxyURL.Host)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			tlsConf := tls.Config{
+				NextProtos:         []string{"h2", "http/1.1"},
+				ServerName:         c.ProxyURL.Hostname(),
+				InsecureSkipVerify: true,
+			}
+			tlsConn, err := tls.Dial(network, c.ProxyURL.Host, &tlsConf)
+			if err != nil {
+				return nil, err
+			}
+			err = tlsConn.Handshake()
+			if err != nil {
+				return nil, err
+			}
+			negotiatedProtocol = tlsConn.ConnectionState().NegotiatedProtocol
+			rawConn = tlsConn
+		}
+	default:
+		return nil, errors.New("scheme " + c.ProxyURL.Scheme + " is not supported")
+	}
+
+	switch negotiatedProtocol {
+	case "":
+		fallthrough
+	case "http/1.1":
+		return connectHTTP1(rawConn)
+	case "h2":
+		//TODO: update this with correct navigator
+		t := http2.Transport{Navigator: "chrome"}
+		h2clientConn, err := t.NewClientConn(rawConn)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+
+		proxyConn, err := connectHTTP2(rawConn, h2clientConn)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+		if c.EnableH2ConnReuse {
+			c.cacheH2Mu.Lock()
+			c.cachedH2ClientConn = h2clientConn
+			c.cachedH2RawConn = rawConn
+			c.cacheH2Mu.Unlock()
+		}
+		return proxyConn, err
+	default:
+		_ = rawConn.Close()
+		return nil, errors.New("negotiated unsupported application layer protocol: " +
+			negotiatedProtocol)
+	}
+}
+
+func newHTTP2Conn(c net.Conn, pipedReqBody *io.PipeWriter, respBody io.ReadCloser) net.Conn {
+	return &http2Conn{Conn: c, in: pipedReqBody, out: respBody}
+}
+
+type http2Conn struct {
+	net.Conn
+	in  *io.PipeWriter
+	out io.ReadCloser
+}
+
+func (h *http2Conn) Read(p []byte) (n int, err error) {
+	return h.out.Read(p)
+}
+
+func (h *http2Conn) Write(p []byte) (n int, err error) {
+	return h.in.Write(p)
+}
+
+func (h *http2Conn) Close() error {
+	var retErr error = nil
+	if err := h.in.Close(); err != nil {
+		retErr = err
+	}
+	if err := h.out.Close(); err != nil {
+		retErr = err
+	}
+	return retErr
+}
+
+func (h *http2Conn) CloseConn() error {
+	return h.Conn.Close()
+}
+
+func (h *http2Conn) CloseWrite() error {
+	return h.in.Close()
+}
+
+func (h *http2Conn) CloseRead() error {
+	return h.out.Close()
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/client.go`:
+
+```go
+package cycletls
+
+import (
+	http "github.com/Danny-Dasilva/fhttp"
+
+	"time"
+
+	"golang.org/x/net/proxy"
+)
+
+type Browser struct {
+	// Return a greeting that embeds the name in a message.
+	JA3                string
+	UserAgent          string
+	Cookies            []Cookie
+	InsecureSkipVerify bool
+	forceHTTP1         bool
+}
+
+var disabledRedirect = func(req *http.Request, via []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+func clientBuilder(browser Browser, dialer proxy.ContextDialer, timeout int, disableRedirect bool) http.Client {
+	//if timeout is not set in call default to 15
+	if timeout == 0 {
+		timeout = 15
+	}
+	client := http.Client{
+		Transport: newRoundTripper(browser, dialer),
+		Timeout:   time.Duration(timeout) * time.Second,
+	}
+	//if disableRedirect is set to true httpclient will not redirect
+	if disableRedirect {
+		client.CheckRedirect = disabledRedirect
+	}
+	return client
+}
+
+// NewTransport creates a new HTTP client transport that modifies HTTPS requests
+// to imitiate a specific JA3 hash and User-Agent.
+// # Example Usage
+// import (
+//
+//	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+//	http "github.com/Danny-Dasilva/fhttp" // note this is a drop-in replacement for net/http
+//
+// )
+//
+// ja3 := "771,52393-52392-52244-52243-49195-49199-49196-49200-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-30032-11-10,29-23-24,0"
+// ua := "Chrome Version 57.0.2987.110 (64-bit) Linux"
+//
+//	cycleClient := &http.Client{
+//		Transport:     cycletls.NewTransport(ja3, ua),
+//	}
+//
+// cycleClient.Get("https://tls.peet.ws/")
+func NewTransport(ja3 string, useragent string) http.RoundTripper {
+	return newRoundTripper(Browser{
+		JA3:       ja3,
+		UserAgent: useragent,
+	})
+}
+
+// NewTransport creates a new HTTP client transport that modifies HTTPS requests
+// to imitiate a specific JA3 hash and User-Agent, optionally specifying a proxy via proxy.ContextDialer.
+func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDialer) http.RoundTripper {
+	return newRoundTripper(Browser{
+		JA3:       ja3,
+		UserAgent: useragent,
+	}, proxy)
+}
+
+// newClient creates a new http client
+func newClient(browser Browser, timeout int, disableRedirect bool, UserAgent string, proxyURL ...string) (http.Client, error) {
+	var dialer proxy.ContextDialer
+	if len(proxyURL) > 0 && len(proxyURL[0]) > 0 {
+		var err error
+		dialer, err = newConnectDialer(proxyURL[0], UserAgent)
+		if err != nil {
+			return http.Client{
+				Timeout:       time.Duration(timeout) * time.Second,
+				CheckRedirect: disabledRedirect,
+			}, err
+		}
+	} else {
+		dialer = proxy.Direct
+	}
+
+	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/utils.go`:
+
+```go
+package cycletls
+
+import (
+	"bytes"
+	"compress/gzip"
+	"compress/zlib"
+	"crypto/sha256"
+	"encoding/json"
+	"strconv"
+	"strings"
+	"io"
+	"errors"
+	"github.com/andybalholm/brotli"
+	utls "github.com/refraction-networking/utls"
+)
+
+const (
+	chrome  = "chrome"  //chrome User agent enum
+	firefox = "firefox" //firefox User agent enum
+)
+
+type UserAgent struct {
+	UserAgent   string
+	HeaderOrder []string
+}
+
+// ParseUserAgent returns the pseudo header order and user agent string for chrome/firefox
+func parseUserAgent(userAgent string) UserAgent {
+	switch {
+	case strings.Contains(strings.ToLower(userAgent), "chrome"):
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
+	case strings.Contains(strings.ToLower(userAgent), "firefox"):
+		return UserAgent{firefox, []string{":method", ":path", ":authority", ":scheme"}}
+	default:
+		return UserAgent{chrome, []string{":method", ":authority", ":scheme", ":path"}}
+	}
+
+}
+
+// DecompressBody unzips compressed data
+func DecompressBody(Body []byte, encoding []string, content []string) (parsedBody []byte) {
+	if len(encoding) > 0 {
+		if encoding[0] == "gzip" {
+			unz, err := gUnzipData(Body)
+			if err != nil {
+				return Body
+			}
+			return unz
+		} else if encoding[0] == "deflate" {
+			unz, err := enflateData(Body)
+			if err != nil {
+				return Body
+			}
+			return unz
+		} else if encoding[0] == "br" {
+			unz, err := unBrotliData(Body)
+			if err != nil {
+				return Body
+			}
+			return unz
+		}
+	}
+
+	return parsedBody
+
+}
+
+func gUnzipData(data []byte) (resData []byte, err error) {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return []byte{}, err
+	}
+	defer gz.Close()
+	respBody, err := io.ReadAll(gz)
+	return respBody, err
+}
+func enflateData(data []byte) (resData []byte, err error) {
+	zr, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return []byte{}, err
+	}
+	defer zr.Close()
+	enflated, err := io.ReadAll(zr)
+	return enflated, err
+}
+func unBrotliData(data []byte) (resData []byte, err error) {
+	br := brotli.NewReader(bytes.NewReader(data))
+	respBody, err := io.ReadAll(br)
+	return respBody, err
+}
+
+// StringToSpec creates a ClientHelloSpec based on a JA3 string
+func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
+	parsedUserAgent := parseUserAgent(userAgent)
+	// if tlsExtensions == nil {
+	// 	tlsExtensions = &TLSExtensions{}
+	// }
+	// ext := tlsExtensions
+	extMap := genMap()
+	tokens := strings.Split(ja3, ",")
+
+	version := tokens[0]
+	ciphers := strings.Split(tokens[1], "-")
+	extensions := strings.Split(tokens[2], "-")
+	curves := strings.Split(tokens[3], "-")
+	if len(curves) == 1 && curves[0] == "" {
+		curves = []string{}
+	}
+	pointFormats := strings.Split(tokens[4], "-")
+	if len(pointFormats) == 1 && pointFormats[0] == "" {
+		pointFormats = []string{}
+	}
+	// parse curves
+	var targetCurves []utls.CurveID
+	// if parsedUserAgent == chrome && !tlsExtensions.UseGREASE {
+	if parsedUserAgent.UserAgent == chrome {
+		targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER)) //append grease for Chrome browsers
+		if supportedVersionsExt, ok := extMap["43"]; ok {
+			if supportedVersions, ok := supportedVersionsExt.(*utls.SupportedVersionsExtension); ok {
+				supportedVersions.Versions = append([]uint16{utls.GREASE_PLACEHOLDER}, supportedVersions.Versions...)
+			}
+		}
+		if keyShareExt, ok := extMap["51"]; ok {
+			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+				keyShare.KeyShares = append([]utls.KeyShare{{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}}}, keyShare.KeyShares...)
+			}
+		}
+	} else {
+		if keyShareExt, ok := extMap["51"]; ok {
+			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+				keyShare.KeyShares = append(keyShare.KeyShares, utls.KeyShare{Group: utls.CurveP256})
+			}
+		}
+	}
+	for _, c := range curves {
+		cid, err := strconv.ParseUint(c, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		targetCurves = append(targetCurves, utls.CurveID(cid))
+	}
+	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
+
+	// parse point formats
+	var targetPointFormats []byte
+	for _, p := range pointFormats {
+		pid, err := strconv.ParseUint(p, 10, 8)
+		if err != nil {
+			return nil, err
+		}
+		targetPointFormats = append(targetPointFormats, byte(pid))
+	}
+	extMap["11"] = &utls.SupportedPointsExtension{SupportedPoints: targetPointFormats}
+
+	// force http1
+	if forceHTTP1 {
+		extMap["16"] = &utls.ALPNExtension{
+			AlpnProtocols: []string{"http/1.1"},
+		}
+	}
+
+
+
+	// set extension 43
+	ver, err := strconv.ParseUint(version, 10, 16)
+	if err != nil {
+		return nil, err
+	}
+	tlsMaxVersion, tlsMinVersion, tlsExtension, err := createTlsVersion(uint16(ver))
+	extMap["43"] = tlsExtension
+
+	// build extenions list
+	var exts []utls.TLSExtension
+	//Optionally Add Chrome Grease Extension
+	// if parsedUserAgent == chrome && !tlsExtensions.UseGREASE {
+	if parsedUserAgent.UserAgent == chrome {
+		exts = append(exts, &utls.UtlsGREASEExtension{})
+	}
+	for _, e := range extensions {
+		te, ok := extMap[e]
+		if !ok {
+			return nil, raiseExtensionError(e)
+		}
+		// //Optionally add Chrome Grease Extension
+		// if e == "21" && parsedUserAgent == chrome && !tlsExtensions.UseGREASE {
+		if e == "21" && parsedUserAgent.UserAgent == chrome {
+			exts = append(exts, &utls.UtlsGREASEExtension{})
+		}
+		exts = append(exts, te)
+	}
+
+	// build CipherSuites
+	var suites []uint16
+	//Optionally Add Chrome Grease Extension
+	// if parsedUserAgent == chrome && !tlsExtensions.UseGREASE {
+	if parsedUserAgent.UserAgent == chrome {
+		suites = append(suites, utls.GREASE_PLACEHOLDER)
+	}
+	for _, c := range ciphers {
+		cid, err := strconv.ParseUint(c, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		suites = append(suites, uint16(cid))
+	}
+	return &utls.ClientHelloSpec{
+		TLSVersMin:         tlsMinVersion,
+		TLSVersMax:         tlsMaxVersion,
+		CipherSuites:       suites,
+		CompressionMethods: []byte{0},
+		Extensions:         exts,
+		GetSessionID:       sha256.Sum256,
+	}, nil
+}
+// TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
+func createTlsVersion(ver uint16) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
+	switch ver {
+	case utls.VersionTLS13:
+		tlsMaxVersion = utls.VersionTLS13
+		tlsMinVersion = utls.VersionTLS12
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS13,
+				utls.VersionTLS12,
+			},
+		}
+	case utls.VersionTLS12:
+		tlsMaxVersion = utls.VersionTLS12
+		tlsMinVersion = utls.VersionTLS11
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS12,
+				utls.VersionTLS11,
+			},
+		}
+	case utls.VersionTLS11:
+		tlsMaxVersion = utls.VersionTLS11
+		tlsMinVersion = utls.VersionTLS10
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS11,
+				utls.VersionTLS10,
+			},
+		}
+	default:
+		err = errors.New("ja3Str tls version error")
+	}
+	return
+}
+func genMap() (extMap map[string]utls.TLSExtension) {
+	extMap = map[string]utls.TLSExtension{
+		"0": &utls.SNIExtension{},
+		"5": &utls.StatusRequestExtension{},
+		// These are applied later
+		// "10": &tls.SupportedCurvesExtension{...}
+		// "11": &tls.SupportedPointsExtension{...}
+		"13": &utls.SignatureAlgorithmsExtension{
+			SupportedSignatureAlgorithms: []utls.SignatureScheme{
+				utls.ECDSAWithP256AndSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.ECDSAWithP521AndSHA512,
+				utls.PSSWithSHA256,
+				utls.PSSWithSHA384,
+				utls.PSSWithSHA512,
+				utls.PKCS1WithSHA256,
+				utls.PKCS1WithSHA384,
+				utls.PKCS1WithSHA512,
+				utls.ECDSAWithSHA1,
+				utls.PKCS1WithSHA1,
+			},
+		},
+		"16": &utls.ALPNExtension{
+			AlpnProtocols: []string{"h2", "http/1.1"},
+		},
+		"17": &utls.GenericExtension{Id: 17}, // status_request_v2
+		"18": &utls.SCTExtension{},
+		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
+		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
+		"23": &utls.ExtendedMasterSecretExtension{},
+		"24": &utls.FakeTokenBindingExtension{},
+		"27": &utls.UtlsCompressCertExtension{
+			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		},
+		"28": &utls.FakeRecordSizeLimitExtension{
+			Limit: 0x4001,
+		}, //Limit: 0x4001
+		"34": &utls.DelegatedCredentialsExtension{
+			SupportedSignatureAlgorithms: []utls.SignatureScheme{
+				utls.ECDSAWithP256AndSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.ECDSAWithP521AndSHA512,
+				utls.ECDSAWithSHA1,
+			},
+		},
+		"35": &utls.SessionTicketExtension{},
+		"41": &utls.UtlsPreSharedKeyExtension{}, //FIXME pre_shared_key
+		// "43": &utls.SupportedVersionsExtension{Versions: []uint16{ this gets set above
+		// 	utls.VersionTLS13,
+		// 	utls.VersionTLS12,
+		// }},
+		"44": &utls.CookieExtension{},
+		"45": &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
+			utls.PskModeDHE,
+		}},
+		"49": &utls.GenericExtension{Id: 49}, // post_handshake_auth
+		"50": &utls.SignatureAlgorithmsCertExtension{
+			SupportedSignatureAlgorithms: []utls.SignatureScheme{
+				utls.ECDSAWithP256AndSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.ECDSAWithP521AndSHA512,
+				utls.PSSWithSHA256,
+				utls.PSSWithSHA384,
+				utls.PSSWithSHA512,
+				utls.PKCS1WithSHA256,
+				utls.PKCS1WithSHA384,
+				utls.SignatureScheme(0x0806),
+				utls.SignatureScheme(0x0601),
+			},
+		}, // signature_algorithms_cert
+		"51": &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+			{Group: utls.X25519},
+
+			// {Group: utls.CurveP384}, known bug missing correct extensions for handshake
+		}},
+		"57":    &utls.QUICTransportParametersExtension{},
+		"13172": &utls.NPNExtension{},
+		"17513": &utls.ApplicationSettingsExtension{
+			SupportedProtocols: []string{
+				"h2",
+			},
+		},
+		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME
+		"65281": &utls.RenegotiationInfoExtension{
+			Renegotiation: utls.RenegotiateOnceAsClient,
+		},
+		"65037": utls.BoringGREASEECH(),
+	}
+	return
+
+}
+
+// PrettyStruct formats json
+func PrettyStruct(data interface{}) (string, error) {
+	val, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		return "", err
+	}
+	return string(val), nil
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/cookie.go`:
+
+```go
+package cycletls
+
+import (
+	http "github.com/Danny-Dasilva/fhttp"
+	nhttp "net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Time wraps time.Time overriddin the json marshal/unmarshal to pass
+// timestamp as integer
+type Time struct {
+	time.Time
+}
+
+type data struct {
+	Time Time `json:"time"`
+}
+
+// A Cookie represents an HTTP cookie as sent in the Set-Cookie header of an
+// HTTP response or the Cookie header of an HTTP request.
+//
+// See https://tools.ietf.org/html/rfc6265 for details.
+// Stolen from Net/http/cookies
+type Cookie struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+
+	Path        string `json:"path"`   // optional
+	Domain      string `json:"domain"` // optional
+	Expires     time.Time
+	JSONExpires Time   `json:"expires"`    // optional
+	RawExpires  string `json:"rawExpires"` // for reading cookies only
+
+	// MaxAge=0 means no 'Max-Age' attribute specified.
+	// MaxAge<0 means delete cookie now, equivalently 'Max-Age: 0'
+	// MaxAge>0 means Max-Age attribute present and given in seconds
+	MaxAge   int            `json:"maxAge"`
+	Secure   bool           `json:"secure"`
+	HTTPOnly bool           `json:"httpOnly"`
+	SameSite nhttp.SameSite `json:"sameSite"`
+	Raw      string
+	Unparsed []string `json:"unparsed"` // Raw text of unparsed attribute-value pairs
+}
+
+// UnmarshalJSON implements json.Unmarshaler inferface.
+func (t *Time) UnmarshalJSON(buf []byte) error {
+	// Try to parse the timestamp integer
+	ts, err := strconv.ParseInt(string(buf), 10, 64)
+	if err == nil {
+		if len(buf) == 19 {
+			t.Time = time.Unix(ts/1e9, ts%1e9)
+		} else {
+			t.Time = time.Unix(ts, 0)
+		}
+		return nil
+	}
+	str := strings.Trim(string(buf), `"`)
+	if str == "null" || str == "" {
+		return nil
+	}
+	// Try to manually parse the data
+	tt, err := ParseDateString(str)
+	if err != nil {
+		return err
+	}
+	t.Time = tt
+	return nil
+}
+
+// ParseDateString takes a string and passes it through Approxidate
+// Parses into a time.Time
+func ParseDateString(dt string) (time.Time, error) {
+	const layout = "Mon, 02-Jan-2006 15:04:05 MST"
+
+	return time.Parse(layout, dt)
+}
+
+// convertFHTTPCookiesToNetHTTPCookies converts a slice of fhttp cookies to net/http cookies.
+func convertFHTTPCookiesToNetHTTPCookies(fhttpCookies []*http.Cookie) []*nhttp.Cookie {
+	var netHTTPCookies []*nhttp.Cookie
+	for _, fhttpCookie := range fhttpCookies {
+		netHTTPCookie := &nhttp.Cookie{
+			Name:     fhttpCookie.Name,
+			Value:    fhttpCookie.Value,
+			Path:     fhttpCookie.Path,
+			Domain:   fhttpCookie.Domain,
+			Expires:  fhttpCookie.Expires,
+			Secure:   fhttpCookie.Secure,
+			HttpOnly: fhttpCookie.HttpOnly,
+		}
+		netHTTPCookies = append(netHTTPCookies, netHTTPCookie)
+	}
+	return netHTTPCookies
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/errors.go`:
+
+```go
+package cycletls
+
+import (
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type errorMessage struct {
+	StatusCode int
+	debugger   string
+	ErrorMsg   string
+	Op         string
+}
+
+func lastString(ss []string) string {
+	return ss[len(ss)-1]
+}
+
+// func createErrorString(err: string) (msg, debugger string) {
+func createErrorString(err error) (msg, debugger string) {
+	msg = fmt.Sprintf("Request returned a Syscall Error: %s", err)
+	debugger = fmt.Sprintf("%#v\n", err)
+	return
+}
+
+func createErrorMessage(StatusCode int, err error, op string) errorMessage {
+	msg := fmt.Sprintf("Request returned a Syscall Error: %s", err)
+	debugger := fmt.Sprintf("%#v\n", err)
+	return errorMessage{StatusCode: StatusCode, debugger: debugger, ErrorMsg: msg, Op: op}
+}
+
+func parseError(err error) (errormessage errorMessage) {
+	var op string
+
+	httpError := string(err.Error())
+	status := lastString(strings.Split(httpError, "StatusCode:"))
+	StatusCode, _ := strconv.Atoi(status)
+	if StatusCode != 0 {
+		msg, debugger := createErrorString(err)
+		return errorMessage{StatusCode: StatusCode, debugger: debugger, ErrorMsg: msg}
+	}
+	if uerr, ok := err.(*url.Error); ok {
+		if noerr, ok := uerr.Err.(*net.OpError); ok {
+			op = noerr.Op
+			if SyscallError, ok := noerr.Err.(*os.SyscallError); ok {
+				if noerr.Timeout() {
+					return createErrorMessage(408, SyscallError, op)
+				}
+				return createErrorMessage(401, SyscallError, op)
+			} else if AddrError, ok := noerr.Err.(*net.AddrError); ok {
+				return createErrorMessage(405, AddrError, op)
+			} else if DNSError, ok := noerr.Err.(*net.DNSError); ok {
+				return createErrorMessage(421, DNSError, op)
+			} else {
+				return createErrorMessage(421, noerr, op)
+			}
+		}
+		if uerr.Timeout() {
+			return createErrorMessage(408, uerr, op)
+		}
+	}
+	return
+}
+
+type errExtensionNotExist struct {
+	Context string
+}
+
+func (w *errExtensionNotExist) Error() string {
+	return fmt.Sprintf("Extension {{ %s }} is not Supported by CycleTLS please raise an issue", w.Context)
+}
+
+func raiseExtensionError(info string) *errExtensionNotExist {
+	return &errExtensionNotExist{
+		Context: info,
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/custom_timeout_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	//"fmt"
+	"log"
+	"strings"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestTimeoutSuccess(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("http://httpbin.org/delay/1", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Timeout:   5,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+}
+
+func TestTimeoutError(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("http://httpbin.org/delay/10", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Timeout:   1,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 408 {
+		t.Fatalf("Expected %d Got %d for Status", 408, resp.Status)
+	}
+	if strings.Contains(resp.Body, "Timeout") == false {
+		t.Fatalf("Expected %s in Body Got %s", "Timeout", resp.Body)
+	}
+
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/latest_fingerprint_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"encoding/json"
+	"testing"
+
+	// cycletls "../../../cycletls"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+type AkamaiOptions struct {
+	Ja3Hash           string `json:"ja3_hash"`
+	Ja3               string `json:"ja3"`
+	UserAgent         string `json:"User-Agent"`
+	AkamaiFingerprint string
+	AkamaiHash        string
+
+	HTTPResponse int
+}
+
+type PeetResp struct {
+	Ja3               string `json:"ja3"`
+	Ja3Hash           string `json:"ja3_hash"`
+	AkamaiFingerprint string `json:"akamai"`
+	AkamaiHash        string `json:"akamai_hash"`
+	PeetPrint         string `json:"peetprint"`
+}
+
+var PeetRequests = []AkamaiOptions{
+	{"c0a45cc83cb2005bbd2a860db187a357", // Firefox 121
+		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,0-23-65281-10-11-16-5-34-51-43-13-45-28-65037,29-23-24-25-256-257,0",
+		"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+		"1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s",
+		"3d9132023bf26a71d40fe766e5c24c9d",
+		200},
+	{"d742731fb59499b2ca4cf990dd929c0a", // Chrome 120
+		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,45-27-23-10-13-35-5-65037-16-51-0-18-43-11-17513-65281,29-23-24,0",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		"1:65536;3:1000;4:6291456;5:16384;6:262144|15663105|0|m,a,s,p",
+		"d8bfc65c373bfcc03d51b3c4e28d4591",
+		200},
+}
+
+// {"ja3_hash":"aa7744226c695c0b2e440419848cf700", "ja3": "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0"}
+func TestLatestVersions(t *testing.T) {
+	client := cycletls.Init()
+	for _, options := range PeetRequests {
+
+		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
+			Ja3:       options.Ja3,
+			UserAgent: options.UserAgent,
+		}, "GET")
+		if err != nil {
+			t.Fatal("Unmarshal Error")
+		}
+		if response.Status != options.HTTPResponse {
+			t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
+		}
+		jsonResp := new(PeetResp)
+
+		err = json.Unmarshal([]byte(response.Body), &jsonResp)
+		if err != nil {
+			t.Fatal("Unmarshal Error")
+		}
+		if jsonResp.Ja3 != options.Ja3 {
+			t.Fatal("Expected:", options.Ja3, "Got:", jsonResp.Ja3, "for Ja3")
+		}
+		if jsonResp.AkamaiFingerprint != options.AkamaiFingerprint {
+			t.Fatal("Expected:", options.AkamaiFingerprint, "Got:", jsonResp.AkamaiFingerprint, "for AkamaiFingerprint", options.UserAgent)
+		}
+		if jsonResp.AkamaiHash != options.AkamaiHash {
+			t.Fatal("Expected:", options.AkamaiHash, "Got:", jsonResp.AkamaiHash, "for AkamaiHash", options.UserAgent)
+		}
+
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/images_test.go`:
+
+```go
+package cycletls_test
+
+import (
+	"bytes"
+	"encoding/base64"
+	"log"
+	"os"
+	"runtime"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func SimpleFileWriteTest(t *testing.T) {
+
+	client := cycletls.Init()
+	response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	// Decode Base64
+	dec, err := base64.StdEncoding.DecodeString(response.Body)
+	if err != nil {
+		panic(err)
+	}
+	//create file to write
+	f, err := os.Create("test.jpeg")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	//write b64 to file
+	if _, err := f.Write(dec); err != nil {
+		panic(err)
+	}
+	if err := f.Sync(); err != nil {
+		panic(err)
+	}
+}
+
+func WriteFile(Body string, Filepath string) {
+	// Decode Base64
+	dec, err := base64.StdEncoding.DecodeString(Body)
+	if err != nil {
+		panic(err)
+	}
+	//create file to write
+	f, err := os.Create(Filepath)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	//write b64 to file
+	if _, err := f.Write(dec); err != nil {
+		panic(err)
+	}
+	if err := f.Sync(); err != nil {
+		panic(err)
+	}
+
+}
+
+func CompareFiles(filepath1 string, filepath2 string) bool {
+	f1, err1 := os.ReadFile(filepath1)
+
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+
+	f2, err2 := os.ReadFile(filepath2)
+
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+
+	return bytes.Equal(f1, f2)
+}
+func GetRequest(url string, client cycletls.CycleTLS) cycletls.Response {
+	resp, err := client.Do(url, cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	return resp
+}
+
+func TestFileWriting(t *testing.T) {
+
+	client := cycletls.Init()
+
+	//jpeg
+	resp := GetRequest("http://httpbin.org/image/jpeg", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.jpeg")
+	filesEqual := CompareFiles("../../../tests/images/test.jpeg", "../../../tests/images/source.jpeg")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "jpeg")
+	}
+
+	//png
+	resp = GetRequest("http://httpbin.org/image/png", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.png")
+	filesEqual = CompareFiles("../../../tests/images/test.png", "../../../tests/images/source.png")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "png")
+	}
+
+	if runtime.GOOS != "windows" {
+		resp = GetRequest("http://httpbin.org/image/svg", client)
+		if resp.Status != 200 {
+			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+		}
+		WriteFile(resp.Body, "../../../tests/images/source.svg")
+		filesEqual = CompareFiles("../../../tests/images/test.svg", "../../../tests/images/source.svg")
+		if filesEqual != true {
+			t.Fatal("Files are not equal", "svg")
+		}
+	}
+	//webp
+	resp = GetRequest("http://httpbin.org/image/webp", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.webp")
+	filesEqual = CompareFiles("../../../tests/images/test.webp", "../../../tests/images/source.webp")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "webp")
+	}
+
+	//gif
+	resp = GetRequest("https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif", client)
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	WriteFile(resp.Body, "../../../tests/images/source.gif")
+	filesEqual = CompareFiles("../../../tests/images/test.gif", "../../../tests/images/source.gif")
+	if filesEqual != true {
+		t.Fatal("Files are not equal", "gif")
+	}
+
+	// if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	// 	//avif
+	// 	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+	// 	if resp.Status != 200 {
+	// 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	// 	}
+	// 	WriteFile(resp.Body, "../../../tests/images/source.avif")
+	// 	filesEqual = CompareFiles("../../../tests/images/test.avif", "../../../tests/images/source.avif")
+	// 	if filesEqual != true {
+	// 		t.Fatal("Files are not equal", "avif")
+	// 	}
+	// }
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/multipart_formdata_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"mime/multipart"
+	"os"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+type HttpBinResponse struct {
+	Args    map[string]string `json:"args"`
+	Data    string            `json:"data"`
+	Files   map[string]string `json:"files"`
+	Form    map[string]string `json:"form"`
+	Headers map[string]string `json:"headers"`
+	Json    interface{}       `json:"json"`
+	Origin  string            `json:"origin"`
+	URL     string            `json:"url"`
+}
+
+func TestMultipartFormDataMixed(t *testing.T) {
+	client := cycletls.Init()
+
+	// Prepare a buffer to write our multipart form
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	// Add form fields
+	err := multipartWriter.WriteField("key1", "value1")
+	if err != nil {
+		t.Fatal("Error adding form field: ", err)
+	}
+	err = multipartWriter.WriteField("key2", "value2")
+	if err != nil {
+		t.Fatal("Error adding form field: ", err)
+	}
+
+	// Add a file
+	fileWriter, err := multipartWriter.CreateFormFile("test_file", "../../go.mod")
+	if err != nil {
+		t.Fatal("CreateFormFile Error: ", err)
+	}
+
+	// Open the file that you want to upload
+	file, err := os.Open("../../go.mod")
+	if err != nil {
+		t.Fatal("File Open Error: ", err)
+	}
+	defer file.Close()
+
+	// Copy the file to the multipart writer
+	_, err = io.Copy(fileWriter, file)
+	if err != nil {
+		t.Fatal("File Copy Error: ", err)
+	}
+
+	// Close the writer before making the request
+	contentType := multipartWriter.FormDataContentType()
+	multipartWriter.Close()
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: requestBody.String(),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		InsecureSkipVerify: true,
+	}, "POST")
+	if err != nil {
+		t.Fatal("Request Failed: ", err)
+	}
+
+	if response.Status != 200 {
+		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
+	}
+	var respData HttpBinResponse
+	err = json.Unmarshal([]byte(response.Body), &respData)
+	if err != nil {
+		t.Fatal("Unmarshal Error: ", err)
+	}
+	if _, ok := respData.Files["test_file"]; !ok {
+		t.Fatal("Expected file 'filetype.csv' in response, but it was not found")
+	}
+
+	expectedForm := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+	for key, expectedValue := range expectedForm {
+		if value, ok := respData.Form[key]; !ok || value != expectedValue {
+			t.Fatalf("Expected form field %s to be %s, got %s", key, expectedValue, value)
+		}
+	}
+}
+
+func TestMultipartFormDataUpload(t *testing.T) {
+	client := cycletls.Init()
+
+	// Prepare a buffer to write our multipart form
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	// Add a file
+	fileWriter, err := multipartWriter.CreateFormFile("test_file", "../../go.mod")
+	if err != nil {
+		t.Fatal("CreateFormFile Error: ", err)
+	}
+
+	// Open the file that you want to upload
+	file, err := os.Open("../../go.mod")
+	if err != nil {
+		t.Fatal("File Open Error: ", err)
+	}
+	defer file.Close()
+
+	// Copy the file to the multipart writer
+	_, err = io.Copy(fileWriter, file)
+	if err != nil {
+		t.Fatal("File Copy Error: ", err)
+	}
+
+	// Close the writer before making the request
+	contentType := multipartWriter.FormDataContentType()
+	multipartWriter.Close()
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: requestBody.String(),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		InsecureSkipVerify: true,
+	}, "POST")
+	if err != nil {
+		t.Fatal("Request Failed: ", err)
+	}
+
+	if response.Status != 200 {
+		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
+	}
+	var respData HttpBinResponse
+	err = json.Unmarshal([]byte(response.Body), &respData)
+	if err != nil {
+		t.Fatal("Unmarshal Error: ", err)
+	}
+	if _, ok := respData.Files["test_file"]; !ok {
+		t.Fatal("Expected file 'filetype.csv' in response, but it was not found")
+	}
+}
+
+func TestMultipartFormDataText(t *testing.T) {
+	client := cycletls.Init()
+
+	// Prepare a buffer to write our multipart form
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	// Add form fields
+	err := multipartWriter.WriteField("key1", "value1")
+	if err != nil {
+		t.Fatal("Error adding form field: ", err)
+	}
+	err = multipartWriter.WriteField("key2", "value2")
+	if err != nil {
+		t.Fatal("Error adding form field: ", err)
+	}
+	// Close the writer before making the request
+	contentType := multipartWriter.FormDataContentType()
+	multipartWriter.Close()
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: requestBody.String(),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		InsecureSkipVerify: true,
+	}, "POST")
+	if err != nil {
+		t.Fatal("Request Failed: ", err)
+	}
+
+	if response.Status != 200 {
+		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
+	}
+	var respData HttpBinResponse
+	err = json.Unmarshal([]byte(response.Body), &respData)
+	if err != nil {
+		t.Fatal("Unmarshal Error: ", err)
+	}
+
+	expectedForm := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+	for key, expectedValue := range expectedForm {
+		if value, ok := respData.Form[key]; !ok || value != expectedValue {
+			t.Fatalf("Expected form field %s to be %s, got %s", key, expectedValue, value)
+		}
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/tls_13_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+// import (
+// 	//"fmt"
+// 	// "encoding/json"
+// 	"testing"
+
+// 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+// )
+
+// var TLS13Results = []CycleTLSOptions{
+// 	{"b32309a26951912be7dba376398abc3b", // HelloChrome_100
+// 	"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+// 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 Edg/100.0.1185.44",
+// 		200},
+// }
+
+// func TestTLS_13(t *testing.T) {
+// 	client := cycletls.Init()
+// 	for _, options := range TLS13Results {
+
+// 		// response, err := client.Do("https://ja3er.com/json", cycletls.Options{
+// 		// 	Ja3:       options.Ja3,
+// 		// 	UserAgent: options.UserAgent,
+// 		// }, "GET")
+// 		// if err != nil {
+// 		// 	t.Fatal("Unmarshal Error")
+// 		// }
+// 		// if response.Status != 502 {
+// 		// 	if response.Status != options.HTTPResponse {
+// 		// 		t.Fatal("Expected Result Not given")
+// 		// 	} else {
+// 		// 		log.Println("ja3er: ", response.Status)
+// 		// 	}
+// 		// 	ja3resp := new(Ja3erResp)
+
+// 		// 	err = json.Unmarshal([]byte(response.Body), &ja3resp)
+// 		// 	if err != nil {
+// 		// 		t.Fatal("Unmarshal Error")
+// 		// 	}
+
+// 		// 	if ja3resp.Ja3Hash != options.Ja3Hash {
+// 		// 		t.Fatal("Expected:", options.Ja3Hash, "Got:", ja3resp.Ja3Hash, "for Ja3Hash")
+// 		// 	}
+// 		// 	if ja3resp.Ja3 != options.Ja3 {
+// 		// 		t.Fatal("Expected:", options.Ja3, "Got:", ja3resp.Ja3, "for Ja3")
+// 		// 	}
+// 		// 	if ja3resp.UserAgent != options.UserAgent {
+// 		// 		t.Fatal("Expected:", options.UserAgent, "Got:", ja3resp.UserAgent, "for UserAgent")
+// 		// 	}
+
+// 		// }
+
+// 		response, err := client.Do("https://tls13.1d.pw", cycletls.Options{
+// 			Ja3:       options.Ja3,
+// 			UserAgent: options.UserAgent,
+// 		}, "GET")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		if response.Status != options.HTTPResponse {
+// 			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash, response.Body)
+// 		}
+// 	}
+// }
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/cookie_jar_test.go`:
+
+```go
+package cycletls_test
+
+import (
+	"encoding/json"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"net/http/cookiejar"
+	"net/url"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestCookieHandling(t *testing.T) {
+	client := cycletls.Init()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// First request to check no cookies
+	firstResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{Body: "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0"}, "GET")
+	if err != nil || len(firstResponse.Cookies) != 0 {
+		t.Fatalf("Expected no cookies, got %v", firstResponse.Cookies)
+	}
+
+	// Second request to set a single cookie
+	secondURL := "https://httpbin.org/cookies/set?freeform=test"
+	secondResponse, err := client.Do(secondURL, cycletls.Options{Body: "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0", DisableRedirect: true}, "GET")
+	if err != nil || secondResponse.Status != 302 {
+		t.Fatalf("Expected status 302, got %d", secondResponse.Status)
+	}
+
+	// Add cookies to jar and prepare for the next request
+	u, _ := url.Parse(secondURL)
+	jar.SetCookies(u, secondResponse.Cookies)
+	cookieHeader := getHeadersFromJar(jar, u)
+
+	// Third request to verify the cookie
+	thirdResponse, _ := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Headers:   map[string]string{"Cookie": cookieHeader},
+	}, "GET")
+	var cookieData struct {
+		Cookies map[string]string `json:"cookies"`
+	}
+	if err := json.Unmarshal([]byte(thirdResponse.Body), &cookieData); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCookies := map[string]string{"freeform": "test"}
+	if !reflect.DeepEqual(cookieData.Cookies, expectedCookies) {
+		t.Fatalf("Expected cookies %v, got %v", expectedCookies, cookieData.Cookies)
+	}
+
+	// Fourth request to set additional cookies
+	fourthURL := "https://httpbin.org/cookies/set?a=1&b=2&c=3"
+	fourthResponse, _ := client.Do(fourthURL, cycletls.Options{Body: "",
+		Ja3:             "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent:       "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		DisableRedirect: true}, "GET")
+
+	// Add new cookies to jar
+	jar.SetCookies(u, fourthResponse.Cookies)
+	cookieHeader = getHeadersFromJar(jar, u)
+
+	// Fifth request to verify all cookies
+	fifthResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Headers:   map[string]string{"Cookie": cookieHeader},
+	}, "GET")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unmarshal the response body to verify cookies
+	var cookieData2 struct {
+		Cookies map[string]string `json:"cookies"`
+	}
+	if err := json.Unmarshal([]byte(fifthResponse.Body), &cookieData2); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCookies = map[string]string{"a": "1", "b": "2", "c": "3", "freeform": "test"}
+	if !reflect.DeepEqual(cookieData2.Cookies, expectedCookies) {
+		t.Fatalf("Expected cookies %v, got %v", expectedCookies, cookieData.Cookies)
+	}
+}
+
+func getHeadersFromJar(jar *cookiejar.Jar, url *url.URL) string {
+	cookies := jar.Cookies(url)
+	var cookieStrs []string
+	for _, cookie := range cookies {
+		cookieStrs = append(cookieStrs, cookie.Name+"="+cookie.Value)
+	}
+	return strings.Join(cookieStrs, "; ")
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/ForceHTTP1_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"encoding/json"
+	"log"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestForceHTTP1_h2(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+		Body:       "",
+		Ja3:        "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		ForceHTTP1: false,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+	fullResp := new(FullResp)
+
+	err = json.Unmarshal([]byte(resp.Body), &fullResp)
+	if err != nil {
+		t.Fatal("Unmarshal Error")
+	}
+	if fullResp.HTTP_Version != "h2" {
+		t.Fatal("Expected:", "h2", "Got:", fullResp.HTTP_Version, "for fullResp")
+	}
+
+}
+
+func TestForceHTTP1_h1(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+		Body:       "",
+		Ja3:        "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		ForceHTTP1: true,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+	fullResp := new(FullResp)
+
+	err = json.Unmarshal([]byte(resp.Body), &fullResp)
+	if err != nil {
+		t.Log("Unmarshal Error")
+	}
+	if fullResp.HTTP_Version != "HTTP/1.1" {
+		t.Log("Expected:", "HTTP/1.1", "Got:", fullResp.HTTP_Version, "for fullResp")
+	}
+
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/disable_redirect_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"log"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestRedirectEnabled(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://ssl.com", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+}
+
+func TestRedirectDisabled(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://ssl.com", cycletls.Options{
+		Body:            "",
+		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		DisableRedirect: true,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 301 {
+		t.Fatal("Expected {} Got {} for Status", 301, resp.Status)
+	}
+
+}
+
+func TestRedirectEnabled_NewURL(t *testing.T) {
+	url := "https://rb.gy/3hwz5h"
+	client := cycletls.Init()
+	resp, err := client.Do(url, cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+	if resp.FinalUrl == url {
+		t.Fatal("Expected https://www.google.com Got {} for Url", url, resp.FinalUrl)
+	}
+}
+
+func TestRedirectDisabled_NewURL(t *testing.T) {
+	url := "https://rb.gy/3hwz5h"
+	client := cycletls.Init()
+	resp, err := client.Do(url, cycletls.Options{
+		Body:            "",
+		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		DisableRedirect: true,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 301 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+	if resp.FinalUrl != url {
+		t.Fatal("Expected {} Got {} for Url", url, resp.FinalUrl)
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/multiple_requests_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestDelayResponseOrder(t *testing.T) {
+	var (
+		ja3       = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+		userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36"
+	)
+	client := cycletls.Init(true) // Initialize with worker pool
+
+	// Define the requests
+	requests := []struct {
+		URL     string
+		Method  string
+		Options cycletls.Options
+	}{
+		{
+			URL:    "http://httpbin.org/delay/3",
+			Method: "GET",
+			Options: cycletls.Options{
+				Ja3:       ja3,
+				UserAgent: userAgent,
+			},
+		},
+		{
+			URL:    "http://httpbin.org/get",
+			Method: "GET",
+			Options: cycletls.Options{
+				Ja3:       ja3,
+				UserAgent: userAgent,
+			},
+		},
+		{
+			URL:    "http://httpbin.org/post",
+			Method: "POST",
+			Options: cycletls.Options{
+				Ja3:       ja3,
+				UserAgent: userAgent,
+			},
+		},
+	}
+
+	// Queue the requests
+	for _, req := range requests {
+		client.Queue(req.URL, req.Options, req.Method)
+	}
+
+	// Collect the order of responses
+	responseOrder := make([]string, 0, len(requests))
+	for i := 0; i < len(requests); i++ {
+		response := <-client.RespChan
+		responseOrder = append(responseOrder, response.FinalUrl)
+	}
+
+	// Close the client
+	client.Close()
+
+	// Assert that the last response is from "http://httpbin.org/delay/3"
+	expectedLastURL := "http://httpbin.org/delay/3"
+	lastResponseURL := responseOrder[len(responseOrder)-1]
+	if lastResponseURL != expectedLastURL {
+		t.Errorf("Expected last response URL to be %s, got %s", expectedLastURL, lastResponseURL)
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/decoding_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	//"fmt"
+	"log"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestDeflateDecoding(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/deflate", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.JSONBody()["deflated"] != true {
+		t.Fatalf("Deflated not found in Response Body: %s", resp.Body)
+	}
+}
+func TestBrotliDecoding(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/brotli", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.JSONBody()["brotli"] != true {
+		t.Fatalf("brotli not found in Response Body: %s", resp.Body)
+	}
+}
+
+func TestGZIPDecoding(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/gzip", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Headers:   map[string]string{"Accept-Encoding": "gzip, deflate"},
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.JSONBody()["gzipped"] != true {
+		t.Fatalf("gzipped not found in Response Body: %s", resp.Body)
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/UrlEncodedFormData_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"encoding/json"
+	"net/url"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+type FormResponse struct {
+	Args    map[string]string `json:"args"`
+	Data    string            `json:"data"`
+	Form    map[string]string `json:"form"`
+	Headers map[string]string `json:"headers"`
+	Json    interface{}       `json:"json"`
+	Origin  string            `json:"origin"`
+	URL     string            `json:"url"`
+}
+
+func TestUrlEncodedFormDataUpload(t *testing.T) {
+	client := cycletls.Init()
+
+	// Prepare form data
+	form := url.Values{}
+	form.Add("key1", "value1")
+	form.Add("key2", "value2")
+
+	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+		Body: form.Encode(),
+		Headers: map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+		},
+	}, "POST")
+	if err != nil {
+		t.Fatal("Request Failed: ", err)
+	}
+
+	if response.Status != 200 {
+		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
+	}
+
+	// Parse the JSON response
+	var respData FormResponse
+	err = json.Unmarshal([]byte(response.Body), &respData)
+	if err != nil {
+		t.Fatal("Unmarshal Error: ", err)
+	}
+
+	// Validate the 'form' part of the response
+	expectedForm := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+	for key, expectedValue := range expectedForm {
+		if value, ok := respData.Form[key]; !ok || value != expectedValue {
+			t.Fatalf("Expected form field %s to be %s, got %s", key, expectedValue, value)
+		}
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/main_ja3_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"encoding/json"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+type CycleTLSOptions struct {
+	Ja3Hash      string `json:"ja3_hash"`
+	Ja3          string `json:"ja3"`
+	UserAgent    string `json:"User-Agent"`
+	HTTPResponse int
+}
+
+type Ja3erResp struct {
+	Ja3Hash    string `json:"ja3_hash"`
+	Ja3        string `json:"ja3"`
+	Ja4        string `json:"ja4"`
+	AkamaiHash string `json:"akamai_hash"`
+	Akamai     string `json:"akamai"`
+}
+
+var CycleTLSResults = []CycleTLSOptions{
+	{"bc6c386f480ee97b9d9e52d472b772d8", // HelloChrome_58
+		"771,49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-11-10,29-23-24,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
+		200},
+	{"bc6c386f480ee97b9d9e52d472b772d8", // HelloChrome_62
+		"771,49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-11-10,29-23-24,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3165.0 Safari/537.36",
+		200},
+	{"b4918ee98d0f0deb4e48563ca749ef10", // HelloChrome_70
+		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-11-51-45-43-10-27-21,29-23-24,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36",
+		200},
+	{"66918128f1b9b03303d77c6f2eefd128", // HelloChrome_72
+		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.96 Safari/537.36",
+		200},
+	{"b32309a26951912be7dba376398abc3b", // HelloChrome_83
+		"771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		200},
+	{"0ffee3ba8e615ad22535e7f771690a28", // HelloFirefox_55
+		"771,49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-13,29-23-24-25,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0",
+		200},
+	{"0ffee3ba8e615ad22535e7f771690a28", // HelloFirefox_56
+		"771,49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-13,29-23-24-25,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:56.0) Gecko/20100101 Firefox/56.0",
+		200},
+	{"b20b44b18b853ef29ab773e921b03422", // HelloFirefox_63
+		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:63.0) Gecko/20100101 Firefox/63.0",
+		200},
+	{"b20b44b18b853ef29ab773e921b03422", // HelloFirefox_65
+		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0",
+		200},
+	{"a69708a64f853c3bcc214c2c5faf84f3", // HelloIOS_11_1
+		"771,49196-49195-49188-49187-49162-49161-52393-49200-49199-49192-49191-49172-49171-52392-157-156-61-60-53-47,65281-0-23-13-5-13172-18-16-11-10,29-23-24-25,0",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A356 Safari/604.1",
+		200},
+	{"5c118da645babe52f060d0754256a73c", // HelloIOS_12_1
+		"771,49196-49195-49188-49187-49162-49161-52393-49200-49199-49192-49191-49172-49171-52392-157-156-61-60-53-47-49160-49170-10,65281-0-23-13-5-13172-18-16-11-10,29-23-24-25,0",
+		"Mozilla/5.0 (iPod; CPU iPhone OS 12_0 like macOS) AppleWebKit/602.1.50 (KHTML, like Gecko) Version/12.0 Mobile/14A5335d Safari/602.1.50",
+		200},
+	{"aa7744226c695c0b2e440419848cf700", // Firefox 92 on macOS (Catalina)
+		"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:92.0) Gecko/20100101 Firefox/92.0",
+		200},
+		{"683732371e44e9583f7fa850fe09e602", // Safari on iOS 17.1.1
+		"771,4865-4866-4867-49196-49195-52393-49200-49199-52392-49162-157-156-53-47-49160-49170-10,0-23-65281-10-11-16-5-13-18-51-45-43-27-21,29-23-24-25,0",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1.1 Mobile/15E148 Safari/604.1",
+		200},
+}
+
+// {"ja3_hash":"aa7744226c695c0b2e440419848cf700", "ja3": "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0", "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0"}
+func TestHTTP2(t *testing.T) {
+	client := cycletls.Init()
+	for _, options := range CycleTLSResults {
+
+		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
+			Ja3:       options.Ja3,
+			UserAgent: options.UserAgent,
+		}, "GET")
+		if err != nil {
+			t.Fatal("Request Error")
+		}
+		if response.Status != 502 {
+			if response.Status != options.HTTPResponse {
+				t.Fatal("Expected Result Not given", response.Status, response.Body, options.HTTPResponse, options.Ja3)
+			}
+			ja3resp := new(Ja3erResp)
+			
+			err = json.Unmarshal([]byte(response.Body), &ja3resp)
+			if err != nil {
+				t.Fatal("Unmarshal Error2")
+			}
+
+			if ja3resp.Ja3Hash != options.Ja3Hash {
+				t.Fatal("Expected:", options.Ja3Hash, "Got:", ja3resp.Ja3Hash, "for Ja3Hash")
+			}
+			if ja3resp.Ja3 != options.Ja3 {
+				t.Fatal("Expected:", options.Ja3, "Got:", ja3resp.Ja3, "for Ja3")
+			}
+
+		}
+
+		response, err = client.Do("https://http2.pro/api/v1", cycletls.Options{
+			Ja3:       options.Ja3,
+			UserAgent: options.UserAgent,
+			Headers:   map[string]string{"Accept-Encoding": "application/json"},
+		}, "GET")
+		if response.Status != options.HTTPResponse {
+			t.Fatal("Expected:", options.HTTPResponse, "Got:", response.Status, "for", options.Ja3Hash)
+		}
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/proxy_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	//"fmt"
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"runtime"
+	"testing"
+)
+
+func TestProxySuccess(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Skipping this test on non-linux platforms")
+		return
+	}
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Proxy:     "socks5://127.0.0.1:9050",
+	}, "GET")
+	if err != nil {
+		t.Fatalf("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	log.Print("Body: " + resp.Body)
+}
+func TestSocks4Proxy(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Skipping this test on non-linux platforms")
+		return
+	}
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Proxy:     "socks4://127.0.0.1:9050",
+	}, "GET")
+	if err != nil {
+		t.Fatalf("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	log.Print("Body: " + resp.Body)
+
+}
+
+func TestSocks5hProxy(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Skipping this test on non-linux platforms")
+		return
+	}
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		Proxy:     "socks5h://127.0.0.1:9050",
+	}, "GET")
+	if err != nil {
+		t.Fatalf("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
+	}
+	log.Print("Body: " + resp.Body)
+}
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/InsecureSkipVerify_test.go`:
+
+```go
+//go:build integration
+// +build integration
+
+package cycletls_test
+
+import (
+	"log"
+	"strings"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+type FullResp struct {
+	Method       string `json:"method"`
+	HTTP_Version string `json:"http_version"`
+}
+
+func TestInsecureSkipVerify_true(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://expired.badssl.com", cycletls.Options{
+		Body:               "",
+		Ja3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		InsecureSkipVerify: false,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+
+	expectedError := "uTlsConn.Handshake() error: tls: failed to verify certificate: x509: certificate has expired or is not yet valid"
+	if !strings.Contains(resp.Body, expectedError) {
+		t.Fatalf("Expected response body to contain error: %q, but got: %q", expectedError, resp.Body)
+	}
+
+}
+
+func TestInsecureSkipVerify_false(t *testing.T) {
+
+	client := cycletls.Init()
+	resp, err := client.Do("https://expired.badssl.com", cycletls.Options{
+		Body:               "",
+		Ja3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+		UserAgent:          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+		InsecureSkipVerify: true,
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+	if resp.Status != 200 {
+		t.Fatal("Expected {} Got {} for Status", 200, resp.Status)
+	}
+
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/integration/cookie_test.go`:
+
+```go
+package cycletls_test
+
+import (
+	//"fmt"
+	"encoding/json"
+	"log"
+	"reflect"
+	"testing"
+
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func TestCookies(t *testing.T) {
+	client := cycletls.Init()
+	resp, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+		Body:      "",
+		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		Cookies: []cycletls.Cookie{{Name: "cookie1", Value: "value1"},
+			{Name: "cookie2", Value: "value2"}},
+	}, "GET")
+	if err != nil {
+		log.Print("Request Failed: " + err.Error())
+	}
+
+	expected := `{
+		"cookies": {
+		  "cookie1": "value1", 
+		  "cookie2": "value2"
+		}
+	  }`
+	var data map[string]interface{}
+	err = json.Unmarshal([]byte(expected), &data)
+	if err != nil {
+		log.Print("Json Conversion failed " + err.Error())
+	}
+
+	eq := reflect.DeepEqual(resp.JSONBody(), data)
+	if !eq {
+		t.Fatalf("Expected %s Got %s, expected cookies not found", data, resp.JSONBody())
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/tests/unit/roundtripper_test.go`:
+
+```go
+package cycletls_test
+
+import (
+	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"testing"
+)
+
+const (
+	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36"
+)
+
+func assertEqual(t *testing.T, a interface{}, b interface{}) {
+	if a != b {
+		t.Fatalf("%s != %s", a, b)
+	}
+}
+
+func TestValidSpec(t *testing.T) {
+	spec, err := cycletls.StringToSpec("771,52244-52243-52245-49195-49199-158-49162-49172-57-49161-49171-51-156-53-47-10-255,0-23-35-13-5-13172-18-16-30032-11-10,23-24,0", UserAgent, false)
+	if err != nil {
+		t.Fatal("Error with valid spec")
+	}
+	_ = spec
+}
+
+func TestInvalidSpec(t *testing.T) {
+	spec, err := cycletls.StringToSpec("771,52244-52243-52245-49195-49199-158-49162-49172-57-49161-49171-51-156-53-47-10-255,0-23-35-13-5-13172-18-16-111111-10,23-24,0", UserAgent, false)
+	if err != nil {
+		assertEqual(t, err.Error(), "Extension {{ 111111 }} is not Supported by CycleTLS please raise an issue")
+	}
+	_ = spec
+
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/roundtripper.go`:
+
+```go
+package cycletls
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+
+	"strings"
+	"sync"
+
+	http "github.com/Danny-Dasilva/fhttp"
+	http2 "github.com/Danny-Dasilva/fhttp/http2"
+	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/proxy"
+)
+
+var errProtocolNegotiated = errors.New("protocol negotiated")
+
+type roundTripper struct {
+	sync.Mutex
+	// fix typing
+	JA3       string
+	UserAgent string
+
+	InsecureSkipVerify bool
+	Cookies            []Cookie
+	cachedConnections  map[string]net.Conn
+	cachedTransports   map[string]http.RoundTripper
+
+	dialer     proxy.ContextDialer
+	forceHTTP1 bool
+}
+
+func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Fix this later for proper cookie parsing
+	for _, properties := range rt.Cookies {
+		req.AddCookie(&http.Cookie{
+			Name:       properties.Name,
+			Value:      properties.Value,
+			Path:       properties.Path,
+			Domain:     properties.Domain,
+			Expires:    properties.JSONExpires.Time, //TODO: scuffed af
+			RawExpires: properties.RawExpires,
+			MaxAge:     properties.MaxAge,
+			HttpOnly:   properties.HTTPOnly,
+			Secure:     properties.Secure,
+			Raw:        properties.Raw,
+			Unparsed:   properties.Unparsed,
+		})
+	}
+	req.Header.Set("User-Agent", rt.UserAgent)
+	addr := rt.getDialTLSAddr(req)
+	if _, ok := rt.cachedTransports[addr]; !ok {
+		if err := rt.getTransport(req, addr); err != nil {
+			return nil, err
+		}
+	}
+	return rt.cachedTransports[addr].RoundTrip(req)
+}
+
+func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
+	switch strings.ToLower(req.URL.Scheme) {
+	case "http":
+		rt.cachedTransports[addr] = &http.Transport{DialContext: rt.dialer.DialContext, DisableKeepAlives: true}
+		return nil
+	case "https":
+	default:
+		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
+	}
+
+	_, err := rt.dialTLS(req.Context(), "tcp", addr)
+	switch err {
+	case errProtocolNegotiated:
+	case nil:
+		// Should never happen.
+		panic("dialTLS returned no error when determining cachedTransports")
+	default:
+		return err
+	}
+
+	return nil
+}
+
+func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	rt.Lock()
+	defer rt.Unlock()
+
+	// If we have the connection from when we determined the HTTPS
+	// cachedTransports to use, return that.
+	if conn := rt.cachedConnections[addr]; conn != nil {
+		return conn, nil
+	}
+	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var host string
+	if host, _, err = net.SplitHostPort(addr); err != nil {
+		host = addr
+	}
+	//////////////////
+
+	spec, err := StringToSpec(rt.JA3, rt.UserAgent, rt.forceHTTP1)
+	if err != nil {
+		return nil, err
+	}
+
+	conn := utls.UClient(rawConn, &utls.Config{ServerName: host, OmitEmptyPsk: true, InsecureSkipVerify: rt.InsecureSkipVerify}, // MinVersion:         tls.VersionTLS10,
+		// MaxVersion:         tls.VersionTLS13,
+
+		utls.HelloCustom)
+
+	if err := conn.ApplyPreset(spec); err != nil {
+		return nil, err
+	}
+
+	if err = conn.Handshake(); err != nil {
+		_ = conn.Close()
+
+		if err.Error() == "tls: CurvePreferences includes unsupported curve" {
+			//fix this
+			return nil, fmt.Errorf("conn.Handshake() error for tls 1.3 (please retry request): %+v", err)
+		}
+		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
+	}
+
+	if rt.cachedTransports[addr] != nil {
+		return conn, nil
+	}
+
+	// No http.Transport constructed yet, create one based on the results
+	// of ALPN.
+	switch conn.ConnectionState().NegotiatedProtocol {
+	case http2.NextProtoTLS:
+		parsedUserAgent := parseUserAgent(rt.UserAgent)
+
+		t2 := http2.Transport{
+			DialTLS:     rt.dialTLSHTTP2,
+			PushHandler: &http2.DefaultPushHandler{},
+			Navigator:   parsedUserAgent.UserAgent,
+		}
+		rt.cachedTransports[addr] = &t2
+	default:
+		// Assume the remote peer is speaking HTTP 1.x + TLS.
+		rt.cachedTransports[addr] = &http.Transport{DialTLSContext: rt.dialTLS, DisableKeepAlives: true}
+
+	}
+
+	// Stash the connection just established for use servicing the
+	// actual request (should be near-immediate).
+	rt.cachedConnections[addr] = conn
+
+	return nil, errProtocolNegotiated
+}
+
+func (rt *roundTripper) dialTLSHTTP2(network, addr string, _ *utls.Config) (net.Conn, error) {
+	return rt.dialTLS(context.Background(), network, addr)
+}
+
+func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
+	host, port, err := net.SplitHostPort(req.URL.Host)
+	if err == nil {
+		return net.JoinHostPort(host, port)
+	}
+	return net.JoinHostPort(req.URL.Host, "443") // we can assume port is 443 at this point
+}
+
+func (rt *roundTripper) CloseIdleConnections() {
+	for addr, conn := range rt.cachedConnections {
+		_ = conn.Close()
+		delete(rt.cachedConnections, addr)
+	}
+}
+
+func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
+	if len(dialer) > 0 {
+
+		return &roundTripper{
+			dialer:             dialer[0],
+			JA3:                browser.JA3,
+			UserAgent:          browser.UserAgent,
+			Cookies:            browser.Cookies,
+			cachedTransports:   make(map[string]http.RoundTripper),
+			cachedConnections:  make(map[string]net.Conn),
+			InsecureSkipVerify: browser.InsecureSkipVerify,
+			forceHTTP1:         browser.forceHTTP1,
+		}
+	}
+
+	return &roundTripper{
+		dialer:             proxy.Direct,
+		JA3:                browser.JA3,
+		UserAgent:          browser.UserAgent,
+		Cookies:            browser.Cookies,
+		cachedTransports:   make(map[string]http.RoundTripper),
+		cachedConnections:  make(map[string]net.Conn),
+		InsecureSkipVerify: browser.InsecureSkipVerify,
+		forceHTTP1:         browser.forceHTTP1,
+	}
+}
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/go.sum`:
+
+```sum
+cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
+cloud.google.com/go v0.31.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
+cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
+cloud.google.com/go v0.37.0/go.mod h1:TS1dMSSfndXH133OKGwekG838Om/cQT0BUHV3HcBgoo=
+dmitri.shuralyov.com/app/changes v0.0.0-20180602232624-0a106ad413e3/go.mod h1:Yl+fi1br7+Rr3LqpNJf1/uxUdtRUV+Tnj0o93V2B9MU=
+dmitri.shuralyov.com/html/belt v0.0.0-20180602232347-f7d459c86be0/go.mod h1:JLBrvjyP0v+ecvNYvCpyZgu5/xkfAUhi6wJj28eUfSU=
+dmitri.shuralyov.com/service/change v0.0.0-20181023043359-a85b471d5412/go.mod h1:a1inKt/atXimZ4Mv927x+r7UpyzRUf4emIoiiSC2TN4=
+dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D6DFvNNtx+9ybjezNCa8XF0xaYcETyp6rHWU=
+git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
+github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 h1:/lqhaiz7xdPr6kuaW1tQ/8DdpWdxkdyd9W/6EHz4oRw=
+github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1/go.mod h1:Hvab/V/YKCDXsEpKYKHjAXH5IFOmoq9FsfxjztEqvDc=
+github.com/andybalholm/brotli v1.0.5/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
+github.com/andybalholm/brotli v1.1.0 h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=
+github.com/andybalholm/brotli v1.1.0/go.mod h1:sms7XGricyQI9K10gOSf56VKKWS4oLer58Q+mhRPtnY=
+github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=
+github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
+github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
+github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
+github.com/bwesterb/go-ristretto v1.2.3/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
+github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
+github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
+github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
+github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
+github.com/cloudflare/circl v1.3.3/go.mod h1:5XYMA4rFBvNIrhs50XuiBJ15vF2pZn4nnUKZrLbUZFA=
+github.com/cloudflare/circl v1.3.7 h1:qlCDlTPz2n9fu58M0Nh1J/JzcFpfgkFHHX3O35r5vcU=
+github.com/cloudflare/circl v1.3.7/go.mod h1:sRTcRWXGLrKw6yIGJ+l7amYJFfAXbZG0kBSc8r4zxgA=
+github.com/coreos/go-systemd v0.0.0-20181012123002-c6f51f82210d/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
+github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:xEzjJPgXI435gkrCt3MPfRiAkVrwSbHsst4LCFVfpJc=
+github.com/francoispqt/gojay v1.2.13/go.mod h1:ehT5mTG4ua4581f1++1WLG0vPdaA9HaiDsoyrBGkyDY=
+github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
+github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
+github.com/gaukas/godicttls v0.0.4/go.mod h1:l6EenT4TLWgTdwslVb4sEMOCf7Bv0JAK67deKr9/NCI=
+github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
+github.com/gliderlabs/ssh v0.1.1/go.mod h1:U7qILu1NlMHj9FlMhZLlkCdDnU1DBEAqr0aevW3Awn0=
+github.com/go-errors/errors v1.0.1/go.mod h1:f4zRHt4oKfwPJE5k8C9vpYG+aDHdBFUsgrm6/TyX73Q=
+github.com/go-logr/logr v1.2.3/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
+github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
+github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
+github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0/go.mod h1:fyg7847qk6SyHyPtNmDHnmrv/HOrqktSC+C9fM+CJOE=
+github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
+github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572/go.mod h1:9Pwr4B2jHnOSGXyyzV8ROjYa2ojvAY6HCGYYfMoC3Ls=
+github.com/gogo/protobuf v1.1.1/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
+github.com/golang/lint v0.0.0-20180702182130-06c8688daad7/go.mod h1:tluoj9z5200jBnyusfRPU2LqT6J+DAorxEvtC7LHB+E=
+github.com/golang/mock v1.1.1/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
+github.com/golang/mock v1.2.0/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
+github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
+github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+github.com/golang/protobuf v1.4.0-rc.1/go.mod h1:ceaxUfeHdC40wWswd/P6IGgMaK3YpKi5j83Wpe3EHw8=
+github.com/golang/protobuf v1.4.0-rc.1.0.20200221234624-67d41d38c208/go.mod h1:xKAWHe0F5eneWXFV3EuXVDTCmh+JuBKY0li0aMyXATA=
+github.com/golang/protobuf v1.4.0-rc.2/go.mod h1:LlEzMj4AhA7rCAGe4KMBDvJI+AwstrUpVNzEA03Pprs=
+github.com/golang/protobuf v1.4.0-rc.4.0.20200313231945-b860323f09d0/go.mod h1:WU3c8KckQ9AFe+yFwt9sWVRKCVIyN9cPHBJSNnbL67w=
+github.com/golang/protobuf v1.4.0/go.mod h1:jodUvKwWbYaEsadDk5Fwe5c77LiNKVO9IDvqG2KuDX0=
+github.com/golang/protobuf v1.4.2/go.mod h1:oDoupMAO8OvCJWAcko0GGGIgR6R6ocIYbsSw735rRwI=
+github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
+github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
+github.com/golang/protobuf v1.5.3/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
+github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
+github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
+github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
+github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
+github.com/google/go-cmp v0.4.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
+github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
+github.com/google/go-cmp v0.5.8/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
+github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/google/go-github v17.0.0+incompatible/go.mod h1:zLgOLi98H3fifZn+44m+umXrS52loVEgC2AApnigrVQ=
+github.com/google/go-querystring v1.0.0/go.mod h1:odCYkC5MyYFN7vkCjXpyrEuKhc/BUO6wN/zVPAxq5ck=
+github.com/google/martian v2.1.0+incompatible/go.mod h1:9I4somxYTbIHy5NJKHRl3wXiIaQGbYVAs8BPL6v8lEs=
+github.com/google/pprof v0.0.0-20181206194817-3ea8567a2e57/go.mod h1:zfwlbNMJ+OItoe0UupaVj+oy1omPYYDuagoSzA8v9mc=
+github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 h1:yAJXTCF9TqKcTiHJAE8dj7HMvPfh66eeA2JYW7eFpSE=
+github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38/go.mod h1:kpwsk12EmLew5upagYY7GY0pfYCcupk39gWOCRROcvE=
+github.com/googleapis/gax-go v2.0.0+incompatible/go.mod h1:SFVmujtThgffbyetf+mdk2eWhX2bMyUtNHzFKcPA9HY=
+github.com/googleapis/gax-go/v2 v2.0.3/go.mod h1:LLvjysVCY1JZeum8Z6l8qUty8fiNwE08qbEPm1M08qg=
+github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
+github.com/gorilla/websocket v1.5.1 h1:gmztn0JnHVt9JZquRuzLw3g4wouNVzKL15iLr/zn/QY=
+github.com/gorilla/websocket v1.5.1/go.mod h1:x3kM2JMyaluk02fnUJpQuwD2dCS5NDG2ZHL0uE0tcaY=
+github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
+github.com/grpc-ecosystem/grpc-gateway v1.5.0/go.mod h1:RSKVYQBd5MCa4OVpNdGskqpgL2+G+NZTnrVHpWWfpdw=
+github.com/h12w/go-socks5 v0.0.0-20200522160539-76189e178364 h1:5XxdakFhqd9dnXoAZy1Mb2R/DZ6D1e+0bGC/JhucGYI=
+github.com/h12w/go-socks5 v0.0.0-20200522160539-76189e178364/go.mod h1:eDJQioIyy4Yn3MVivT7rv/39gAJTrA7lgmYr8EW950c=
+github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
+github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
+github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
+github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
+github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
+github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
+github.com/klauspost/compress v1.16.7/go.mod h1:ntbaceVETuRiXiv4DpjP66DpAtAGkEQskQzEyD//IeE=
+github.com/klauspost/compress v1.17.6 h1:60eq2E/jlfwQXtvZEeBUYADs+BwKBWURIY+Gj2eRGjI=
+github.com/klauspost/compress v1.17.6/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
+github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
+github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
+github.com/kr/pty v1.1.3/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
+github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/lunixbochs/vtclean v1.0.0/go.mod h1:pHhQNgMf3btfWnGBVipUOjRYhoOsdGqdm/+2c2E2WMI=
+github.com/mailru/easyjson v0.0.0-20190312143242-1de009706dbe/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
+github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
+github.com/microcosm-cc/bluemonday v1.0.1/go.mod h1:hsXNsILzKxV+sX77C5b8FSuKF00vh2OMYv+xgHpAMF4=
+github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
+github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
+github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
+github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
+github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
+github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
+github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
+github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=
+github.com/onsi/ginkgo v1.16.4 h1:29JGrr5oVBm5ulCWet69zQkzWipVXIol6ygQUe/EzNc=
+github.com/onsi/ginkgo v1.16.4/go.mod h1:dX+/inL/fNMqNlz0e9LfyB9TswhZpCVdJM/Z6Vvnwo0=
+github.com/onsi/ginkgo/v2 v2.1.3/go.mod h1:vw5CSIxN1JObi/U8gcbwft7ZxR2dgaR70JSE3/PpL4c=
+github.com/onsi/ginkgo/v2 v2.1.4/go.mod h1:um6tUpWM/cxCK3/FK8BXqEiUMUwRgSM4JXG47RKZmLU=
+github.com/onsi/ginkgo/v2 v2.1.6/go.mod h1:MEH45j8TBi6u9BMogfbp0stKC5cdGjumZj5Y7AG4VIk=
+github.com/onsi/ginkgo/v2 v2.2.0/go.mod h1:MEH45j8TBi6u9BMogfbp0stKC5cdGjumZj5Y7AG4VIk=
+github.com/onsi/ginkgo/v2 v2.3.0/go.mod h1:Eew0uilEqZmIEZr8JrvYlvOM7Rr6xzTmMV8AyFNU9d0=
+github.com/onsi/ginkgo/v2 v2.4.0/go.mod h1:iHkDK1fKGcBoEHT5W7YBq4RFWaQulw+caOMkAt4OrFo=
+github.com/onsi/ginkgo/v2 v2.5.0/go.mod h1:Luc4sArBICYCS8THh8v3i3i5CuSZO+RaQRaJoeNwomw=
+github.com/onsi/ginkgo/v2 v2.7.0/go.mod h1:yjiuMwPokqY1XauOgju45q3sJt6VzQ/Fict1LFVcsAo=
+github.com/onsi/ginkgo/v2 v2.8.1/go.mod h1:N1/NbDngAFcSLdyZ+/aYTYGSlq9qMCS/cNKGJjy+csc=
+github.com/onsi/ginkgo/v2 v2.9.0/go.mod h1:4xkjoL/tZv4SMWeww56BU5kAt19mVB47gTWxmrTcxyk=
+github.com/onsi/ginkgo/v2 v2.9.1/go.mod h1:FEcmzVcCHl+4o9bQZVab+4dC9+j+91t2FHSzmGAPfuo=
+github.com/onsi/ginkgo/v2 v2.9.2/go.mod h1:WHcJJG2dIlcCqVfBAwUCrJxSPFb6v4azBwgxeMeDuts=
+github.com/onsi/ginkgo/v2 v2.9.5 h1:+6Hr4uxzP4XIUyAkg61dWBw8lb/gc4/X5luuxN/EC+Q=
+github.com/onsi/ginkgo/v2 v2.9.5/go.mod h1:tvAoo1QUJwNEU2ITftXTpR7R1RbCzoZUOs3RonqW57k=
+github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
+github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
+github.com/onsi/gomega v1.17.0/go.mod h1:HnhC7FXeEQY45zxNK3PPoIUhzk/80Xly9PcubAlGdZY=
+github.com/onsi/gomega v1.19.0/go.mod h1:LY+I3pBVzYsTBU1AnDwOSxaYi9WoWiqgwooUqq9yPro=
+github.com/onsi/gomega v1.20.1/go.mod h1:DtrZpjmvpn2mPm4YWQa0/ALMDj9v4YxLgojwPeREyVo=
+github.com/onsi/gomega v1.21.1/go.mod h1:iYAIXgPSaDHak0LCMA+AWBpIKBr8WZicMxnE8luStNc=
+github.com/onsi/gomega v1.22.1/go.mod h1:x6n7VNe4hw0vkyYUM4mjIXx3JbLiPaBPNgB7PRQ1tuM=
+github.com/onsi/gomega v1.24.0/go.mod h1:Z/NWtiqwBrwUt4/2loMmHL63EDLnYHmVbuBpDr2vQAg=
+github.com/onsi/gomega v1.24.1/go.mod h1:3AOiACssS3/MajrniINInwbfOOtfZvplPzuRSmvt1jM=
+github.com/onsi/gomega v1.26.0/go.mod h1:r+zV744Re+DiYCIPRlYOTxn0YkOLcAnW8k1xXdMPGhM=
+github.com/onsi/gomega v1.27.1/go.mod h1:aHX5xOykVYzWOV4WqQy0sy8BQptgukenXpCXfadcIAw=
+github.com/onsi/gomega v1.27.3/go.mod h1:5vG284IBtfDAmDyrK+eGyZmUgUlmi+Wngqo557cZ6Gw=
+github.com/onsi/gomega v1.27.4/go.mod h1:riYq/GJKh8hhoM01HN6Vmuy93AarCXCBGpvFDK3q3fQ=
+github.com/onsi/gomega v1.27.6 h1:ENqfyGeS5AX/rlXDd/ETokDz93u0YufY1Pgxuy/PvWE=
+github.com/onsi/gomega v1.27.6/go.mod h1:PIQNjfQwkP3aQAH7lf7j87O/5FiNr+ZR8+ipb+qQlhg=
+github.com/openzipkin/zipkin-go v0.1.1/go.mod h1:NtoC/o8u3JlF1lSlyPNswIbeQH9bJTmOf0Erfk+hxe8=
+github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2 h1:JhzVVoYvbOACxoUmOs6V/G4D5nPVUW73rKvXxP4XUJc=
+github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2/go.mod h1:iIss55rKnNBTvrwdmkUpLnDpZoAHvWaiq5+iMmen4AE=
+github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/prometheus/client_golang v0.8.0/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
+github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910/go.mod h1:MbSGuTsp3dbXC40dX6PRTWyKYBIrTGTE9sqQNg2J8bo=
+github.com/prometheus/common v0.0.0-20180801064454-c7de2306084e/go.mod h1:daVV7qP5qjZbuso7PdcryaAu0sAZbrN9i7WWcTMWvro=
+github.com/prometheus/procfs v0.0.0-20180725123919-05ee40e3a273/go.mod h1:c3At6R/oaqEKCNdg8wHV1ftS6bRYblBhIjjI8uT2IGk=
+github.com/quic-go/qpack v0.4.0/go.mod h1:UZVnYIfi5GRk+zI9UMaCPsmZ2xKJP7XBUvVyT1Knj9A=
+github.com/quic-go/qtls-go1-20 v0.3.1/go.mod h1:X9Nh97ZL80Z+bX/gUXMbipO6OxdiDi58b/fMC9mAL+k=
+github.com/quic-go/quic-go v0.37.4/go.mod h1:YsbH1r4mSHPJcLF4k4zruUkLBqctEMBDR6VPvcYjIsU=
+github.com/quic-go/quic-go v0.41.0 h1:aD8MmHfgqTURWNJy48IYFg2OnxwHT3JL7ahGs73lb4k=
+github.com/quic-go/quic-go v0.41.0/go.mod h1:qCkNjqczPEvgsOnxZ0eCD14lv+B2LHlFAB++CNOh9hA=
+github.com/refraction-networking/utls v1.5.4/go.mod h1:SPuDbBmgLGp8s+HLNc83FuavwZCFoMmExj+ltUHiHUw=
+github.com/refraction-networking/utls v1.6.2 h1:iTeeGY0o6nMNcGyirxkD5bFIsVctP5InGZ3E0HrzS7k=
+github.com/refraction-networking/utls v1.6.2/go.mod h1:yil9+7qSl+gBwJqztoQseO6Pr3h62pQoY1lXiNR/FPs=
+github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
+github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
+github.com/shurcooL/component v0.0.0-20170202220835-f88ec8f54cc4/go.mod h1:XhFIlyj5a1fBNx5aJTbKoIq0mNaPvOagO+HjB3EtxrY=
+github.com/shurcooL/events v0.0.0-20181021180414-410e4ca65f48/go.mod h1:5u70Mqkb5O5cxEA8nxTsgrgLehJeAw6Oc4Ab1c/P1HM=
+github.com/shurcooL/github_flavored_markdown v0.0.0-20181002035957-2122de532470/go.mod h1:2dOwnU2uBioM+SGy2aZoq1f/Sd1l9OkAeAUvjSyvgU0=
+github.com/shurcooL/go v0.0.0-20180423040247-9e1955d9fb6e/go.mod h1:TDJrrUr11Vxrven61rcy3hJMUqaf/CLWYhHNPmT14Lk=
+github.com/shurcooL/go-goon v0.0.0-20170922171312-37c2f522c041/go.mod h1:N5mDOmsrJOB+vfqUK+7DmDyjhSLIIBnXo9lvZJj3MWQ=
+github.com/shurcooL/gofontwoff v0.0.0-20180329035133-29b52fc0a18d/go.mod h1:05UtEgK5zq39gLST6uB0cf3NEHjETfB4Fgr3Gx5R9Vw=
+github.com/shurcooL/gopherjslib v0.0.0-20160914041154-feb6d3990c2c/go.mod h1:8d3azKNyqcHP1GaQE/c6dDgjkgSx2BZ4IoEi4F1reUI=
+github.com/shurcooL/highlight_diff v0.0.0-20170515013008-09bb4053de1b/go.mod h1:ZpfEhSmds4ytuByIcDnOLkTHGUI6KNqRNPDLHDk+mUU=
+github.com/shurcooL/highlight_go v0.0.0-20181028180052-98c3abbbae20/go.mod h1:UDKB5a1T23gOMUJrI+uSuH0VRDStOiUVSjBTRDVBVag=
+github.com/shurcooL/home v0.0.0-20181020052607-80b7ffcb30f9/go.mod h1:+rgNQw2P9ARFAs37qieuu7ohDNQ3gds9msbT2yn85sg=
+github.com/shurcooL/htmlg v0.0.0-20170918183704-d01228ac9e50/go.mod h1:zPn1wHpTIePGnXSHpsVPWEktKXHr6+SS6x/IKRb7cpw=
+github.com/shurcooL/httperror v0.0.0-20170206035902-86b7830d14cc/go.mod h1:aYMfkZ6DWSJPJ6c4Wwz3QtW22G7mf/PEgaB9k/ik5+Y=
+github.com/shurcooL/httpfs v0.0.0-20171119174359-809beceb2371/go.mod h1:ZY1cvUeJuFPAdZ/B6v7RHavJWZn2YPVFQ1OSXhCGOkg=
+github.com/shurcooL/httpgzip v0.0.0-20180522190206-b1c53ac65af9/go.mod h1:919LwcH0M7/W4fcZ0/jy0qGght1GIhqyS/EgWGH2j5Q=
+github.com/shurcooL/issues v0.0.0-20181008053335-6292fdc1e191/go.mod h1:e2qWDig5bLteJ4fwvDAc2NHzqFEthkqn7aOZAOpj+PQ=
+github.com/shurcooL/issuesapp v0.0.0-20180602232740-048589ce2241/go.mod h1:NPpHK2TI7iSaM0buivtFUc9offApnI0Alt/K8hcHy0I=
+github.com/shurcooL/notifications v0.0.0-20181007000457-627ab5aea122/go.mod h1:b5uSkrEVM1jQUspwbixRBhaIjIzL2xazXp6kntxYle0=
+github.com/shurcooL/octicon v0.0.0-20181028054416-fa4f57f9efb2/go.mod h1:eWdoE5JD4R5UVWDucdOPg1g2fqQRq78IQa9zlOV1vpQ=
+github.com/shurcooL/reactions v0.0.0-20181006231557-f2e0b4ca5b82/go.mod h1:TCR1lToEk4d2s07G3XGfz2QrgHXg4RJBvjrOozvoWfk=
+github.com/shurcooL/sanitized_anchor_name v0.0.0-20170918181015-86672fcb3f95/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
+github.com/shurcooL/users v0.0.0-20180125191416-49c67e49c537/go.mod h1:QJTqeLYEDaXHZDBsXlPCDqdhQuJkuw4NOtaxYe3xii4=
+github.com/shurcooL/webdavfs v0.0.0-20170829043945-18c3829fa133/go.mod h1:hKmq5kWdCj2z2KEozexVbfEZIWiTjhE0+UjmZgPqehw=
+github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d/go.mod h1:UdhH50NIW0fCiwBSr0co2m7BnFLdv4fQTgdqdJTHFeE=
+github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e/go.mod h1:HuIsMU8RRBOtsCgI77wP899iHVBQpCmg4ErYMZB+2IA=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
+github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
+github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07/go.mod h1:kDXzergiv9cbyO7IOYJZWg1U88JhDg3PB6klq9Hg2pA=
+github.com/viant/assertly v0.4.8/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49uaYMPRU=
+github.com/viant/toolbox v0.24.0/go.mod h1:OxMCG57V0PXuIP2HNQrtJf2CjqdmbrOx5EkMILuUhzM=
+github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
+github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
+github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
+github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
+go.opencensus.io v0.18.0/go.mod h1:vKdFvxhtzZ9onBp9VKHK8z/sRpBMnKAsufL7wlDrCOA=
+go4.org v0.0.0-20180809161055-417644f6feb5/go.mod h1:MkTOUMDaeVYJUOUsaDXIhWPZYa1yOyC1qaOBpL57BhE=
+golang.org/x/build v0.0.0-20190111050920-041ab4dc3f9d/go.mod h1:OWs+y06UdEOHN4y+MfF/py+xQ/tYqIWW03b70/CG9Rw=
+golang.org/x/crypto v0.0.0-20181030102418-4d3f4d9ffa16/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
+golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
+golang.org/x/crypto v0.0.0-20190313024323-a1f597ede03a/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
+golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
+golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
+golang.org/x/crypto v0.1.0/go.mod h1:RecgLatLF4+eUMCP1PoPZQb+cVrJcOPbHkTkbkB9sbw=
+golang.org/x/crypto v0.3.1-0.20221117191849-2c476679df9a/go.mod h1:hebNnKkNXi2UzZN1eVRvBB7co0a+JxK6XbPiWVs/3J4=
+golang.org/x/crypto v0.4.0/go.mod h1:3quD/ATkf6oY+rnes5c3ExXTbLc8mueNue5/DoinL80=
+golang.org/x/crypto v0.12.0/go.mod h1:NF0Gs7EO5K4qLn+Ylc+fih8BSTeIjAP05siRnAh98yw=
+golang.org/x/crypto v0.19.0 h1:ENy+Az/9Y1vSrlrvBSyna3PITt4tiZLf7sgCjZBX7Wo=
+golang.org/x/crypto v0.19.0/go.mod h1:Iy9bg/ha4yyC70EfRS8jz+B6ybOBKMaSxLj6P6oBDfU=
+golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
+golang.org/x/exp v0.0.0-20221205204356-47842c84f3db/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
+golang.org/x/lint v0.0.0-20180702182130-06c8688daad7/go.mod h1:UVdnD1Gm6xHRNCYTkRU2/jEulfH38KcIWyp/GAMgvoE=
+golang.org/x/lint v0.0.0-20181026193005-c67002cb31c3/go.mod h1:UVdnD1Gm6xHRNCYTkRU2/jEulfH38KcIWyp/GAMgvoE=
+golang.org/x/lint v0.0.0-20190227174305-5b3e6a55c961/go.mod h1:wehouNa3lNwaWXcvxsM5YxQ5yQlVC4a0KAMCusXpPoU=
+golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+golang.org/x/mod v0.4.2/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3/go.mod h1:3p9vT2HGsQu2K1YbXdKPJLVgG5VJdoTa1poYQBtP1AY=
+golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
+golang.org/x/mod v0.6.0/go.mod h1:4mET923SAdbXp2ki8ey+zGs1SLqsuM2Y0uvdZR/fUNI=
+golang.org/x/mod v0.7.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+golang.org/x/mod v0.8.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+golang.org/x/mod v0.9.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+golang.org/x/mod v0.10.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+golang.org/x/net v0.0.0-20180724234803-3673e40ba225/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20181029044818-c44066c5c816/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20181106065722-10aee1819953/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20190108225652-1e06a53dbb7e/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20190213061140-3a22650c66bd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20190313220215-9f648a60d977/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+golang.org/x/net v0.0.0-20190620200207-3b0461eec859/go.mod h1:z5CRVTTTmAJ677TzLLGU+0bjPO0LkuOLi4/5GtJWs/s=
+golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7/go.mod h1:qpuaurCH72eLCgpAm/N6yyVIVM9cpaDIP3A8BGJEC5A=
+golang.org/x/net v0.0.0-20201021035429-f5854403a974/go.mod h1:sp8m0HH+o8qH0wwXwYZr8TS3Oi6o0r6Gce1SSxlDquU=
+golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
+golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4/go.mod h1:p54w0d4576C0XHj96bSt6lcn1PtDYWL6XObtHCRCNQM=
+golang.org/x/net v0.0.0-20210428140749-89ef3d95e781/go.mod h1:OJAsFXCWl8Ukc7SiCT/9KSuxbyM7479/AVlXFRxuMCk=
+golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
+golang.org/x/net v0.0.0-20220225172249-27dd8689420f/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
+golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
+golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
+golang.org/x/net v0.1.0/go.mod h1:Cx3nUiGt4eDBEyega/BKRp+/AlGL8hYe7U9odMt2Cco=
+golang.org/x/net v0.2.0/go.mod h1:KqCZLdyyvdV855qA2rE3GC2aiw5xGR5TEjj8smXukLY=
+golang.org/x/net v0.3.0/go.mod h1:MBQ8lrhLObU/6UmLb4fmbmk5OcyYmqtbGd/9yIeKjEE=
+golang.org/x/net v0.5.0/go.mod h1:DivGGAXEgPSlEBzxGzZI+ZLohi+xUj054jfeKui00ws=
+golang.org/x/net v0.6.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
+golang.org/x/net v0.7.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
+golang.org/x/net v0.8.0/go.mod h1:QVkue5JL9kW//ek3r6jTKnTFis1tRmNAW2P1shuFdJc=
+golang.org/x/net v0.10.0/go.mod h1:0qNGK6F8kojg2nk9dLZ2mShWaEBan6FAoqfSigmmuDg=
+golang.org/x/net v0.14.0/go.mod h1:PpSgVXXLK0OxS0F31C1/tv6XNguvCrnXIDrFMspZIUI=
+golang.org/x/net v0.21.0 h1:AQyQV4dYCvJ7vGmJyKki9+PBdyvhkSd8EIx/qb0AYv4=
+golang.org/x/net v0.21.0/go.mod h1:bIjVDfnllIU7BJ2DNgfnXvpSvtn8VRwhlsaeUTyUS44=
+golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
+golang.org/x/oauth2 v0.0.0-20181017192945-9dcd33a902f4/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
+golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
+golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
+golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852/go.mod h1:JLpeXjPJfIyPr5TlbXLkXWLhP8nz10XfvxElABhCtcw=
+golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20181108010431-42b317875d0f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.2.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20181029174526-d69651ed3497/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20190316082340-a2f829d7f35f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20190904154756-749cb33beabd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20191005200804-aed5e4c7ecf9/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20191120155948-bd437916bb0e/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20191204072324-ce4227a45e2e/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210112080510-489259a85091/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210330210617-4fbd30eecc44/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210510120138-977fb7262007/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20211019181941-9d821ace8654/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20220422013727-9388b58f7150/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.2.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.3.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.4.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.5.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.8.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.11.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.17.0 h1:25cE3gD+tdBA7lp7QfhuV+rJiE9YXTcS3VG1SqssI/Y=
+golang.org/x/sys v0.17.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
+golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
+golang.org/x/term v0.1.0/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
+golang.org/x/term v0.2.0/go.mod h1:TVmDHMZPmdnySmBfhjOoOdhjzdE1h4u1VwSiw2l1Nuc=
+golang.org/x/term v0.3.0/go.mod h1:q750SLmJuPmVoN1blW3UFBPREJfb1KmY3vwxfr+nFDA=
+golang.org/x/term v0.4.0/go.mod h1:9P2UbLfCdcvo3p/nzKvsmas4TnlujnuoV9hGgYzW1lQ=
+golang.org/x/term v0.5.0/go.mod h1:jMB1sMXY+tzblOD4FWmEbocvup2/aLOaQEp7JmGp78k=
+golang.org/x/term v0.6.0/go.mod h1:m6U89DPEgQRMq3DNkDClhWw02AUbt2daBVO4cn4Hv9U=
+golang.org/x/term v0.8.0/go.mod h1:xPskH00ivmX89bAKVGSKKtLOWNx2+17Eiy94tnKShWo=
+golang.org/x/term v0.11.0/go.mod h1:zC9APTIj3jG3FdV/Ons+XE1riIZXG4aZ4GTHiPZJPIU=
+golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+golang.org/x/text v0.3.6/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+golang.org/x/text v0.4.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+golang.org/x/text v0.5.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+golang.org/x/text v0.6.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+golang.org/x/text v0.7.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+golang.org/x/text v0.8.0/go.mod h1:e1OnstbJyHTd6l/uOt8jFFHp6TRDWZR/bV3emEE/zU8=
+golang.org/x/text v0.9.0/go.mod h1:e1OnstbJyHTd6l/uOt8jFFHp6TRDWZR/bV3emEE/zU8=
+golang.org/x/text v0.12.0/go.mod h1:TvPlkZtksWOMsz7fbANvkp4WM8x/WCo/om8BMLbz+aE=
+golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
+golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
+golang.org/x/time v0.0.0-20181108054448-85acf8d2951c/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
+golang.org/x/tools v0.0.0-20180828015842-6cd1fcedba52/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/tools v0.0.0-20181030000716-a0a13e073c7b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/tools v0.0.0-20190114222345-bf090417da8b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/tools v0.0.0-20190226205152-f727befe758c/go.mod h1:9Yl7xja0Znq3iFh3HoIrodX9oNMXvdceNzlUR8zjMvY=
+golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
+golang.org/x/tools v0.0.0-20201224043029-2b0845dc783e/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
+golang.org/x/tools v0.1.1/go.mod h1:o0xws9oXOQQZyjljx8fwUC0k7L1pTE6eaCbjGeHmOkk=
+golang.org/x/tools v0.1.10/go.mod h1:Uh6Zz+xoGYZom868N8YTex3t7RhtHDBrE8Gzo9bV56E=
+golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
+golang.org/x/tools v0.2.0/go.mod h1:y4OqIKeOV/fWJetJ8bXPU1sEVniLMIyDAZWeHdV+NTA=
+golang.org/x/tools v0.4.0/go.mod h1:UE5sM2OK9E/d67R0ANs2xJizIymRP5gJU295PvKXxjQ=
+golang.org/x/tools v0.6.0/go.mod h1:Xwgl3UAJ/d3gWutnCtw505GrjyAbvKui8lOU390QaIU=
+golang.org/x/tools v0.7.0/go.mod h1:4pg6aUX35JBAogB10C9AtvVL+qowtN4pT3CGSQex14s=
+golang.org/x/tools v0.9.1 h1:8WMNJAz3zrtPmnYC7ISf5dEn3MT0gY7jBJfw27yrrLo=
+golang.org/x/tools v0.9.1/go.mod h1:owI94Op576fPu3cIGQeHs3joujW/2Oc6MtlxbF5dfNc=
+golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+google.golang.org/api v0.0.0-20180910000450-7ca32eb868bf/go.mod h1:4mhQ8q/RsB7i+udVvVy5NUi08OU8ZlA0gRVgrF7VFY0=
+google.golang.org/api v0.0.0-20181030000543-1d582fd0359e/go.mod h1:4mhQ8q/RsB7i+udVvVy5NUi08OU8ZlA0gRVgrF7VFY0=
+google.golang.org/api v0.1.0/go.mod h1:UGEZY7KEX120AnNLIHFMKIo4obdJhkp2tPbaPlQx13Y=
+google.golang.org/appengine v1.1.0/go.mod h1:EbEs0AVv82hx2wNQdGPgUI5lhzA/G0D9YwlJXL52JkM=
+google.golang.org/appengine v1.2.0/go.mod h1:xpcJRLb0r/rnEns0DIKYYv+WjYCduHsrkT7/EB5XEv4=
+google.golang.org/appengine v1.3.0/go.mod h1:xpcJRLb0r/rnEns0DIKYYv+WjYCduHsrkT7/EB5XEv4=
+google.golang.org/appengine v1.4.0/go.mod h1:xpcJRLb0r/rnEns0DIKYYv+WjYCduHsrkT7/EB5XEv4=
+google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
+google.golang.org/genproto v0.0.0-20180831171423-11092d34479b/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
+google.golang.org/genproto v0.0.0-20181029155118-b69ba1387ce2/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
+google.golang.org/genproto v0.0.0-20181202183823-bd91e49a0898/go.mod h1:7Ep/1NZk928CDR8SjdVbjWNpdIf6nzjE3BTgJDr2Atg=
+google.golang.org/genproto v0.0.0-20190306203927-b5d61aea6440/go.mod h1:VzzqZJRnGkLBvHegQrXjBqPurQTc5/KpmUdxsrq26oE=
+google.golang.org/grpc v1.14.0/go.mod h1:yo6s7OP7yaDglbqo1J04qKzAhqBH6lvTonzMVmEdcZw=
+google.golang.org/grpc v1.16.0/go.mod h1:0JHn/cJsOMiMfNA9+DeHDlAU7KAAB5GDlYFpa9MZMio=
+google.golang.org/grpc v1.17.0/go.mod h1:6QZJwpn2B+Zp71q/5VxRsJ6NXXVCE5NRUHRo+f3cWCs=
+google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
+google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
+google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
+google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
+google.golang.org/protobuf v1.20.1-0.20200309200217-e05f789c0967/go.mod h1:A+miEFZTKqfCUM6K7xSMQL9OKL/b6hQv+e19PK+JZNE=
+google.golang.org/protobuf v1.21.0/go.mod h1:47Nbq4nVaFHyn7ilMalzfO3qCViNmqZ2kzikPIcrTAo=
+google.golang.org/protobuf v1.23.0/go.mod h1:EGpADcykh3NcUnDUJcl1+ZksZNG86OlYog2l/sGQquU=
+google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
+google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
+google.golang.org/protobuf v1.28.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/fsnotify.v1 v1.4.7/go.mod h1:Tz8NjZHkW78fSQdbUxIjBTcgA1z1m8ZHf0WmKUhAMys=
+gopkg.in/inf.v0 v0.9.1/go.mod h1:cWUDdTG/fYaXco+Dcufb5Vnc6Gp2YChqWtbxRZE0mXw=
+gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7/go.mod h1:dt/ZhP58zS4L8KSrWDmTeBkI65Dw0HsyUHuEVlX15mw=
+gopkg.in/yaml.v2 v2.2.1/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.3.0/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+grpc.go4.org v0.0.0-20170609214715-11d0a25b4919/go.mod h1:77eQGdRu53HpSqPFJFmuJdjuHRquDANNeA4x7B8WQ9o=
+h12.io/socks v1.0.3 h1:Ka3qaQewws4j4/eDQnOdpr4wXsC//dXtWvftlIcCQUo=
+h12.io/socks v1.0.3/go.mod h1:AIhxy1jOId/XCz9BO+EIgNL2rQiPTBNnOfnVnQ+3Eck=
+honnef.co/go/tools v0.0.0-20180728063816-88497007e858/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
+honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
+honnef.co/go/tools v0.0.0-20190106161140-3f1c8253044a/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
+sourcegraph.com/sourcegraph/go-diff v0.5.0/go.mod h1:kuch7UrkMzY0X+p9CRK03kfuPQ2zzQcaEFbx8wA8rck=
+sourcegraph.com/sqs/pbtypes v0.0.0-20180604144634-d3ebe8f20ae4/go.mod h1:ketZ/q3QxT9HOBeFhu6RdvsftgpsbFHBF5Cas6cDKZ0=
+
+```
+
+`/home/danny/Documents/TLS_SHIT/CycleTLS/cycletls/extensions.go`:
+
+```go
+package cycletls
+
+import (
+	"fmt"
+	utls "github.com/refraction-networking/utls"
+	"strconv"
+)
+
+type TLSExtensions struct {
+	SupportedSignatureAlgorithms *utls.SignatureAlgorithmsExtension
+	CertCompressionAlgo          *utls.UtlsCompressCertExtension
+	RecordSizeLimit              *utls.FakeRecordSizeLimitExtension
+	DelegatedCredentials         *utls.DelegatedCredentialsExtension
+	SupportedVersions            *utls.SupportedVersionsExtension
+	PSKKeyExchangeModes          *utls.PSKKeyExchangeModesExtension
+	SignatureAlgorithmsCert      *utls.SignatureAlgorithmsCertExtension
+	KeyShareCurves               *utls.KeyShareExtension
+	UseGREASE                    bool
+}
+
+type Extensions struct {
+	//PKCS1WithSHA256 SignatureScheme = 0x0401
+	//PKCS1WithSHA384 SignatureScheme = 0x0501
+	//PKCS1WithSHA512 SignatureScheme = 0x0601
+	//PSSWithSHA256 SignatureScheme = 0x0804
+	//PSSWithSHA384 SignatureScheme = 0x0805
+	//PSSWithSHA512 SignatureScheme = 0x0806
+	//ECDSAWithP256AndSHA256 SignatureScheme = 0x0403
+	//ECDSAWithP384AndSHA384 SignatureScheme = 0x0503
+	//ECDSAWithP521AndSHA512 SignatureScheme = 0x0603
+	//Ed25519 SignatureScheme = 0x0807
+	//PKCS1WithSHA1 SignatureScheme = 0x0201
+	//ECDSAWithSHA1 SignatureScheme = 0x0203
+	SupportedSignatureAlgorithms []string `json:"SupportedSignatureAlgorithms"`
+	//CertCompressionZlib   CertCompressionAlgo = 0x0001
+	//CertCompressionBrotli CertCompressionAlgo = 0x0002
+	//CertCompressionZstd   CertCompressionAlgo = 0x0003
+	CertCompressionAlgo []string `json:"CertCompressionAlgo"`
+	// Limit: 0x4001
+	RecordSizeLimit int `json:"RecordSizeLimit"`
+	//PKCS1WithSHA256 SignatureScheme = 0x0401
+	//PKCS1WithSHA384 SignatureScheme = 0x0501
+	//PKCS1WithSHA512 SignatureScheme = 0x0601
+	//PSSWithSHA256 SignatureScheme = 0x0804
+	//PSSWithSHA384 SignatureScheme = 0x0805
+	//PSSWithSHA512 SignatureScheme = 0x0806
+	//ECDSAWithP256AndSHA256 SignatureScheme = 0x0403
+	//ECDSAWithP384AndSHA384 SignatureScheme = 0x0503
+	//ECDSAWithP521AndSHA512 SignatureScheme = 0x0603
+	//Ed25519 SignatureScheme = 0x0807
+	//PKCS1WithSHA1 SignatureScheme = 0x0201
+	//ECDSAWithSHA1 SignatureScheme = 0x0203
+	DelegatedCredentials []string `json:"DelegatedCredentials"`
+	//GREASE_PLACEHOLDER = 0x0a0a
+	//VersionTLS10 = 0x0301
+	//VersionTLS11 = 0x0302
+	//VersionTLS12 = 0x0303
+	//VersionTLS13 = 0x0304
+	//VersionSSL30 = 0x0300
+	SupportedVersions []string `json:"SupportedVersions"`
+	//PskModePlain uint8 = pskModePlain
+	//PskModeDHE   uint8 = pskModeDHE
+	PSKKeyExchangeModes []string `json:"PSKKeyExchangeModes"`
+	//PKCS1WithSHA256 SignatureScheme = 0x0401
+	//PKCS1WithSHA384 SignatureScheme = 0x0501
+	//PKCS1WithSHA512 SignatureScheme = 0x0601
+	//PSSWithSHA256 SignatureScheme = 0x0804
+	//PSSWithSHA384 SignatureScheme = 0x0805
+	//PSSWithSHA512 SignatureScheme = 0x0806
+	//ECDSAWithP256AndSHA256 SignatureScheme = 0x0403
+	//ECDSAWithP384AndSHA384 SignatureScheme = 0x0503
+	//ECDSAWithP521AndSHA512 SignatureScheme = 0x0603
+	//Ed25519 SignatureScheme = 0x0807
+	//PKCS1WithSHA1 SignatureScheme = 0x0201
+	//ECDSAWithSHA1 SignatureScheme = 0x0203
+	SignatureAlgorithmsCert []string `json:"SignatureAlgorithmsCert"`
+	//GREASE_PLACEHOLDER = 0x0a0a
+	//CurveP256 CurveID = 23
+	//CurveP384 CurveID = 24
+	//CurveP521 CurveID = 25
+	//X25519    CurveID = 29
+	KeyShareCurves []string `json:"KeyShareCurves"`
+	//default is false, default is used grease, if not used grease the UseGREASE param is true
+	UseGREASE bool `json:"UseGREASE"`
+}
+
+var supportedSignatureAlgorithmsExtensions = map[string]utls.SignatureScheme{
+	"PKCS1WithSHA256":                     utls.PKCS1WithSHA256,
+	"PKCS1WithSHA384":                     utls.PKCS1WithSHA384,
+	"PKCS1WithSHA512":                     utls.PKCS1WithSHA512,
+	"PSSWithSHA256":                       utls.PSSWithSHA256,
+	"PSSWithSHA384":                       utls.PSSWithSHA384,
+	"PSSWithSHA512":                       utls.PSSWithSHA512,
+	"ECDSAWithP256AndSHA256":              utls.ECDSAWithP256AndSHA256,
+	"ECDSAWithP384AndSHA384":              utls.ECDSAWithP384AndSHA384,
+	"ECDSAWithP521AndSHA512":              utls.ECDSAWithP521AndSHA512,
+	"Ed25519":                             utls.Ed25519,
+	"PKCS1WithSHA1":                       utls.PKCS1WithSHA1,
+	"ECDSAWithSHA1":                       utls.ECDSAWithSHA1,
+	"rsa_pkcs1_sha1":                      utls.SignatureScheme(0x0201),
+	"Reserved for backward compatibility": utls.SignatureScheme(0x0202),
+	"ecdsa_sha1":                          utls.SignatureScheme(0x0203),
+	"rsa_pkcs1_sha256":                    utls.SignatureScheme(0x0401),
+	"ecdsa_secp256r1_sha256":              utls.SignatureScheme(0x0403),
+	"rsa_pkcs1_sha256_legacy":             utls.SignatureScheme(0x0420),
+	"rsa_pkcs1_sha384":                    utls.SignatureScheme(0x0501),
+	"ecdsa_secp384r1_sha384":              utls.SignatureScheme(0x0503),
+	"rsa_pkcs1_sha384_legacy":             utls.SignatureScheme(0x0520),
+	"rsa_pkcs1_sha512":                    utls.SignatureScheme(0x0601),
+	"ecdsa_secp521r1_sha512":              utls.SignatureScheme(0x0603),
+	"rsa_pkcs1_sha512_legacy":             utls.SignatureScheme(0x0620),
+	"eccsi_sha256":                        utls.SignatureScheme(0x0704),
+	"iso_ibs1":                            utls.SignatureScheme(0x0705),
+	"iso_ibs2":                            utls.SignatureScheme(0x0706),
+	"iso_chinese_ibs":                     utls.SignatureScheme(0x0707),
+	"sm2sig_sm3":                          utls.SignatureScheme(0x0708),
+	"gostr34102012_256a":                  utls.SignatureScheme(0x0709),
+	"gostr34102012_256b":                  utls.SignatureScheme(0x070A),
+	"gostr34102012_256c":                  utls.SignatureScheme(0x070B),
+	"gostr34102012_256d":                  utls.SignatureScheme(0x070C),
+	"gostr34102012_512a":                  utls.SignatureScheme(0x070D),
+	"gostr34102012_512b":                  utls.SignatureScheme(0x070E),
+	"gostr34102012_512c":                  utls.SignatureScheme(0x070F),
+	"rsa_pss_rsae_sha256":                 utls.SignatureScheme(0x0804),
+	"rsa_pss_rsae_sha384":                 utls.SignatureScheme(0x0805),
+	"rsa_pss_rsae_sha512":                 utls.SignatureScheme(0x0806),
+	"ed25519":                             utls.SignatureScheme(0x0807),
+	"ed448":                               utls.SignatureScheme(0x0808),
+	"rsa_pss_pss_sha256":                  utls.SignatureScheme(0x0809),
+	"rsa_pss_pss_sha384":                  utls.SignatureScheme(0x080A),
+	"rsa_pss_pss_sha512":                  utls.SignatureScheme(0x080B),
+	"ecdsa_brainpoolP256r1tls13_sha256":   utls.SignatureScheme(0x081A),
+	"ecdsa_brainpoolP384r1tls13_sha384":   utls.SignatureScheme(0x081B),
+	"ecdsa_brainpoolP512r1tls13_sha512":   utls.SignatureScheme(0x081C),
+}
+
+var certCompressionAlgoExtensions = map[string]utls.CertCompressionAlgo{
+	"zlib":   utls.CertCompressionZlib,
+	"brotli": utls.CertCompressionBrotli,
+	"zstd":   utls.CertCompressionZstd,
+}
+
+var supportedVersionsExtensions = map[string]uint16{
+	"GREASE": utls.GREASE_PLACEHOLDER,
+	"1.3":    utls.VersionTLS13,
+	"1.2":    utls.VersionTLS12,
+	"1.1":    utls.VersionTLS11,
+	"1.0":    utls.VersionTLS10,
+}
+
+var pskKeyExchangeModesExtensions = map[string]uint8{
+	"PskModeDHE":   utls.PskModeDHE,
+	"PskModePlain": utls.PskModePlain,
+}
+
+var keyShareCurvesExtensions = map[string]utls.KeyShare{
+	"GREASE": utls.KeyShare{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+	"P256":   utls.KeyShare{Group: utls.CurveP256},
+	"P384":   utls.KeyShare{Group: utls.CurveP384},
+	"P521":   utls.KeyShare{Group: utls.CurveP521},
+	"X25519": utls.KeyShare{Group: utls.X25519},
+}
+
+func ToTLSExtensions(e *Extensions) (extensions *TLSExtensions) {
+	extensions = &TLSExtensions{}
+	if e == nil {
+		return extensions
+	}
+	if e.SupportedSignatureAlgorithms != nil {
+		extensions.SupportedSignatureAlgorithms = &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{}}
+		for _, s := range e.SupportedSignatureAlgorithms {
+			var signature_algorithms utls.SignatureScheme
+			if val, ok := supportedSignatureAlgorithmsExtensions[s]; ok {
+				signature_algorithms = val
+			} else {
+				hexInt, _ := strconv.ParseInt(s, 0, 0)
+				signature_algorithms = utls.SignatureScheme(hexInt)
+			}
+			extensions.SupportedSignatureAlgorithms.SupportedSignatureAlgorithms = append(extensions.SupportedSignatureAlgorithms.SupportedSignatureAlgorithms, signature_algorithms)
+		}
+	}
+	if e.CertCompressionAlgo != nil {
+		extensions.CertCompressionAlgo = &utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{}}
+		for _, s := range e.CertCompressionAlgo {
+			extensions.CertCompressionAlgo.Algorithms = append(extensions.CertCompressionAlgo.Algorithms, certCompressionAlgoExtensions[s])
+		}
+	}
+	if e.RecordSizeLimit != 0 {
+		hexStr := fmt.Sprintf("0x%v", e.RecordSizeLimit)
+		hexInt, _ := strconv.ParseInt(hexStr, 0, 0)
+		extensions.RecordSizeLimit = &utls.FakeRecordSizeLimitExtension{uint16(hexInt)}
+	}
+	if e.DelegatedCredentials != nil {
+		extensions.DelegatedCredentials = &utls.DelegatedCredentialsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{}}
+		for _, s := range e.DelegatedCredentials {
+			var signature_algorithms utls.SignatureScheme
+			if val, ok := supportedSignatureAlgorithmsExtensions[s]; ok {
+				signature_algorithms = val
+			} else {
+				hexStr := fmt.Sprintf("0x%v", e.RecordSizeLimit)
+				hexInt, _ := strconv.ParseInt(hexStr, 0, 0)
+				signature_algorithms = utls.SignatureScheme(hexInt)
+			}
+			extensions.DelegatedCredentials.SupportedSignatureAlgorithms = append(extensions.DelegatedCredentials.SupportedSignatureAlgorithms, signature_algorithms)
+		}
+	}
+	if e.SupportedVersions != nil {
+		extensions.SupportedVersions = &utls.SupportedVersionsExtension{Versions: []uint16{}}
+		for _, s := range e.SupportedVersions {
+			extensions.SupportedVersions.Versions = append(extensions.SupportedVersions.Versions, supportedVersionsExtensions[s])
+		}
+	}
+	if e.PSKKeyExchangeModes != nil {
+		extensions.PSKKeyExchangeModes = &utls.PSKKeyExchangeModesExtension{Modes: []uint8{}}
+		for _, s := range e.PSKKeyExchangeModes {
+			extensions.PSKKeyExchangeModes.Modes = append(extensions.PSKKeyExchangeModes.Modes, pskKeyExchangeModesExtensions[s])
+		}
+	}
+	if e.SignatureAlgorithmsCert != nil {
+		extensions.SignatureAlgorithmsCert = &utls.SignatureAlgorithmsCertExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{}}
+		for _, s := range e.SignatureAlgorithmsCert {
+			var signature_algorithms_cert utls.SignatureScheme
+			if val, ok := supportedSignatureAlgorithmsExtensions[s]; ok {
+				signature_algorithms_cert = val
+			} else {
+				hexStr := fmt.Sprintf("0x%v", e.RecordSizeLimit)
+				hexInt, _ := strconv.ParseInt(hexStr, 0, 0)
+				signature_algorithms_cert = utls.SignatureScheme(hexInt)
+			}
+			extensions.SignatureAlgorithmsCert.SupportedSignatureAlgorithms = append(extensions.SignatureAlgorithmsCert.SupportedSignatureAlgorithms, signature_algorithms_cert)
+		}
+	}
+	if e.KeyShareCurves != nil {
+		extensions.KeyShareCurves = &utls.KeyShareExtension{KeyShares: []utls.KeyShare{}}
+		for _, s := range e.KeyShareCurves {
+			extensions.KeyShareCurves.KeyShares = append(extensions.KeyShareCurves.KeyShares, keyShareCurvesExtensions[s])
+		}
+	}
+	if e.UseGREASE != false {
+		extensions.UseGREASE = e.UseGREASE
+	}
+	return extensions
+}
+
+```

@@ -1,0 +1,47 @@
+go test --race -v -tags=integration ./tests/integration/ForceHTTP1_test.go 
+# command-line-arguments_test [command-line-arguments.test]
+tests/integration/ForceHTTP1_test.go:29:18: undefined: FullResp
+tests/integration/ForceHTTP1_test.go:56:18: undefined: FullResp
+FAIL    command-line-arguments [build failed]
+FAIL
+
+
+go test --race -v -tags=integration ./tests/integration/http3_test.go 
+=== RUN   TestHTTP3Request
+2025/08/03 20:15:26 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 2048 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+--- PASS: TestHTTP3Request (0.08s)
+=== RUN   TestHTTP3Transport
+--- PASS: TestHTTP3Transport (0.00s)
+PASS
+ok      command-line-arguments  1.11
+fix this error, research quic and https://github.com/gospider007/http3 fo tifx it
+
+go test --race -v -tags=integration ./tests/integration/latest_fingerprint_test.go 
+=== RUN   TestLatestVersions
+    latest_fingerprint_test.go:72: Expected: 1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s Got: 1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|a,m,p,s for AkamaiFingerprint Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0
+--- FAIL: TestLatestVersions (0.35s)
+FAIL
+FAIL    command-line-arguments  0.377s
+FAIL
+
+"this is failing because masp isn't being set properly, this should be set in the http2 params fia fhttp research this to figure it out
+
+
+
+go test --race -v -tags=integration ./tests/integration/sse_test.go 
+=== RUN   TestSSEClient
+--- PASS: TestSSEClient (0.30s)
+=== RUN   TestSSE
+This test just times out forever and never finishes
+
+
+go test --race -v -tags=integration ./tests/integration/websocket_test.go 
+=== RUN   TestWebSocketClient
+--- PASS: TestWebSocketClient (0.10s)
+=== RUN   TestWebSocketResponse
+    websocket_test.go:134: Cannot connect to echo.websocket.org: websocket: bad handshake
+--- SKIP: TestWebSocketResponse (0.03s)
+PASS
+ok      command-line-arguments  1.159s
+
+this test should work https://github.com/gospider007/requests/blob/master/test/protocol/websocket_test.go research this requests library to find a better implementation

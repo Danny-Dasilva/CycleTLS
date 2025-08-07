@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,9 +13,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"crypto/tls"
-	fhttp "github.com/Danny-Dasilva/fhttp"
+
 	"github.com/andybalholm/brotli"
+	fhttp "github.com/Danny-Dasilva/fhttp"
 	utls "github.com/refraction-networking/utls"
 	uquic "github.com/refraction-networking/uquic"
 )
@@ -173,8 +174,6 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 			AlpnProtocols: []string{"http/1.1"},
 		}
 	}
-
-
 
 	// set extension 43
 	ver, err := strconv.ParseUint(version, 10, 16)
@@ -702,6 +701,10 @@ func genMap() (extMap map[string]utls.TLSExtension) {
 			SupportedProtocols: []string{
 				"h2",
 			},
+		},
+		"17613": &utls.GenericExtension{
+			Id:   17613,
+			Data: []byte{0x00, 0x03, 0x02, 0x68, 0x32},
 		},
 		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, //FIXME
 		"65281": &utls.RenegotiationInfoExtension{
