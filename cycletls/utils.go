@@ -240,31 +240,48 @@ type JA4Components struct {
 // JA4 format: <TLS version><cipher hash>_<extensions hash>_<headers hash>_<UA hash>
 // Example: t13d_cd89_1952_bb99
 func ParseJA4String(ja4 string) (*JA4Components, error) {
-	if len(ja4) < 19 { // minimum length for JA4
+	if len(ja4) < 10 { // minimum reasonable length for JA4
 		return nil, errors.New("invalid JA4 string: too short")
 	}
 
 	// Split by underscores
 	parts := strings.Split(ja4, "_")
-	if len(parts) != 4 {
-		return nil, errors.New("invalid JA4 string: incorrect format")
+	if len(parts) != 3 {
+		return nil, errors.New("invalid JA4 string: incorrect format - expected 3 parts separated by underscores")
 	}
 
-	// Extract TLS version and cipher hash from first part
-	// Expected format: t13d (3 chars TLS version + 1 char cipher hash = 4 chars)
-	if len(parts[0]) != 4 { // t13 + 1 char exactly
-		return nil, errors.New("invalid JA4 string: invalid TLS version/cipher part")
+	// Extract TLS version from first part (JA4_a)
+	// JA4_a format: t<version><sni><cipher_count><ext_count><alpn>
+	// Example: t13d1516h2 (protocol=t, version=13, sni=d, ciphers=15, extensions=16, alpn=h2)
+	ja4a := parts[0]
+	if len(ja4a) < 4 {
+		return nil, errors.New("invalid JA4 string: JA4_a too short")
+	}
+	
+	// Extract TLS version (e.g., "t13" from "t13d1516h2")
+	if ja4a[0] != 't' {
+		return nil, errors.New("invalid JA4 string: must start with 't' for TLS")
+	}
+	
+	var tlsVersion string
+	if len(ja4a) >= 3 && (ja4a[1:3] == "10" || ja4a[1:3] == "11" || ja4a[1:3] == "12" || ja4a[1:3] == "13") {
+		tlsVersion = ja4a[:3] // t10, t11, t12, t13
+	} else {
+		return nil, errors.New("invalid JA4 string: invalid TLS version")
 	}
 
-	tlsVersion := parts[0][:3] // t10, t11, t12, t13
-	cipherHash := parts[0][3:] // remainder is cipher hash (1 char)
+	// JA4_b is the cipher suites hash
+	cipherHash := parts[1]
+	
+	// JA4_c is the extensions hash  
+	extensionsHash := parts[2]
 
 	return &JA4Components{
 		TLSVersion:       tlsVersion,
 		CipherHash:       cipherHash,
-		ExtensionsHash:   parts[1],
-		HeadersHash:      parts[2], 
-		UserAgentHash:    parts[3],
+		ExtensionsHash:   extensionsHash,
+		HeadersHash:      "", // Not used in 3-part format
+		UserAgentHash:    "", // Not used in 3-part format
 	}, nil
 }
 

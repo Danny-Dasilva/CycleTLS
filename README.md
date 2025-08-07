@@ -111,6 +111,137 @@ const initCycleTLS = require('cycletls');
 
 ```
 
+## JA4 TLS Fingerprinting
+
+JA4 is an enhanced TLS fingerprinting method that provides more detailed client identification:
+
+### JavaScript Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Firefox JA4 fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d'
+  });
+
+  const data = await response.json();
+  console.log('JA4:', data.tls.ja4);
+  console.log('JA4_r:', data.tls.ja4_r);
+  console.log('TLS Version:', data.tls.tls_version_negotiated);
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang JA4 Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // Chrome JA4 fingerprint
+    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+        Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+        UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println("Response with JA4:", response.Status)
+}
+```
+
+## HTTP/2 Fingerprinting
+
+HTTP/2 fingerprinting allows you to mimic specific browser HTTP/2 implementations:
+
+### JavaScript Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Firefox HTTP/2 fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s'
+  });
+
+  const data = await response.json();
+  console.log('HTTP/2 Fingerprint:', data.http2.akamai_fingerprint);
+  console.log('Settings:', data.http2.sent_frames[0].settings);
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang HTTP/2 Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // Firefox HTTP/2 fingerprint
+    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+        HTTP2Fingerprint: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+        UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println("Response with HTTP/2 fingerprint:", response.Status)
+}
+```
+
+### Common Browser HTTP/2 Fingerprints
+
+| Browser | HTTP/2 Fingerprint | Description |
+|---------|-------------------|-------------|
+| Firefox | `1:65536;2:0;4:131072;5:16384\|12517377\|0\|m,p,a,s` | Smaller window size, MPAS priority |
+| Chrome | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` | Larger window size, MASP priority |
+
+### Combined Fingerprinting Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Complete Firefox browser fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+  });
+
+  const data = await response.json();
+  console.log('Complete fingerprint applied successfully');
+  console.log('JA4:', data.tls.ja4);
+  console.log('HTTP/2:', data.http2.akamai_fingerprint);
+  
+  cycleTLS.exit();
+})();
+```
+
 ## Streaming Responses (Axios-style)
 
 CycleTLS supports axios-compatible streaming responses for real-time data processing:
@@ -1326,6 +1457,32 @@ func main() {
 
 CycleTLS provides a WebSocket client that supports custom TLS fingerprinting.
 
+### JavaScript WebSocket Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // WebSocket connection with TLS fingerprinting
+  const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Sec-WebSocket-Protocol': 'echo-protocol'
+    }
+  });
+
+  // Check connection status
+  if (wsResponse.status === 101) {
+    console.log('WebSocket upgrade successful');
+    console.log('Response headers:', wsResponse.headers);
+  }
+
+  cycleTLS.exit();
+})();
+```
+
 ### Golang WebSocket Example
 
 ```go
@@ -1424,9 +1581,11 @@ func main() {
 		log.Fatal("Receive failed: ", err)
 	}
 
-	log.Printf("Received: %s (type: %d)\n", string(message), messageType)
+	log.Printf("Received: %s (type: %d)
+", string(message), messageType)
 }
 ```
+
 
 </details>
 
@@ -1435,6 +1594,86 @@ func main() {
 <details>
 
 CycleTLS supports Server-Sent Events for real-time data streaming from servers.
+
+### JavaScript SSE Example
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // SSE connection with TLS fingerprinting
+  const sseResponse = await cycleTLS.sse('https://example.com/events', {
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  // Parse real-time events
+  const eventData = await sseResponse.text();
+  console.log('SSE events:', eventData);
+
+  cycleTLS.exit();
+})();
+```
+
+### JavaScript SSE with Streaming 
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // SSE with streaming for real-time processing
+  const response = await cycleTLS.get('https://example.com/events', {
+    responseType: 'stream',
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  // Process SSE stream in real-time
+  const stream = response.data;
+  let buffer = '';
+
+  stream.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('
+');
+    
+    // Process complete lines, keep incomplete line in buffer
+    buffer = lines.pop() || '';
+    
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        const eventData = line.substring(5).trim();
+        console.log('Event data:', eventData);
+      } else if (line.startsWith('event:')) {
+        const eventType = line.substring(6).trim();
+        console.log('Event type:', eventType);
+      }
+    }
+  });
+
+  stream.on('end', () => {
+    console.log('SSE stream ended');
+    cycleTLS.exit();
+  });
+
+  stream.on('error', (error) => {
+    console.error('SSE stream error:', error);
+    cycleTLS.exit();
+  });
+})();
+```
 
 ### Golang SSE Client Example
 

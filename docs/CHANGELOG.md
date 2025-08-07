@@ -36,6 +36,64 @@ New features include HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, 
 - **HTTP/2 Fingerprinting** - Enhanced `HTTP2Fingerprint` support
 - **Direct Transports** - `NewHTTP3Transport()` for advanced usage
 
+
+
+#### HTTP/2 Fingerprinting
+
+HTTP/2 fingerprinting allows you to mimic specific browser HTTP/2 implementations:
+
+```javascript
+// JavaScript - Firefox HTTP/2 fingerprint
+const response = await cycleTLS('https://tls.peet.ws/api/all', {
+  http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+});
+
+const data = await response.json();
+console.log('HTTP/2:', data.http2.akamai_fingerprint);
+```
+
+```go
+// Golang - Chrome HTTP/2 fingerprint
+response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+    HTTP2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+}, "GET")
+```
+
+| Browser | HTTP/2 Settings | Window | Priority |
+|---------|-----------------|--------|----------|
+| Firefox | `1:65536;2:0;4:131072;5:16384` | 12517377 | m,p,a,s |
+| Chrome | `1:65536;2:0;4:6291456;6:262144` | 15663105 | m,a,s,p |
+
+#### JA4 Fingerprinting (Enhanced)
+
+JA4 is the successor to JA3, providing more detailed TLS fingerprinting:
+
+```javascript
+// JavaScript - Firefox JA4
+const response = await cycleTLS('https://tls.peet.ws/api/all', {
+  ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+});
+
+const data = await response.json();
+console.log('JA4:', data.tls.ja4);
+```
+
+```go
+// Golang - Chrome JA4
+response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+    Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+    UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+}, "GET")
+```
+
+| Browser | JA4 Fingerprint |
+|---------|-----------------|
+| Firefox 141 | `t13d1717h2_5b57614c22b0_f2748d6cd58d` |
+| Chrome 138 | `t13d1517h2_8daaf6152771_7e51fdad25f2` |
+
 ### ⚠️ BREAKING CHANGES ⚠️
 
 ```

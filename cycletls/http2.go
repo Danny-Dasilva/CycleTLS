@@ -26,23 +26,29 @@ func NewHTTP2Fingerprint(fingerprint string) (*HTTP2Fingerprint, error) {
 
 	// Parse settings
 	settingsStr := parts[0]
-	settingsParts := strings.Split(settingsStr, ",")
+	
+	// Determine the separator used in the settings string
+	var settingsParts []string
+	if strings.Contains(settingsStr, ";") && !strings.Contains(settingsStr, ",") {
+		// If settings use semicolons exclusively, split by semicolon
+		settingsParts = strings.Split(settingsStr, ";")
+	} else {
+		// Default to comma separator
+		settingsParts = strings.Split(settingsStr, ",")
+	}
+	
 	settings := make([]http2.Setting, 0, len(settingsParts))
 
 	for _, setting := range settingsParts {
 		var id, val uint32
-		if strings.Contains(setting, ";") {
-			// Handle alternate separator format
-			_, err := fmt.Sscanf(setting, "%d;%d", &id, &val)
-			if err != nil {
-				return nil, fmt.Errorf("invalid setting format: %s", setting)
-			}
-		} else {
-			// Handle standard format
+		if strings.Contains(setting, ":") {
+			// Handle standard format (ID:VALUE)
 			_, err := fmt.Sscanf(setting, "%d:%d", &id, &val)
 			if err != nil {
 				return nil, fmt.Errorf("invalid setting format: %s", setting)
 			}
+		} else {
+			return nil, fmt.Errorf("invalid setting format: %s - expected ID:VALUE", setting)
 		}
 		settings = append(settings, http2.Setting{ID: http2.SettingID(id), Val: val})
 	}
