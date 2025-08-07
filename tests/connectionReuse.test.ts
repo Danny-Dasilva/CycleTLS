@@ -48,7 +48,6 @@ describe("Connection Reuse Tests", () => {
     });
     
     server.listen(PORT, () => {
-      console.log(`Test HTTPS server running on port ${PORT}`);
       done();
     });
   });
@@ -57,7 +56,6 @@ describe("Connection Reuse Tests", () => {
   afterAll((done) => {
     if (server) {
       server.close(() => {
-        console.log('Test HTTPS server closed');
         done();
       });
     } else {
