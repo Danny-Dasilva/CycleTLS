@@ -1,4 +1,5 @@
 const initCycleTLS = require("../dist/index.js");
+const { Blob } = require('buffer');
 
 describe("Response Methods Tests", () => {
   let cycleTLS;
