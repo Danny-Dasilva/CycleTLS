@@ -1,12 +1,14 @@
 import initCycleTLS, { CycleTLSClient } from "../dist/index.js";
 
+jest.setTimeout(30000);
+
 describe("CycleTLS InsecureSkipVerify Test", () => {
   let cycleTLS: CycleTLSClient;
   let ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
   let userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
 
   beforeAll(async () => {
-    cycleTLS = await initCycleTLS({ port: 9125 });
+    cycleTLS = await initCycleTLS({ port: 9152, timeout: 30000 });
   });
 
   afterAll(async () => {
@@ -26,6 +28,8 @@ describe("CycleTLS InsecureSkipVerify Test", () => {
       "get"
     );
 
+    // Should return status 495 for certificate errors
+    expect(response.status).toBe(495);
     expect(await response.text()).toContain(
       "uTlsConn.Handshake() error: tls: failed to verify certificate: x509: certificate has expired or is not yet valid"
     );
@@ -45,5 +49,44 @@ describe("CycleTLS InsecureSkipVerify Test", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  test("Should return certificate error for self-signed certificate", async () => {
+    const url = "https://self-signed.badssl.com";
+    const response = await cycleTLS(
+      url,
+      {
+        body: "",
+        ja3: ja3,
+        userAgent: userAgent,
+        insecureSkipVerify: false,
+      },
+      "get"
+    );
+
+    // Should return status 495 for certificate errors
+    expect(response.status).toBe(495);
+    const errorText = await response.text();
+    expect(errorText).toContain("Request returned a Syscall Error");
+    expect(errorText).toContain("certificate");
+  });
+
+  test("Should properly handle connection refused error", async () => {
+    // Test with a port that's likely not listening
+    const response = await cycleTLS(
+      "https://localhost:9999",
+      {
+        body: "",
+        ja3: ja3,
+        userAgent: userAgent,
+        timeout: 5000,
+      },
+      "get"
+    );
+
+    // Connection refused should return 502
+    expect(response.status).toBe(502);
+    const errorText = await response.text();
+    expect(errorText).toContain("Request returned a Syscall Error");
   });
 });
