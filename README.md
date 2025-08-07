@@ -46,6 +46,7 @@ Table of contents
 * [Installation](#installation)
 * [Usage](#usage)
 	* [QuickStart JS](#example-cycletls-request-for-typescript-and-javascript)
+	* [Streaming Responses](#streaming-responses-axios-style)
 	* [Quickstart Golang](#example-cycletls-request-for-golang)
 	* [Initializing CycleTLS](#creating-an-instance)
 	* [API/Methods](#cycletls-alias-methods)
@@ -84,7 +85,6 @@ $ go get github.com/Danny-Dasilva/CycleTLS/cycletls
 You can run this test in `tests/simple.test.ts`
 
 ```js
-
 const initCycleTLS = require('cycletls');
 // Typescript: import initCycleTLS from 'cycletls';
 
@@ -100,13 +100,114 @@ const initCycleTLS = require('cycletls');
     proxy: 'http://username:password@hostname.com:443', 
   }, 'get');
 
-  console.log(response);
+  // Parse response as JSON
+  const data = await response.json();
+  console.log(data);
 
   // Cleanly exit CycleTLS
   cycleTLS.exit();
 
 })();
 
+```
+
+## Streaming Responses (Axios-style)
+
+CycleTLS supports axios-compatible streaming responses for real-time data processing:
+
+### Basic Streaming Example
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Get streaming response
+  const response = await cycleTLS.get('https://httpbin.org/stream/3', {
+    headers: { Authorization: `Bearer your_token_here` },
+    responseType: 'stream'
+  });
+
+  const stream = response.data;
+
+  stream.on('data', data => {
+    console.log('Received chunk:', data.toString());
+  });
+
+  stream.on('end', () => {
+    console.log("stream done");
+    cycleTLS.exit();
+  });
+
+  stream.on('error', (error) => {
+    console.error('Stream error:', error);
+    cycleTLS.exit();
+  });
+})();
+```
+
+### Advanced Streaming with Error Handling
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  try {
+    const response = await cycleTLS.get('https://httpbin.org/drip?numbytes=100&duration=2', {
+      responseType: 'stream',
+      ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+      userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    });
+
+    console.log('Status:', response.status);
+    console.log('Headers:', response.headers);
+
+    const chunks = [];
+    
+    response.data.on('data', (chunk) => {
+      chunks.push(chunk);
+      console.log(`Received ${chunk.length} bytes`);
+    });
+
+    response.data.on('end', () => {
+      console.log('Stream complete');
+      const fullData = Buffer.concat(chunks);
+      console.log('Total received:', fullData.length, 'bytes');
+      cycleTLS.exit();
+    });
+
+    response.data.on('error', (error) => {
+      console.error('Stream error:', error);
+      cycleTLS.exit();
+    });
+
+  } catch (error) {
+    console.error('Request failed:', error);
+    cycleTLS.exit();
+  }
+})();
+```
+
+### Non-Streaming Responses (Default Behavior)
+
+For non-streaming responses, CycleTLS works exactly as before:
+
+```js
+// These return buffered responses (existing behavior)
+const jsonResponse = await cycleTLS.get('https://httpbin.org/json', {
+  responseType: 'json' // or omit for default JSON parsing
+});
+const jsonData = await jsonResponse.json();
+console.log(jsonData); // Parsed JSON object
+
+const textResponse = await cycleTLS.get('https://httpbin.org/html', {
+  responseType: 'text'
+});
+const textData = await textResponse.text();
+console.log(textData); // String content
 ```
 
 ## Example CycleTLS Request for Golang
@@ -173,6 +274,8 @@ const initCycleTLS = require('cycletls');
 
 // Async/Await method
 const cycleTLS = await initCycleTLS();
+// With optional configuration
+const cycleTLS = await initCycleTLS({ port: 9118, timeout: 30000 });
 // .then method
 initCycleTLS().then((cycleTLS) => {});
 
@@ -297,7 +400,12 @@ If you are using CycleTLS in JavaScript, it is necessary to exit out of the inst
 const initCycleTLS = require("cycletls");
 // Typescript: import initCycleTLS from 'cycletls';
 
-// Defining custom JA3 token and user agenton multiple requests,
+// Defining JA3 token and user agent
+const ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
+const userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
+
+// Defining multiple requests
+const requestDict = {
   "https://httpbin.org/user-agent": {
     ja3: ja3,
     userAgent: userAgent,
@@ -317,43 +425,33 @@ const initCycleTLS = require("cycletls");
   },
 };
 
-// Promises array of requests
-const promises = [];
-
 // Anonymous async function
 (async () => {
   // Initiate CycleTLS
   const cycleTLS = await initCycleTLS();
 
-  // Loop through requestDict (Object) defined above
-  for (const url in requestDict) {
-    // Fetch configs from requestDict (Object)
-    const params = requestDict[url];
-
-    // Send request (note: no waiting)
-    const response = cycleTLS(
+  // Create promises for all requests
+  const promises = Object.entries(requestDict).map(async ([url, params]) => {
+    const response = await cycleTLS(
       url, {
-        body: params.body ?? "", //?? is just setting defaults in this case
+        body: params.body ?? "",
         ja3: params.ja3 ?? ja3,
         userAgent: params.userAgent ?? userAgent,
         headers: params.headers,
         cookies: params.cookies,
       }, params.method ?? "GET");
 
-    // console.log the response object
-    response.then((out) => {
-      console.log(url, out);
-    });
-
-    // Push request to promise array
-    promises.push(response);
-  }
-
-  // Wait for all requests to execute successfully
-  Promise.all(promises).then(() => {
-    // Cleanly exit CycleTLS one all requests have been received
-    cycleTLS.exit();
+    // Parse response based on content type
+    const data = await response.json();
+    console.log(url, data);
+    return { url, data };
   });
+
+  // Wait for all requests to complete
+  await Promise.all(promises);
+  
+  // Cleanly exit CycleTLS
+  cycleTLS.exit();
 })();
 ```
 
@@ -498,7 +596,9 @@ const initCycleTLS = require("cycletls");
       cookie2: "value2",
     },
   });
-  console.log(response.body);
+  
+  const data = await response.json();
+  console.log(data);
   /* Expected
   {
     "cookies": {
@@ -560,7 +660,8 @@ const initCycleTLS = require("cycletls");
     cookies: complexCookies,
   });
 
-  console.log(response.body);
+  const data = await response.json();
+  console.log(data);
   /* Expected
   {
     "cookies": {
@@ -603,7 +704,7 @@ func main() {
       }
     */
     
-    //Altenatively if you want access to values within a map
+    // Alternatively if you want access to values within a map
     log.Println(resp.JSONBody())
     /* Expected
     map[cookies:map[cookie1:value1 cookie2:value2]]
@@ -656,8 +757,9 @@ const Cookie = tough.Cookie;
     },
   });
   
-  //verify cookies were set
-  console.log(secondResponse.body)
+  // Verify cookies were set
+  const data = await secondResponse.json();
+  console.log(data)
   /* Expected
   {
     "cookies": {
@@ -762,12 +864,11 @@ const FormData = require('form-data');
   
   const response = await cycleTLS('http://httpbin.org/post', {
       body: formData,
-      headers: {
-          'Content-Type': 'multipart/form-data',
-      },
+      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -788,15 +889,13 @@ const fs = require('fs');
   const fileStream = fs.createReadStream("../go.mod");
   formData.append('file', fileStream);
 
-  
   const response = await cycleTLS('http://httpbin.org/post', {
       body: formData,
-      headers: {
-          'Content-Type': 'multipart/form-data',
-      },
+      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -928,7 +1027,8 @@ const initCycleTLS = require("cycletls");
       },
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -1011,8 +1111,9 @@ const writeImage = (filename, data) => {
     userAgent:
       "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
   });
-  //Write Image
-  writeImage("test.jpeg", jpegImage.body);
+  // Get image data and write to file
+  const imageData = await jpegImage.text(); // Image data is base64 encoded
+  writeImage("test.jpeg", imageData);
 
   cycleTLS.exit();
 })();
@@ -1526,11 +1627,12 @@ const initCycleTLS = require('cycletls');
     ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
     userAgent:
       'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    forceHTTP1: false, //Set this field
+    forceHTTP1: true, // Set this field to force HTTP/1.1
   });
 
-  console.log(response);
-  //You can verify the HTTP_Version in the response
+  const data = await response.json();
+  console.log(data);
+  // You can verify the HTTP_Version in the response
   cycleTLS.exit();
 
 })();
