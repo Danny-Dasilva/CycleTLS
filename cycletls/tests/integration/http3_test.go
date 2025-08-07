@@ -5,6 +5,7 @@ package cycletls_test
 
 import (
 	"crypto/tls"
+	"os"
 	"testing"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -12,6 +13,12 @@ import (
 )
 
 func TestHTTP3Request(t *testing.T) {
+	// Skip HTTP/3 tests in CI environment due to network restrictions
+	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping HTTP/3 test in CI environment due to network restrictions")
+		return
+	}
+
 	// Create TLS config
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
