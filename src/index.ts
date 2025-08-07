@@ -8,6 +8,7 @@ import FormData from 'form-data';
 import { Readable, Writable } from 'stream';
 import { promisify } from 'util';
 import stream from 'stream';
+import { Blob } from 'buffer';
 const pipeline = promisify(stream.pipeline);
 
 export interface Cookie {

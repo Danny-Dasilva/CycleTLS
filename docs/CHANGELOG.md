@@ -19,20 +19,22 @@ New features include HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, 
 
 ### API Enhancements
 
-#### JavaScript/TypeScript API Changes
-- **Fetch-like Response Methods** - New response methods: `response.json()`, `response.text()`, `response.arrayBuffer()`, `response.blob()` for consistent data handling
-- **HTTP Method Shortcuts** - Added convenient methods: `cycleTLS.get()`, `cycleTLS.post()`, `cycleTLS.put()`, `cycleTLS.delete()`, `cycleTLS.head()`, `cycleTLS.options()`, `cycleTLS.patch()`
-- **WebSocket Support** - New `cycleTLS.ws()` and `cycleTLS.webSocket()` methods for WebSocket connections with event-based API
-- **Server-Sent Events** - New `cycleTLS.sse()` and `cycleTLS.eventSource()` methods for SSE connections with async iterator support
-- **Enhanced Initialization** - Optional configuration support: `initCycleTLS({ port: 9118, timeout: 30000 })`
-- **Streaming Response Support** - New `responseType: 'stream'` option for efficient handling of large responses
-- **Improved Form Data Handling** - Better multipart form data support with `formData.getHeaders()`
+#### New Protocols & Features
+- **WebSocket Support** - Native WebSocket client with TLS fingerprinting (`cycleTLS.ws()`, `cycletls.NewWebSocketClient()`)
+- **Server-Sent Events** - SSE client implementation (`cycleTLS.sse()`, `cycletls.NewSSEClient()`)
+- **HTTP/3 & QUIC** - Full HTTP/3 support with custom QUIC fingerprinting (`ForceHTTP3`, `QUICFingerprint`)
+- **JA4 Fingerprinting** - Enhanced TLS fingerprinting successor to JA3 (`JA4` field in options)
 
-#### Protocol-Specific Methods
-- **WebSocket Support** - `cycleTLS.ws()` / `cycleTLS.webSocket()` for WebSocket connections with event-based API
-- **Server-Sent Events** - `cycleTLS.sse()` / `cycleTLS.eventSource()` for SSE connections with async iterator support
-- **HTTP/3 Protocol** - `forceHTTP3` option to explicitly use HTTP/3 protocol
-- **Protocol Selection** - `protocol` parameter to specify connection type: "http1", "http2", "http3", "websocket", "sse"
+#### JavaScript/TypeScript Changes
+- **⚠️ Response Methods** - `response.body` removed, use `response.json()`, `response.text()`, `response.arrayBuffer()`, `response.blob()`
+- **Streaming Support** - `responseType: 'stream'` for real-time data handling
+- **Enhanced Init** - `initCycleTLS({ port, timeout })` configuration options
+
+#### Golang Enhancements (Backward Compatible)
+- **Enhanced Connection Reuse** - Improved `EnableConnectionReuse` with connection pooling
+- **Browser Configuration** - Unified `Browser` struct for all protocols
+- **HTTP/2 Fingerprinting** - Enhanced `HTTP2Fingerprint` support
+- **Direct Transports** - `NewHTTP3Transport()` for advanced usage
 
 ### ⚠️ BREAKING CHANGES ⚠️
 
@@ -83,110 +85,171 @@ Do NOT upgrade to v2.0.0 without reading the migration guide below.
 
 ---
 
-### 📝 JavaScript/TypeScript Examples
+### 🔄 Quick Migration Examples
 
-```
-📚 EXAMPLE LIBRARY - All New v2.0.0 API Patterns
-
-Use these examples as templates for updating your code!
-Each example shows the complete, working v2.0.0 syntax.
-```
-
-#### ✅ Basic Request with New Response API
+#### ⚠️ JavaScript/TypeScript: Response Handling (BREAKING)
 ```javascript
-const initCycleTLS = require('cycletls');
+// ❌ OLD (v1.x)
+const response = await cycleTLS(url, options);
+console.log(response.body); // ❌ REMOVED
 
-(async () => {
-  const cycleTLS = await initCycleTLS();
-  
-  // ✅ Using new response methods (REQUIRED in v2.0.0)
-  const response = await cycleTLS('https://httpbin.org/json', {
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-  });
-  
-  const data = await response.json(); // ✅ REQUIRED: Parse as JSON
-  console.log(data);
-  
-  cycleTLS.exit();
-})();
+// ✅ NEW (v2.0.0)
+const response = await cycleTLS(url, options);
+const data = await response.json(); // or .text(), .arrayBuffer(), .blob()
+console.log(data);
 ```
 
-#### ✨ NEW: Streaming Response
+#### ✨ New Features - WebSocket & SSE
+
+##### WebSocket Implementation
 ```javascript
-// ✨ NEW FEATURE in v2.0.0
-const response = await cycleTLS('https://httpbin.org/stream/3', {
-  responseType: 'stream' // ✨ NEW option
-});
-
-const stream = response.data;
-stream.on('data', chunk => {
-  console.log('Received:', chunk.toString());
-});
-
-stream.on('end', () => {
-  console.log('Stream complete');
-  cycleTLS.exit();
-});
-```
-
-#### ✨ NEW: WebSocket Connection
-```javascript
-// ✨ BRAND NEW FEATURE in v2.0.0
+// JavaScript/TypeScript - WebSocket connection
 const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
   ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
   userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-});
-
-// ✨ NEW: Set up message handler
-wsResponse.onMessage((message) => {
-  if (message.type === 'text') {
-    console.log('Received:', message.data.toString());
+  headers: {
+    'Sec-WebSocket-Protocol': 'echo-protocol'
   }
 });
 
-// ✨ NEW: Send a message
-const testMessage = 'Hello, WebSocket!';
-await wsResponse.send(testMessage);
-
-// ✨ NEW: Close connection
-await wsResponse.close();
+// Check connection status
+if (wsResponse.status === 101) {
+  console.log('WebSocket upgrade successful');
+  console.log('Response headers:', wsResponse.headers);
+}
 ```
 
-#### ✨ NEW: Server-Sent Events (SSE)
+```go
+// Golang - WebSocket client
+wsClient := cycletls.NewWebSocketClient(&tls.Config{
+  ServerName: "echo.websocket.org",
+}, map[string]string{
+  "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+})
+
+conn, response, err := wsClient.Dial("wss://echo.websocket.org", nil)
+if err != nil {
+  log.Fatal(err)
+}
+defer conn.Close()
+
+// Send message
+err = conn.WriteMessage(websocket.TextMessage, []byte("Hello WebSocket"))
+if err != nil {
+  log.Fatal(err)
+}
+```
+
+##### Server-Sent Events Implementation
 ```javascript
-// ✨ BRAND NEW FEATURE in v2.0.0
-// Event-based approach
+// JavaScript/TypeScript - SSE connection
 const sseResponse = await cycleTLS.sse('https://example.com/events', {
   ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
   userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+  headers: {
+    'Accept': 'text/event-stream',
+    'Cache-Control': 'no-cache'
+  }
 });
 
-// ✨ NEW: Event handler
-sseResponse.onEvent((event) => {
-  console.log('SSE Event:', event.data);
-});
-
-// ✨ NEW: Async iterator approach
-for await (const event of sseResponse.events()) {
-  console.log('Event:', event.data);
-  if (event.data === 'done') break;
-}
-
-await sseResponse.close();
+// Parse real-time events
+const eventData = await sseResponse.text();
+console.log('SSE events:', eventData);
 ```
 
-#### ✨ NEW: HTTP Method Shortcuts
-```javascript
-// ✨ NEW FEATURE: Convenient method shortcuts (similar to axios)
-const getResponse = await cycleTLS.get('https://httpbin.org/get', options);
-const getData = await getResponse.json(); // ⚠️ Don't forget this!
+```go
+// Golang - SSE client
+sseClient := cycletls.NewSSEClient(&http.Client{
+  Timeout: 30 * time.Second,
+}, map[string]string{
+  "Accept": "text/event-stream",
+  "Cache-Control": "no-cache",
+})
 
-const postResponse = await cycleTLS.post('https://httpbin.org/post', {
-  body: JSON.stringify({ key: 'value' }),
-  headers: { 'Content-Type': 'application/json' }
+response, err := sseClient.Get("https://example.com/events")
+if err != nil {
+  log.Fatal(err)
+}
+defer response.Body.Close()
+
+// Read SSE stream
+scanner := bufio.NewScanner(response.Body)
+for scanner.Scan() {
+  line := scanner.Text()
+  if strings.HasPrefix(line, "data:") {
+    fmt.Println("Event data:", line[5:])
+  }
+}
+```
+
+##### Connection Reuse Performance Enhancement
+Connection reuse significantly reduces TLS handshake overhead by maintaining persistent connections to the same host:
+
+```javascript
+// JavaScript/TypeScript - Automatic connection reuse
+const cycleTLS = await initCycleTLS();
+
+// First request establishes connection
+const response1 = await cycleTLS.get('https://api.example.com/endpoint1', options);
+const data1 = await response1.json();
+
+// Subsequent requests reuse the same connection (much faster)
+const response2 = await cycleTLS.get('https://api.example.com/endpoint2', options);
+const data2 = await response2.json();
+
+// Performance benefit: ~200-500ms saved per request after the first
+```
+
+```go
+// Golang - Enable connection reuse
+client := cycletls.Init()
+response, err := client.Do("https://api.example.com/endpoint1", cycletls.Options{
+  EnableConnectionReuse: true, // Enables persistent connection pooling
+  Ja3: "771,4865-4867...", 
+}, "GET")
+
+// Subsequent requests automatically reuse connections
+response2, err := client.Do("https://api.example.com/endpoint2", cycletls.Options{
+  EnableConnectionReuse: true,
+  Ja3: "771,4865-4867...",
+}, "GET")
+```
+
+##### Streaming Support
+```javascript
+// Streaming responses for large data
+const response = await cycleTLS('https://example.com/large-file', {
+  responseType: 'stream'
 });
-const postData = await postResponse.json(); // ⚠️ Don't forget this!
+
+response.data.on('data', chunk => {
+  console.log('Received:', chunk.length, 'bytes');
+});
+response.data.on('end', () => {
+  console.log('Download complete!');
+});
+
+// Method shortcuts with proper response parsing
+const response = await cycleTLS.get(url, options);
+const data = await response.json(); // Don't forget to parse!
+```
+
+
+
+
+#### ✅ Golang: New Options (Backward Compatible)
+```go
+// All new features, existing code unchanged
+response, err := client.Do(url, cycletls.Options{
+	Ja4:                   "t13d1516h2_8daaf6152771_02713d6af862", // NEW: JA4 fingerprinting
+	ForceHTTP3:            true,                                    // NEW: HTTP/3 support
+	QUICFingerprint:       "16030106f2010006ee...",                // NEW: QUIC fingerprint
+	EnableConnectionReuse: true,                                    // Enhanced connection reuse
+}, "GET")
+
+// NEW: WebSocket & SSE clients
+wsClient := cycletls.NewWebSocketClient(tlsConfig, headers)
+sseClient := cycletls.NewSSEClient(httpClient, headers)
 ```
 
 ---
