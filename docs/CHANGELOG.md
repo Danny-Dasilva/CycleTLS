@@ -14,7 +14,7 @@ New features include HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, 
 - **Server-Sent Events (SSE)** - SSE client implementation for real-time event streaming with automatic reconnection and AsyncIterableIterator API [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274)
 - **JA4 Fingerprinting** - Implementation of JA4 TLS fingerprinting (successor to JA3) combining TLS version, cipher suites, extensions, HTTP headers, and User-Agent [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
 - **HTTP/2 Fingerprinting** - Enhanced HTTP/2 client fingerprinting with custom settings, stream dependencies, and priority orders [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
-- **Binary Response Support** - Streaming support for binary responses with async dispatcher and improved memory efficiency [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371), [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274), [#380](https://github.com/Danny-Dasilva/CycleTLS/issues/380)
+- **Binary Response Support** - Real-time streaming support for binary responses with async dispatcher and improved memory efficiency. Special thanks to [@RealAlphabet](https://github.com/RealAlphabet) for the core implementation from [CycleTLSv2](https://github.com/RealAlphabet/CycleTLSv2) [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371), [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274), [#380](https://github.com/Danny-Dasilva/CycleTLS/issues/380)
 - **Connection Reuse** - Persistent connection pooling to reduce TLS handshakes and improve performance [#281](https://github.com/Danny-Dasilva/CycleTLS/issues/281)
 
 ### API Enhancements
@@ -35,6 +35,17 @@ New features include HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, 
 - **Browser Configuration** - Unified `Browser` struct for all protocols
 - **HTTP/2 Fingerprinting** - Enhanced `HTTP2Fingerprint` support
 - **Direct Transports** - `NewHTTP3Transport()` for advanced usage
+
+### Contributors & Acknowledgments
+
+Special thanks to the following contributors for their significant contributions to v2.0.0:
+
+- **[@RealAlphabet](https://github.com/RealAlphabet)** - Core implementation of binary streaming and real-time response handling. This contribution forms the foundation of the async dispatcher system and streaming capabilities in v2.0.0.
+- **[@brian6932](https://github.com/brian6932)** - Fixed uncaught `ESRCH` errors on `SIGINT`/`SIGTERM` (#370) and specified `form-data` dependency in package.json (#367)
+- **[@makichigin](https://github.com/makichigin)** - Added support for TLS extension 17613 for improved fingerprinting (#385)
+- **[@mariovparaschiv](https://github.com/mariovparaschiv)** - Fixed task killing by using built-in kill method (#347)
+- **[@mlshv](https://github.com/mlshv)** - Fixed execution path quoting for proper space handling (#339)
+- **[@m4xx1m](https://github.com/m4xx1m)** - Documentation improvements (#331)
 
 
 

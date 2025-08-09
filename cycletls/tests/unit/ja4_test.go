@@ -107,6 +107,25 @@ func TestParseJA4String(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for old 4-part JA4 format")
 	}
+
+	// Test case 5: Real TLS 1.2 JA4 string from provided data
+	ja4String = "t12d1209h2_d34a8e72043a_b39be8c56a14"
+	components, err = cycletls.ParseJA4String(ja4String)
+	if err != nil {
+		t.Errorf("ParseJA4String failed for real TLS 1.2 JA4: %v", err)
+	}
+
+	if components.TLSVersion != "t12" {
+		t.Errorf("TLS version incorrect for real JA4: got %s, want t12", components.TLSVersion)
+	}
+
+	if components.CipherHash != "d34a8e72043a" {
+		t.Errorf("Cipher hash incorrect for real JA4: got %s, want d34a8e72043a", components.CipherHash)
+	}
+
+	if components.ExtensionsHash != "b39be8c56a14" {
+		t.Errorf("Extensions hash incorrect for real JA4: got %s, want b39be8c56a14", components.ExtensionsHash)
+	}
 }
 
 func TestJA4StringToSpec(t *testing.T) {
@@ -165,6 +184,22 @@ func TestJA4StringToSpec(t *testing.T) {
 	_, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
 	if err == nil {
 		t.Error("Expected error for invalid TLS version")
+	}
+
+	// Test case 5: Real TLS 1.2 JA4 fingerprint from provided data
+	ja4String = "t12d1209h2_d34a8e72043a_b39be8c56a14"
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	if err != nil {
+		t.Errorf("JA4StringToSpec failed for real TLS 1.2 JA4: %v", err)
+	}
+
+	if spec == nil {
+		t.Error("Spec should not be nil for real TLS 1.2 JA4")
+	}
+
+	// Check TLS version
+	if spec.TLSVersMax != 0x0303 { // TLS 1.2
+		t.Errorf("TLS max version incorrect for real TLS 1.2 JA4: got %x, want %x", spec.TLSVersMax, 0x0303)
 	}
 }
 

@@ -80,4 +80,39 @@ describe("JA4 Fingerprinting Tests", () => {
     expect(result.http_protocol_version).toBe("HTTP/2.0");
     
   });
+
+  test("TLS 1.2 JA4 fingerprint with peet.ws", async () => {
+    // Real TLS 1.2 JA4 fingerprint from the provided data
+    const tls12JA4 = "t12d1209h2_d34a8e72043a_b39be8c56a14";
+    
+    const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
+      ja4: tls12JA4,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    });
+    
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    
+    // Validate TLS data
+    expect(result.tls).toBeDefined();
+    expect(result.tls.ja4).toBeDefined();
+    expect(result.http_version).toBeDefined();
+  });
+
+  test("TLS 1.2 JA4 fingerprint with scrapfly.io", async () => {
+    // Real TLS 1.2 JA4 fingerprint with JA3 matching
+    const tls12JA4 = "t12d1209h2_d34a8e72043a_b39be8c56a14";
+    
+    const response = await cycleTLS.get('https://tools.scrapfly.io/api/fp/anything', {
+      ja4: tls12JA4,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    });
+    
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    
+    // Validate TLS data
+    expect(result.tls).toBeDefined();
+    expect(result.http_protocol_version).toBeDefined();
+  });
 });
