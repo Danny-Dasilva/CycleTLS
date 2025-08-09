@@ -34,5 +34,5 @@ test("Should return a timeout error", async () => {
 
   expect(normalResponse.status).toBe(200);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 });

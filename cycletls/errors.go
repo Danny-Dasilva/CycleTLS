@@ -1,6 +1,7 @@
 package cycletls
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,7 +37,38 @@ func createErrorMessage(StatusCode int, err error, op string) errorMessage {
 func parseError(err error) (errormessage errorMessage) {
 	var op string
 
+	// Check for context.DeadlineExceeded (client timeout)
+	if err == context.DeadlineExceeded {
+		return createErrorMessage(408, err, "timeout")
+	}
+
 	httpError := string(err.Error())
+	//todo - clean this up
+	
+	// Check for TLS certificate errors (should return 495)
+	if strings.Contains(httpError, "uTlsConn.Handshake() error") ||
+	   strings.Contains(httpError, "tls: failed to verify certificate") ||
+	   strings.Contains(httpError, "x509: certificate") ||
+	   strings.Contains(httpError, "certificate verify failed") ||
+	   strings.Contains(httpError, "certificate has expired") ||
+	   strings.Contains(httpError, "certificate signed by unknown authority") {
+		return createErrorMessage(495, err, "certificate")
+	}
+	
+	// Check for connection refused errors (should return 502)
+	if strings.Contains(httpError, "connection refused") ||
+	   strings.Contains(httpError, "connect: connection refused") ||
+	   strings.Contains(httpError, "dial tcp") && strings.Contains(httpError, "connect: connection refused") {
+		return createErrorMessage(502, err, "connection")
+	}
+	
+	// Check for common timeout error messages
+	if strings.Contains(httpError, "context deadline exceeded") || 
+	   strings.Contains(httpError, "Client.Timeout exceeded") ||
+	   strings.Contains(httpError, "timeout") {
+		return createErrorMessage(408, err, "timeout")
+	}
+	
 	status := lastString(strings.Split(httpError, "StatusCode:"))
 	StatusCode, _ := strconv.Atoi(status)
 	if StatusCode != 0 {

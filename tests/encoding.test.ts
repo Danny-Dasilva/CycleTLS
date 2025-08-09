@@ -78,29 +78,33 @@ const myRequests: Request[] = [
   },
 ];
 
-test("Response bodies should be decoded", async () => {
+test("Response data contains raw compressed data (Axios-style)", async () => {
   const cycleTLS = await initCycleTLS({ port: 9115 });
 
   for (let request of myRequests) {
-    const response = await cycleTLS(
-      request.url,
-      {
-        ja3: ja3,
-        userAgent: userAgent,
-        headers: { "Accept-Encoding": "gzip, deflate, br" },
-      },
-      "get"
-    );
-    //Remove origin for comparison
-    if (typeof response.body === "object") {
-      delete response.body.origin;
-      delete response.body.headers["X-Amzn-Trace-Id"];
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject(request?.response || {});
-      
-    } else {
-      throw "encoding error";
-    }
+    // Test with default responseType (json) - should return raw buffer for compressed data
+    const response = await cycleTLS(request.url, {
+      ja3: ja3,
+      userAgent: userAgent,
+      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+    });
+
+    expect(response.status).toBe(200);
+    
+    // Default (json) should return raw compressed Buffer when JSON parsing fails
+    expect(response.data).toBeInstanceOf(Buffer);
+    expect(response.data.length).toBeGreaterThan(0);
+    
+    // Test with explicit arraybuffer responseType  
+    const arrayBufferResponse = await cycleTLS(request.url, {
+      ja3: ja3,
+      userAgent: userAgent,
+      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+      responseType: 'arraybuffer'
+    });
+    
+    expect(arrayBufferResponse.data).toBeInstanceOf(ArrayBuffer);
+    expect(arrayBufferResponse.data.byteLength).toBeGreaterThan(0);
   }
-  cycleTLS.exit();
+  await cycleTLS.exit();
 });

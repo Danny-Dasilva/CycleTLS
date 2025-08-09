@@ -1,5 +1,534 @@
 # CycleTLS Changelog
 
+## 2.0.0 - (8-9-2025)
+### Release Highlights
+⚠️ **MAJOR BREAKING CHANGES** ⚠️
+
+This is a major release with **breaking changes** to the JavaScript/TypeScript API. Please review the migration guide below before upgrading.
+
+New features include HTTP/3, WebSocket, Server-Sent Events, JA4 fingerprinting, and binary response support. Significant performance improvements through connection reuse and enhanced protocol support.
+
+### New Features
+- **HTTP/3 Support** - Full HTTP/3 protocol implementation with QUIC transport, custom QUIC configuration options, and connection pooling
+- **WebSocket Support** - Native WebSocket client implementation with event-based API (onMessage, onClose, onError callbacks) and TLS fingerprinting integration [#34](https://github.com/Danny-Dasilva/CycleTLS/issues/34)
+- **Server-Sent Events (SSE)** - SSE client implementation for real-time event streaming with automatic reconnection and AsyncIterableIterator API [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274)
+- **JA4 Fingerprinting** - Implementation of JA4 TLS fingerprinting (successor to JA3) combining TLS version, cipher suites, extensions, HTTP headers, and User-Agent [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
+- **HTTP/2 Fingerprinting** - Enhanced HTTP/2 client fingerprinting with custom settings, stream dependencies, and priority orders [#112](https://github.com/Danny-Dasilva/CycleTLS/issues/112)
+- **Binary Response Support** - Real-time streaming support for binary responses with async dispatcher and improved memory efficiency. Special thanks to [@RealAlphabet](https://github.com/RealAlphabet) for the core implementation from [CycleTLSv2](https://github.com/RealAlphabet/CycleTLSv2) [#371](https://github.com/Danny-Dasilva/CycleTLS/pull/371), [#274](https://github.com/Danny-Dasilva/CycleTLS/issues/274), [#380](https://github.com/Danny-Dasilva/CycleTLS/issues/380)
+- **Connection Reuse** - Persistent connection pooling to reduce TLS handshakes and improve performance [#281](https://github.com/Danny-Dasilva/CycleTLS/issues/281)
+
+### API Enhancements
+
+#### New Protocols & Features
+- **WebSocket Support** - Native WebSocket client with TLS fingerprinting (`cycleTLS.ws()`, `cycletls.NewWebSocketClient()`)
+- **Server-Sent Events** - SSE client implementation (`cycleTLS.sse()`, `cycletls.NewSSEClient()`)
+- **HTTP/3 & QUIC** - Full HTTP/3 support with custom QUIC fingerprinting (`ForceHTTP3`, `QUICFingerprint`)
+- **JA4 Fingerprinting** - Enhanced TLS fingerprinting successor to JA3 (`JA4` field in options)
+
+#### JavaScript/TypeScript Changes
+- **⚠️ Response Methods** - `response.body` removed, use `response.json()`, `response.text()`, `response.arrayBuffer()`, `response.blob()`
+- **Streaming Support** - `responseType: 'stream'` for real-time data handling
+- **Enhanced Init** - `initCycleTLS({ port, timeout })` configuration options
+
+#### Golang Enhancements (Backward Compatible)
+- **Enhanced Connection Reuse** - Improved `EnableConnectionReuse` with connection pooling
+- **Browser Configuration** - Unified `Browser` struct for all protocols
+- **HTTP/2 Fingerprinting** - Enhanced `HTTP2Fingerprint` support
+- **Direct Transports** - `NewHTTP3Transport()` for advanced usage
+
+### Contributors & Acknowledgments
+
+Special thanks to the following contributors for their significant contributions to v2.0.0:
+
+- **[@RealAlphabet](https://github.com/RealAlphabet)** - Core implementation of binary streaming and real-time response handling. This contribution forms the foundation of the async dispatcher system and streaming capabilities in v2.0.0.
+- **[@brian6932](https://github.com/brian6932)** - Fixed uncaught `ESRCH` errors on `SIGINT`/`SIGTERM` (#370) and specified `form-data` dependency in package.json (#367)
+- **[@makichigin](https://github.com/makichigin)** - Added support for TLS extension 17613 for improved fingerprinting (#385)
+- **[@mariovparaschiv](https://github.com/mariovparaschiv)** - Fixed task killing by using built-in kill method (#347)
+- **[@mlshv](https://github.com/mlshv)** - Fixed execution path quoting for proper space handling (#339)
+- **[@m4xx1m](https://github.com/m4xx1m)** - Documentation improvements (#331)
+
+
+
+#### HTTP/2 Fingerprinting
+
+HTTP/2 fingerprinting allows you to mimic specific browser HTTP/2 implementations:
+
+```javascript
+// JavaScript - Firefox HTTP/2 fingerprint
+const response = await cycleTLS('https://tls.peet.ws/api/all', {
+  http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+});
+
+const data = await response.json();
+console.log('HTTP/2:', data.http2.akamai_fingerprint);
+```
+
+```go
+// Golang - Chrome HTTP/2 fingerprint
+response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+    HTTP2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+}, "GET")
+```
+
+| Browser | HTTP/2 Settings | Window | Priority |
+|---------|-----------------|--------|----------|
+| Firefox | `1:65536;2:0;4:131072;5:16384` | 12517377 | m,p,a,s |
+| Chrome | `1:65536;2:0;4:6291456;6:262144` | 15663105 | m,a,s,p |
+
+#### JA4 Fingerprinting (Enhanced)
+
+JA4 is the successor to JA3, providing more detailed TLS fingerprinting:
+
+```javascript
+// JavaScript - Firefox JA4
+const response = await cycleTLS('https://tls.peet.ws/api/all', {
+  ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+});
+
+const data = await response.json();
+console.log('JA4:', data.tls.ja4);
+```
+
+```go
+// Golang - Chrome JA4
+response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+    Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+    UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+}, "GET")
+```
+
+| Browser | JA4 Fingerprint |
+|---------|-----------------|
+| Firefox 141 | `t13d1717h2_5b57614c22b0_f2748d6cd58d` |
+| Chrome 138 | `t13d1517h2_8daaf6152771_7e51fdad25f2` |
+
+### ⚠️ BREAKING CHANGES ⚠️
+
+```
+🚨🚨🚨 CRITICAL BREAKING CHANGES 🚨🚨🚨
+
+Your JavaScript/TypeScript code WILL BREAK if you don't update it!
+Do NOT upgrade to v2.0.0 without reading the migration guide below.
+
+❌ response.body is REMOVED
+✅ Use response.json(), response.text(), etc. instead
+```
+
+---
+
+#### 🚨 CRITICAL CHANGES (WILL BREAK YOUR CODE)
+
+| Change Type | Old (v1.x) | New (v2.0.0) | Status |
+|-------------|------------|--------------|--------|
+| **Response Data Access** | `response.body` | `response.json()` / `response.text()` | ❌ **REMOVED** |
+| **Form Data Headers** | Manual `Content-Type` | `formData.getHeaders()` | ⚠️ **DEPRECATED** |
+| **Response Methods** | Synchronous | Asynchronous (returns Promises) | ⚠️ **CHANGED** |
+
+---
+
+#### 📋 DETAILED BREAKING CHANGES
+
+**1. ⚠️ Response Body Access (CRITICAL)**
+- Direct `response.body` access **REMOVED**
+- Must use: `response.json()`, `response.text()`, `response.arrayBuffer()`, or `response.blob()` methods
+- Impact: **ALL existing code that accesses response.body will break**
+
+**2. ⚠️ Form Data Headers (RECOMMENDED)**
+- Manual `Content-Type: multipart/form-data` headers **DEPRECATED**
+- Must use: `formData.getHeaders()` instead
+- Impact: **Form uploads may fail without proper boundary headers**
+
+**3. ⚠️ Async Response Methods (BEHAVIORAL CHANGE)**
+- All response data access is now asynchronous and returns Promises
+- Must use `await` or `.then()` with response methods
+- Impact: **Synchronous response handling will not work**
+
+**4. ✨ NEW API Methods (ADDITIONS - NON-BREAKING)**
+- Added `cycleTLS.ws()`, `cycleTLS.webSocket()` for WebSocket connections
+- Added `cycleTLS.sse()`, `cycleTLS.eventSource()` for Server-Sent Events
+- Added HTTP method shortcuts: `cycleTLS.get()`, `cycleTLS.post()`, etc.
+- Impact: **No breaking changes - these are new features**
+
+---
+
+### 🔄 Quick Migration Examples
+
+#### ⚠️ JavaScript/TypeScript: Response Handling (BREAKING)
+```javascript
+// ❌ OLD (v1.x)
+const response = await cycleTLS(url, options);
+console.log(response.body); // ❌ REMOVED
+
+// ✅ NEW (v2.0.0)
+const response = await cycleTLS(url, options);
+const data = await response.json(); // or .text(), .arrayBuffer(), .blob()
+console.log(data);
+```
+
+#### ✨ New Features - WebSocket & SSE
+
+##### WebSocket Implementation
+```javascript
+// JavaScript/TypeScript - WebSocket connection
+const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
+  ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+  headers: {
+    'Sec-WebSocket-Protocol': 'echo-protocol'
+  }
+});
+
+// Check connection status
+if (wsResponse.status === 101) {
+  console.log('WebSocket upgrade successful');
+  console.log('Response headers:', wsResponse.headers);
+}
+```
+
+```go
+// Golang - WebSocket client
+wsClient := cycletls.NewWebSocketClient(&tls.Config{
+  ServerName: "echo.websocket.org",
+}, map[string]string{
+  "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+})
+
+conn, response, err := wsClient.Dial("wss://echo.websocket.org", nil)
+if err != nil {
+  log.Fatal(err)
+}
+defer conn.Close()
+
+// Send message
+err = conn.WriteMessage(websocket.TextMessage, []byte("Hello WebSocket"))
+if err != nil {
+  log.Fatal(err)
+}
+```
+
+##### Server-Sent Events Implementation
+```javascript
+// JavaScript/TypeScript - SSE connection
+const sseResponse = await cycleTLS.sse('https://example.com/events', {
+  ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+  headers: {
+    'Accept': 'text/event-stream',
+    'Cache-Control': 'no-cache'
+  }
+});
+
+// Parse real-time events
+const eventData = await sseResponse.text();
+console.log('SSE events:', eventData);
+```
+
+```go
+// Golang - SSE client
+sseClient := cycletls.NewSSEClient(&http.Client{
+  Timeout: 30 * time.Second,
+}, map[string]string{
+  "Accept": "text/event-stream",
+  "Cache-Control": "no-cache",
+})
+
+response, err := sseClient.Get("https://example.com/events")
+if err != nil {
+  log.Fatal(err)
+}
+defer response.Body.Close()
+
+// Read SSE stream
+scanner := bufio.NewScanner(response.Body)
+for scanner.Scan() {
+  line := scanner.Text()
+  if strings.HasPrefix(line, "data:") {
+    fmt.Println("Event data:", line[5:])
+  }
+}
+```
+
+##### Connection Reuse Performance Enhancement
+Connection reuse significantly reduces TLS handshake overhead by maintaining persistent connections to the same host:
+
+```javascript
+// JavaScript/TypeScript - Automatic connection reuse
+const cycleTLS = await initCycleTLS();
+
+// First request establishes connection
+const response1 = await cycleTLS.get('https://api.example.com/endpoint1', options);
+const data1 = await response1.json();
+
+// Subsequent requests reuse the same connection (much faster)
+const response2 = await cycleTLS.get('https://api.example.com/endpoint2', options);
+const data2 = await response2.json();
+
+// Performance benefit: ~200-500ms saved per request after the first
+```
+
+```go
+// Golang - Enable connection reuse
+client := cycletls.Init()
+response, err := client.Do("https://api.example.com/endpoint1", cycletls.Options{
+  EnableConnectionReuse: true, // Enables persistent connection pooling
+  Ja3: "771,4865-4867...", 
+}, "GET")
+
+// Subsequent requests automatically reuse connections
+response2, err := client.Do("https://api.example.com/endpoint2", cycletls.Options{
+  EnableConnectionReuse: true,
+  Ja3: "771,4865-4867...",
+}, "GET")
+```
+
+##### Streaming Support
+```javascript
+// Streaming responses for large data
+const response = await cycleTLS('https://example.com/large-file', {
+  responseType: 'stream'
+});
+
+response.data.on('data', chunk => {
+  console.log('Received:', chunk.length, 'bytes');
+});
+response.data.on('end', () => {
+  console.log('Download complete!');
+});
+
+// Method shortcuts with proper response parsing
+const response = await cycleTLS.get(url, options);
+const data = await response.json(); // Don't forget to parse!
+```
+
+
+
+
+#### ✅ Golang: New Options (Backward Compatible)
+```go
+// All new features, existing code unchanged
+response, err := client.Do(url, cycletls.Options{
+	Ja4:                   "t13d1516h2_8daaf6152771_02713d6af862", // NEW: JA4 fingerprinting
+	ForceHTTP3:            true,                                    // NEW: HTTP/3 support
+	QUICFingerprint:       "16030106f2010006ee...",                // NEW: QUIC fingerprint
+	EnableConnectionReuse: true,                                    // Enhanced connection reuse
+}, "GET")
+
+// NEW: WebSocket & SSE clients
+wsClient := cycletls.NewWebSocketClient(tlsConfig, headers)
+sseClient := cycletls.NewSSEClient(httpClient, headers)
+```
+
+---
+
+### 🔄 MIGRATION GUIDE (v1.x → v2.0.0)
+
+```
+🛠️ STEP-BY-STEP MIGRATION CHECKLIST
+
+□ 1. Update all response.body references
+□ 2. Fix form data headers
+□ 3. Add error handling for async methods
+□ 4. (Optional) Use new API features
+```
+
+**⚠️ REQUIRED CHANGES - Your code will break without these updates:**
+
+---
+
+#### ⚠️ STEP 1: Update Response Handling (REQUIRED)
+
+**🚨 CRITICAL: This change affects ALL existing code**
+
+```javascript
+// ❌ OLD (v1.x) - THIS WILL NO LONGER WORK
+const response = await cycleTLS(url, options);
+console.log(response.body); // ❌ response.body is REMOVED
+
+// ✅ NEW (v2.0.0) - CHOOSE THE RIGHT METHOD
+const response = await cycleTLS(url, options);
+
+// For JSON APIs (most common)
+const data = await response.json();
+console.log(data);
+
+// For HTML/plain text
+const text = await response.text();
+console.log(text);
+
+// For binary data (images, files)
+const buffer = await response.arrayBuffer();
+console.log(buffer);
+
+// For blob data
+const blob = await response.blob();
+console.log(blob);
+```
+
+**📝 Quick Fix Pattern:**
+```javascript
+// Find and replace in your codebase:
+// OLD: response.body
+// NEW: await response.json()  (for JSON)
+// NEW: await response.text()  (for text)
+```
+
+---
+
+#### ⚠️ STEP 2: Update Form Data Headers (STRONGLY RECOMMENDED)
+
+**🔧 ISSUE: Manual Content-Type headers break multipart boundaries**
+
+```javascript
+// ❌ OLD (v1.x) - WILL CAUSE UPLOAD FAILURES
+const formData = new FormData();
+formData.append('file', fileStream);
+
+const response = await cycleTLS(url, {
+  body: formData,
+  headers: {
+    'Content-Type': 'multipart/form-data' // ❌ Missing boundary!
+  }
+});
+
+// ✅ NEW (v2.0.0) - PROPER BOUNDARY HANDLING
+const formData = new FormData();
+formData.append('file', fileStream);
+
+const response = await cycleTLS(url, {
+  body: formData,
+  headers: formData.getHeaders() // ✅ Includes proper boundary
+});
+const result = await response.json(); // ✅ Parse response too!
+```
+
+**📝 Why This Matters:**
+Multipart form data requires unique boundaries. Manual headers miss this critical detail.
+
+---
+
+#### ⚠️ STEP 3: Add Error Handling (RECOMMENDED)
+
+**🛡️ PROTECTION: Response parsing can now fail**
+
+```javascript
+// ✅ ROBUST ERROR HANDLING
+try {
+  const response = await cycleTLS(url, options);
+  
+  // Check if request was successful
+  if (response.status >= 400) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  
+  // Parse response (can throw parsing errors)
+  const data = await response.json();
+  console.log(data);
+  
+} catch (error) {
+  if (error.message.includes('JSON')) {
+    console.error('Response is not valid JSON:', error.message);
+  } else {
+    console.error('Request failed:', error.message);
+  }
+}
+```
+
+**🔍 Common Errors to Handle:**
+- **JSON parsing errors**: Server returned non-JSON data
+- **Network errors**: Connection failed
+- **HTTP errors**: 4xx/5xx status codes
+
+---
+
+#### ✨ STEP 4: Explore New Features (OPTIONAL)
+
+**🎉 BONUS: Take advantage of new capabilities**
+
+```javascript
+// ✨ HTTP METHOD SHORTCUTS (cleaner code)
+const getResponse = await cycleTLS.get(url, options);
+const postResponse = await cycleTLS.post(url, options);
+const putResponse = await cycleTLS.put(url, options);
+const deleteResponse = await cycleTLS.delete(url, options);
+// ... and more!
+
+// ⚠️ Still need to parse responses!
+const data = await getResponse.json();
+```
+
+```javascript
+// ✨ WEBSOCKET CONNECTIONS
+const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
+  ja3: 'your_ja3_string',
+  userAgent: 'your_user_agent'
+});
+
+// Check connection status
+if (wsResponse.status === 101) {
+  console.log('WebSocket connected!');
+}
+```
+
+```javascript
+// ✨ SERVER-SENT EVENTS
+const sseResponse = await cycleTLS.sse('https://example.com/events', {
+  ja3: 'your_ja3_string',
+  userAgent: 'your_user_agent'
+});
+
+// Parse real-time events
+const eventData = await sseResponse.text();
+console.log('SSE events:', eventData);
+```
+
+```javascript
+// ✨ STREAMING RESPONSES (for large data)
+const response = await cycleTLS('https://example.com/large-file', {
+  responseType: 'stream'
+});
+
+const stream = response.data;
+stream.on('data', chunk => {
+  console.log('Received:', chunk.length, 'bytes');
+});
+stream.on('end', () => {
+  console.log('Download complete!');
+});
+```
+
+---
+
+### 🐛 Bug Fixes
+- Fix uncaught `ESRCH` on `SIGINT`/`SIGTERM` signals [#370](https://github.com/Danny-Dasilva/CycleTLS/issues/370)
+- Improved error handling for Windows systems
+- Fixed syntax issues with redirects
+- Resolved deadlock issues on Linux
+- Better proxy header handling
+- General test fixes and stability improvements
+
+---
+
+### ✅ What Remains Unchanged (Backward Compatible)
+
+**🎯 GOOD NEWS: These parts of your code don't need changes**
+
+| Category | Details | Status |
+|----------|---------|--------|
+| **Core Syntax** | `cycleTLS(url, options, method)` | ✅ **Unchanged** |
+| **Request Options** | `ja3`, `userAgent`, `proxy`, `timeout`, etc. | ✅ **Unchanged** |
+| **Response Properties** | `response.status`, `response.headers`, `response.finalUrl` | ✅ **Unchanged** |
+| **Lifecycle Methods** | `cycleTLS.exit()`, `initCycleTLS()` | ✅ **Unchanged** |
+| **Golang API** | All Go package methods and types | ✅ **100% Compatible** |
+
+**📋 What This Means:**
+- Your request configuration stays the same
+- Your TLS fingerprinting setup works unchanged
+- Your proxy and authentication logic is preserved
+- Only response parsing needs updates
+
 ## 1.0.26 - (2-16-2024)
 ### Release Highlights
 Fix illegal parameter error and location url error

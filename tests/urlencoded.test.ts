@@ -7,7 +7,7 @@ test("Should Handle URL Encoded Form Data Correctly", async () => {
   urlEncodedData.append("key1", "value1");
   urlEncodedData.append("key2", "value2");
 
-  const response = cycleTLS(
+  const response = await cycleTLS(
     "http://httpbin.org/post",
     {
       body: urlEncodedData.toString(),
@@ -17,18 +17,15 @@ test("Should Handle URL Encoded Form Data Correctly", async () => {
     },
     "post"
   );
+  const responseBody = await response.json();
 
-  await response.then((out: CycleTLSResponse) => {
-    expect(out.status).toBe(200); // Check if the status code is 200
-
-    const responseBody =
-      typeof out.body === "string" ? JSON.parse(out.body) : out.body;
     // Validate the 'form' part of the response
     expect(responseBody.form).toEqual({
       key1: "value1",
       key2: "value2",
     });
 
-    cycleTLS.exit();
-  });
+  await cycleTLS.exit();
+
+
 });

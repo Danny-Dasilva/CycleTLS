@@ -23,6 +23,7 @@ type FormResponse struct {
 
 func TestUrlEncodedFormDataUpload(t *testing.T) {
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	// Prepare form data
 	form := url.Values{}

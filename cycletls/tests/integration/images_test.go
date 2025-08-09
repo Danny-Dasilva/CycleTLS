@@ -2,7 +2,6 @@ package cycletls_test
 
 import (
 	"bytes"
-	"encoding/base64"
 	"log"
 	"os"
 	"runtime"
@@ -14,6 +13,7 @@ import (
 func SimpleFileWriteTest(t *testing.T) {
 
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
@@ -22,19 +22,17 @@ func SimpleFileWriteTest(t *testing.T) {
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
-	// Decode Base64
-	dec, err := base64.StdEncoding.DecodeString(response.Body)
-	if err != nil {
-		panic(err)
-	}
+	// Convert string body to bytes (raw binary data)
+	bodyBytes := []byte(response.Body)
+	
 	//create file to write
 	f, err := os.Create("test.jpeg")
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	//write b64 to file
-	if _, err := f.Write(dec); err != nil {
+	//write bytes to file
+	if _, err := f.Write(bodyBytes); err != nil {
 		panic(err)
 	}
 	if err := f.Sync(); err != nil {
@@ -43,19 +41,17 @@ func SimpleFileWriteTest(t *testing.T) {
 }
 
 func WriteFile(Body string, Filepath string) {
-	// Decode Base64
-	dec, err := base64.StdEncoding.DecodeString(Body)
-	if err != nil {
-		panic(err)
-	}
+	// Convert string body to bytes (raw binary data)
+	bodyBytes := []byte(Body)
+	
 	//create file to write
 	f, err := os.Create(Filepath)
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	//write b64 to file
-	if _, err := f.Write(dec); err != nil {
+	//write bytes to file
+	if _, err := f.Write(bodyBytes); err != nil {
 		panic(err)
 	}
 	if err := f.Sync(); err != nil {
@@ -94,6 +90,7 @@ func GetRequest(url string, client cycletls.CycleTLS) cycletls.Response {
 func TestFileWriting(t *testing.T) {
 
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 
 	//jpeg
 	resp := GetRequest("http://httpbin.org/image/jpeg", client)

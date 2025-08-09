@@ -8,56 +8,48 @@ let userAgent =
 test("Should return a 301 redirect", async () => {
     const cycleTLS = await initCycleTLS({ port: 9114 });
 
-    const redirectResponse = await cycleTLS(
-        "https://google.com",
-        {
-            body: "",
-            ja3: ja3,
-            userAgent: userAgent,
-            disableRedirect: true,
-        },
-        "get"
-    );
-    expect(redirectResponse.status).toBe(301);
+    const response = await cycleTLS('https://google.com', {
+        body: '',
+        ja3: ja3,
+        userAgent: userAgent,
+        disableRedirect: true,
+    },
+        'get');
+    expect(response.status).toBe(301);
     await cycleTLS.exit();
 });
 
 test("Should return a 200 redirect", async () => {
     const cycleTLS = await initCycleTLS({ port: 9121 });
 
-    const normalResponse = await cycleTLS(
-        "https://google.com",
-        {
-            body: "",
-            ja3: ja3,
-            userAgent: userAgent,
-            disableRedirect: false,
-        },
-        "get"
-    );
+    const response = await cycleTLS('https://google.com', {
+        body: '',
+        ja3: ja3,
+        userAgent: userAgent,
+        disableRedirect: false,
+    });
 
-    expect(normalResponse.status).toBe(200);
 
-    cycleTLS.exit();
+    expect(response.status).toBe(200);
+
+    await cycleTLS.exit();
 });
 
 test("Should return final url a 301 redirect", async () => {
     const cycleTLS = await initCycleTLS({ port: 9122 });
     const url = "https://rb.gy/3hwz5h";
-    const redirectResponse = await cycleTLS(
-        url,
-        {
-            body: "",
-            ja3: ja3,
-            userAgent: userAgent,
-            disableRedirect: true,
-        },
+    const redirectResponse = await cycleTLS(url, {
+        body: '',
+        ja3: ja3,
+        userAgent: userAgent,
+        disableRedirect: true,
+    },
         "get"
     );
     expect(redirectResponse.status).toBe(301);
     expect(redirectResponse.finalUrl).toBe(url)
 
-    cycleTLS.exit();
+    await cycleTLS.exit();
 });
 
 test("Should return final url a 200 redirect", async () => {
@@ -78,5 +70,5 @@ test("Should return final url a 200 redirect", async () => {
     expect(normalResponse.status).toBe(200);
     expect(normalResponse.finalUrl).toBe("https://www.google.com/");
 
-    cycleTLS.exit();
+    await cycleTLS.exit();
 });

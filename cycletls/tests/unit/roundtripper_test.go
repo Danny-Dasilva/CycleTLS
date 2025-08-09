@@ -1,4 +1,4 @@
-package cycletls_test
+package unit
 
 import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"

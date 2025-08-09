@@ -20,7 +20,8 @@ const initCycleTLS = require("../dist/index.js");
     cookies: complexCookies,
   });
 
-  console.log(response.body);
+  const result = await response.json();
+  console.log(result);
   /* Expected
   {
     "cookies": {
@@ -29,5 +30,5 @@ const initCycleTLS = require("../dist/index.js");
     }
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();

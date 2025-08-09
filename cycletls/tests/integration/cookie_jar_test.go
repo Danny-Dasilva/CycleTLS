@@ -12,6 +12,7 @@ import (
 
 func TestCookieHandling(t *testing.T) {
 	client := cycletls.Init()
+	defer client.Close() // Ensure resources are cleaned up
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

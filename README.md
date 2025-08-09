@@ -31,6 +31,11 @@ If you have a API change or feature request feel free to open an [Issue](https:/
 - Custom header ordering via [fhttp](https://github.com/useflyent/fhttp)
 - Proxy support | Socks4, Socks5, Socks5h
 - Ja3 Token configuration
+- HTTP/3 and QUIC support
+- WebSocket client
+- Server-Sent Events (SSE)
+- Connection reuse
+- JA4 fingerprinting
 
 
 Table of contents
@@ -47,6 +52,7 @@ Table of contents
 	* [Request Config](#cycletls-request-config)
 	* [Response Schema](#cycletls-response-schema)
 	* [Multiple Requests Example](#multiple-requests-example-for-typescript-and-javascript)
+	* [Streaming Responses](#streaming-responses-axios-style)
 * [Local Setup](#dev-setup)
 * [QA](#questions)
 * [LICENSE](#license)
@@ -79,7 +85,6 @@ $ go get github.com/Danny-Dasilva/CycleTLS/cycletls
 You can run this test in `tests/simple.test.ts`
 
 ```js
-
 const initCycleTLS = require('cycletls');
 // Typescript: import initCycleTLS from 'cycletls';
 
@@ -95,13 +100,245 @@ const initCycleTLS = require('cycletls');
     proxy: 'http://username:password@hostname.com:443', 
   }, 'get');
 
-  console.log(response);
+  // Parse response as JSON
+  const data = await response.json();
+  console.log(data);
 
   // Cleanly exit CycleTLS
   cycleTLS.exit();
 
 })();
 
+```
+
+## JA4 TLS Fingerprinting
+
+JA4 is an enhanced TLS fingerprinting method that provides more detailed client identification:
+
+### JavaScript Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Firefox JA4 fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d'
+  });
+
+  const data = await response.json();
+  console.log('JA4:', data.tls.ja4);
+  console.log('JA4_r:', data.tls.ja4_r);
+  console.log('TLS Version:', data.tls.tls_version_negotiated);
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang JA4 Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // Chrome JA4 fingerprint
+    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+        Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+        UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println("Response with JA4:", response.Status)
+}
+```
+
+## HTTP/2 Fingerprinting
+
+HTTP/2 fingerprinting allows you to mimic specific browser HTTP/2 implementations:
+
+### JavaScript Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Firefox HTTP/2 fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s'
+  });
+
+  const data = await response.json();
+  console.log('HTTP/2 Fingerprint:', data.http2.akamai_fingerprint);
+  console.log('Settings:', data.http2.sent_frames[0].settings);
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang HTTP/2 Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // Firefox HTTP/2 fingerprint
+    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+        HTTP2Fingerprint: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+        UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println("Response with HTTP/2 fingerprint:", response.Status)
+}
+```
+
+### Common Browser HTTP/2 Fingerprints
+
+| Browser | HTTP/2 Fingerprint | Description |
+|---------|-------------------|-------------|
+| Firefox | `1:65536;2:0;4:131072;5:16384\|12517377\|0\|m,p,a,s` | Smaller window size, MPAS priority |
+| Chrome | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` | Larger window size, MASP priority |
+
+### Combined Fingerprinting Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Complete Firefox browser fingerprint
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+  });
+
+  const data = await response.json();
+  console.log('Complete fingerprint applied successfully');
+  console.log('JA4:', data.tls.ja4);
+  console.log('HTTP/2:', data.http2.akamai_fingerprint);
+  
+  cycleTLS.exit();
+})();
+```
+
+## Streaming Responses (Axios-style)
+
+CycleTLS supports axios-compatible streaming responses for real-time data processing:
+
+### Basic Streaming Example
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Get streaming response
+  const response = await cycleTLS.get('https://httpbin.org/stream/3', {
+    headers: { Authorization: `Bearer your_token_here` },
+    responseType: 'stream'
+  });
+
+  const stream = response.data;
+
+  stream.on('data', data => {
+    console.log('Received chunk:', data.toString());
+  });
+
+  stream.on('end', () => {
+    console.log("stream done");
+    cycleTLS.exit();
+  });
+
+  stream.on('error', (error) => {
+    console.error('Stream error:', error);
+    cycleTLS.exit();
+  });
+})();
+```
+
+### Advanced Streaming with Error Handling
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  try {
+    const response = await cycleTLS.get('https://httpbin.org/drip?numbytes=100&duration=2', {
+      responseType: 'stream',
+      ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+      userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    });
+
+    console.log('Status:', response.status);
+    console.log('Headers:', response.headers);
+
+    const chunks = [];
+    
+    response.data.on('data', (chunk) => {
+      chunks.push(chunk);
+      console.log(`Received ${chunk.length} bytes`);
+    });
+
+    response.data.on('end', () => {
+      console.log('Stream complete');
+      const fullData = Buffer.concat(chunks);
+      console.log('Total received:', fullData.length, 'bytes');
+      cycleTLS.exit();
+    });
+
+    response.data.on('error', (error) => {
+      console.error('Stream error:', error);
+      cycleTLS.exit();
+    });
+
+  } catch (error) {
+    console.error('Request failed:', error);
+    cycleTLS.exit();
+  }
+})();
+```
+
+### Non-Streaming Responses (Default Behavior)
+
+For non-streaming responses, CycleTLS works exactly as before:
+
+```js
+// These return buffered responses (existing behavior)
+const jsonResponse = await cycleTLS.get('https://httpbin.org/json', {
+  responseType: 'json' // or omit for default JSON parsing
+});
+const jsonData = await jsonResponse.json();
+console.log(jsonData); // Parsed JSON object
+
+const textResponse = await cycleTLS.get('https://httpbin.org/html', {
+  responseType: 'text'
+});
+const textData = await textResponse.text();
+console.log(textData); // String content
 ```
 
 ## Example CycleTLS Request for Golang
@@ -115,13 +352,14 @@ import (
 )
 
 func main() {
-
 	client := cycletls.Init()
+	defer client.Close()
 
 	response, err := client.Do("https://ja3er.com/json", cycletls.Options{
 		Body : "",
 		Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		EnableConnectionReuse: true, // Enable connection reuse for better performance
 	  }, "GET");
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
@@ -167,6 +405,8 @@ const initCycleTLS = require('cycletls');
 
 // Async/Await method
 const cycleTLS = await initCycleTLS();
+// With optional configuration
+const cycleTLS = await initCycleTLS({ port: 9118, timeout: 30000 });
 // .then method
 initCycleTLS().then((cycleTLS) => {});
 
@@ -231,9 +471,11 @@ Url is not optional, config is optional
   body: '',
   // JA3 token to send with request
   ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+  // JA4 token for enhanced fingerprinting
+  ja4: 't13d1516h2_8daaf6152771_02713d6af862',
   // User agent for request
   userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-  // Proxy to send request through (must be in the same format)
+  // Proxy to send request through (supports http, socks4, socks5, socks5h)
   proxy: 'http://username:password@hostname.com:443',
   // Amount of seconds before request timeout (default: 7)
   timeout: 2,
@@ -244,7 +486,15 @@ Url is not optional, config is optional
   // Toggle if CycleTLS should skip verify certificate (If InsecureSkipVerify is true, TLS accepts any certificate presented by the server and any host name in that certificate.)
   insecureSkipVerify: false	
   // Forces CycleTLS to do a http1 handshake
-  forceHTTP1: false	
+  forceHTTP1: false
+  // Forces HTTP/3 protocol
+  forceHTTP3: false
+  // Enable connection reuse across requests
+  enableConnectionReuse: true
+  // HTTP/2 fingerprint
+  http2Fingerprint: '1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s'
+  // QUIC fingerprint for HTTP/3
+  quicFingerprint: '16030106f2010006ee03039a2b98d81139db0e128ea09eff...'
 }
 
 ```
@@ -281,7 +531,12 @@ If you are using CycleTLS in JavaScript, it is necessary to exit out of the inst
 const initCycleTLS = require("cycletls");
 // Typescript: import initCycleTLS from 'cycletls';
 
-// Defining custom JA3 token and user agenton multiple requests,
+// Defining JA3 token and user agent
+const ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
+const userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
+
+// Defining multiple requests
+const requestDict = {
   "https://httpbin.org/user-agent": {
     ja3: ja3,
     userAgent: userAgent,
@@ -301,43 +556,33 @@ const initCycleTLS = require("cycletls");
   },
 };
 
-// Promises array of requests
-const promises = [];
-
 // Anonymous async function
 (async () => {
   // Initiate CycleTLS
   const cycleTLS = await initCycleTLS();
 
-  // Loop through requestDict (Object) defined above
-  for (const url in requestDict) {
-    // Fetch configs from requestDict (Object)
-    const params = requestDict[url];
-
-    // Send request (note: no waiting)
-    const response = cycleTLS(
+  // Create promises for all requests
+  const promises = Object.entries(requestDict).map(async ([url, params]) => {
+    const response = await cycleTLS(
       url, {
-        body: params.body ?? "", //?? is just setting defaults in this case
+        body: params.body ?? "",
         ja3: params.ja3 ?? ja3,
         userAgent: params.userAgent ?? userAgent,
         headers: params.headers,
         cookies: params.cookies,
       }, params.method ?? "GET");
 
-    // console.log the response object
-    response.then((out) => {
-      console.log(url, out);
-    });
-
-    // Push request to promise array
-    promises.push(response);
-  }
-
-  // Wait for all requests to execute successfully
-  Promise.all(promises).then(() => {
-    // Cleanly exit CycleTLS one all requests have been received
-    cycleTLS.exit();
+    // Parse response based on content type
+    const data = await response.json();
+    console.log(url, data);
+    return { url, data };
   });
+
+  // Wait for all requests to complete
+  await Promise.all(promises);
+  
+  // Cleanly exit CycleTLS
+  cycleTLS.exit();
 })();
 ```
 
@@ -482,7 +727,9 @@ const initCycleTLS = require("cycletls");
       cookie2: "value2",
     },
   });
-  console.log(response.body);
+  
+  const data = await response.json();
+  console.log(data);
   /* Expected
   {
     "cookies": {
@@ -544,7 +791,8 @@ const initCycleTLS = require("cycletls");
     cookies: complexCookies,
   });
 
-  console.log(response.body);
+  const data = await response.json();
+  console.log(data);
   /* Expected
   {
     "cookies": {
@@ -587,7 +835,7 @@ func main() {
       }
     */
     
-    //Altenatively if you want access to values within a map
+    // Alternatively if you want access to values within a map
     log.Println(resp.JSONBody())
     /* Expected
     map[cookies:map[cookie1:value1 cookie2:value2]]
@@ -640,8 +888,9 @@ const Cookie = tough.Cookie;
     },
   });
   
-  //verify cookies were set
-  console.log(secondResponse.body)
+  // Verify cookies were set
+  const data = await secondResponse.json();
+  console.log(data)
   /* Expected
   {
     "cookies": {
@@ -746,12 +995,11 @@ const FormData = require('form-data');
   
   const response = await cycleTLS('http://httpbin.org/post', {
       body: formData,
-      headers: {
-          'Content-Type': 'multipart/form-data',
-      },
+      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -772,15 +1020,13 @@ const fs = require('fs');
   const fileStream = fs.createReadStream("../go.mod");
   formData.append('file', fileStream);
 
-  
   const response = await cycleTLS('http://httpbin.org/post', {
       body: formData,
-      headers: {
-          'Content-Type': 'multipart/form-data',
-      },
+      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -912,7 +1158,8 @@ const initCycleTLS = require("cycletls");
       },
   }, 'post');
 
-  console.log(response);
+  const data = await response.json();
+  console.log(data);
 
   cycleTLS.exit();
 })();
@@ -995,8 +1242,9 @@ const writeImage = (filename, data) => {
     userAgent:
       "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
   });
-  //Write Image
-  writeImage("test.jpeg", jpegImage.body);
+  // Get image data and write to file
+  const imageData = await jpegImage.text(); // Image data is base64 encoded
+  writeImage("test.jpeg", imageData);
 
   cycleTLS.exit();
 })();
@@ -1048,6 +1296,532 @@ Additional file type support is planned.
 Feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) with a feature request for specific file type support. 
 </details>
 
+### How do I use Connection Reuse?
+
+<details>
+
+Connection reuse allows you to reuse TLS connections across multiple requests to the same host, reducing handshake overhead and improving performance.
+
+### Golang Connection Reuse
+
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	// Initialize without worker pool for better connection management
+	client := cycletls.Init(false)
+	defer client.Close()
+
+	// Enable connection reuse in the options
+	options := cycletls.Options{
+		Ja3:                   "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		UserAgent:             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+		EnableConnectionReuse: true, // Enable connection reuse
+	}
+
+	// First request - establishes connection
+	resp1, err := client.Do("https://httpbin.org/get", options, "GET")
+	if err != nil {
+		log.Fatal("First request failed: ", err)
+	}
+	log.Println("First request status:", resp1.Status)
+
+	// Second request - reuses connection
+	resp2, err := client.Do("https://httpbin.org/headers", options, "GET")
+	if err != nil {
+		log.Fatal("Second request failed: ", err)
+	}
+	log.Println("Second request status:", resp2.Status)
+
+	// Connection is reused for requests to the same host
+}
+```
+
+</details>
+
+### How do I use HTTP/3 and QUIC?
+
+<details>
+
+CycleTLS now supports HTTP/3 over QUIC protocol with custom QUIC fingerprinting.
+
+### Golang HTTP/3 Basic Usage
+
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	// Force HTTP/3
+	response, err := client.Do("https://cloudflare-quic.com/", cycletls.Options{
+		ForceHTTP3:         true,
+		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+		InsecureSkipVerify: true,
+	}, "GET")
+
+	if err != nil {
+		log.Fatal("Request failed: ", err)
+	}
+
+	log.Println("Response over HTTP/3:", response.Status)
+}
+```
+
+### Golang QUIC Fingerprinting
+
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	// Custom QUIC fingerprint
+	quicFingerprint := "16030106f2010006ee03039a2b98d81139db0e128ea09eff6874549c219b543fb6dbaa7e4dbfe9e31602c620ce04c4026f019442affade7fed8ba66e022e186f77f1c670fd992f33c0143f120020aaaa130113021303c02bc02fc02cc030cca9cca8c013c014009c009d002f0035010006851a1a00000010000e000c02683208687474702f312e31002b000706dada03040303..."
+
+	response, err := client.Do("https://cloudflare-quic.com/", cycletls.Options{
+		QUICFingerprint:    quicFingerprint,
+		ForceHTTP3:         true,
+		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+		InsecureSkipVerify: true,
+	}, "GET")
+
+	if err != nil {
+		log.Fatal("Request failed: ", err)
+	}
+
+	log.Println("Response with QUIC fingerprint:", response.Status)
+}
+```
+
+### Golang HTTP/3 Transport Direct Usage
+
+```go
+package main
+
+import (
+	"crypto/tls"
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	http "github.com/Danny-Dasilva/fhttp"
+)
+
+func main() {
+	// Create TLS config
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	// Create HTTP/3 transport
+	transport := cycletls.NewHTTP3Transport(tlsConfig)
+
+	// Create request
+	req, err := http.NewRequest("GET", "https://cloudflare-quic.com/", nil)
+	if err != nil {
+		log.Fatal("Failed to create request: ", err)
+	}
+
+	// Send request
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		log.Fatal("Request failed: ", err)
+	}
+	defer resp.Body.Close()
+
+	log.Println("Direct HTTP/3 response:", resp.Status)
+}
+```
+
+</details>
+
+### How do I use WebSocket support?
+
+<details>
+
+CycleTLS provides a WebSocket client that supports custom TLS fingerprinting.
+
+### JavaScript WebSocket Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // WebSocket connection with TLS fingerprinting
+  const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Sec-WebSocket-Protocol': 'echo-protocol'
+    }
+  });
+
+  // Check connection status
+  if (wsResponse.status === 101) {
+    console.log('WebSocket upgrade successful');
+    console.log('Response headers:', wsResponse.headers);
+  }
+
+  cycleTLS.exit();
+})();
+```
+
+### Golang WebSocket Example
+
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/gorilla/websocket"
+	utls "github.com/refraction-networking/utls"
+)
+
+func main() {
+	// Create TLS config
+	tlsConfig := &utls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	// Create headers
+	headers := make(http.Header)
+	headers.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+
+	// Create WebSocket client
+	wsClient := cycletls.NewWebSocketClient(tlsConfig, headers)
+
+	// Connect to WebSocket server
+	conn, resp, err := wsClient.Connect("wss://echo.websocket.org/")
+	if err != nil {
+		log.Fatal("WebSocket connection failed: ", err)
+	}
+	defer conn.Close()
+
+	log.Println("WebSocket connected, status:", resp.StatusCode)
+
+	// Send message
+	testMessage := "Hello, WebSocket!"
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(testMessage)); err != nil {
+		log.Fatal("Failed to send message: ", err)
+	}
+
+	// Read response
+	messageType, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Fatal("Failed to read message: ", err)
+	}
+
+	log.Printf("Received message type %d: %s\n", messageType, string(message))
+}
+```
+
+### Golang WebSocket Response Wrapper
+
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/gorilla/websocket"
+	utls "github.com/refraction-networking/utls"
+)
+
+func main() {
+	// Setup WebSocket client
+	tlsConfig := &utls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	headers := make(http.Header)
+	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	wsClient := cycletls.NewWebSocketClient(tlsConfig, headers)
+
+	// Connect
+	conn, _, err := wsClient.Connect("wss://echo.websocket.org/")
+	if err != nil {
+		log.Fatal("Connection failed: ", err)
+	}
+
+	// Create response wrapper
+	wsResponse := &cycletls.WebSocketResponse{
+		Conn: conn,
+	}
+	defer wsResponse.Close()
+
+	// Send message using wrapper
+	if err := wsResponse.Send(websocket.TextMessage, []byte("Hello!")); err != nil {
+		log.Fatal("Send failed: ", err)
+	}
+
+	// Receive message using wrapper
+	messageType, message, err := wsResponse.Receive()
+	if err != nil {
+		log.Fatal("Receive failed: ", err)
+	}
+
+	log.Printf("Received: %s (type: %d)
+", string(message), messageType)
+}
+```
+
+
+</details>
+
+### How do I use Server-Sent Events (SSE)?
+
+<details>
+
+CycleTLS supports Server-Sent Events for real-time data streaming from servers.
+
+### JavaScript SSE Example
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // SSE connection with TLS fingerprinting
+  const sseResponse = await cycleTLS.sse('https://example.com/events', {
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  // Parse real-time events
+  const eventData = await sseResponse.text();
+  console.log('SSE events:', eventData);
+
+  cycleTLS.exit();
+})();
+```
+
+### JavaScript SSE with Streaming 
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // SSE with streaming for real-time processing
+  const response = await cycleTLS.get('https://example.com/events', {
+    responseType: 'stream',
+    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  // Process SSE stream in real-time
+  const stream = response.data;
+  let buffer = '';
+
+  stream.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('
+');
+    
+    // Process complete lines, keep incomplete line in buffer
+    buffer = lines.pop() || '';
+    
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        const eventData = line.substring(5).trim();
+        console.log('Event data:', eventData);
+      } else if (line.startsWith('event:')) {
+        const eventType = line.substring(6).trim();
+        console.log('Event type:', eventType);
+      }
+    }
+  });
+
+  stream.on('end', () => {
+    console.log('SSE stream ended');
+    cycleTLS.exit();
+  });
+
+  stream.on('error', (error) => {
+    console.error('SSE stream error:', error);
+    cycleTLS.exit();
+  });
+})();
+```
+
+### Golang SSE Client Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	fhttp "github.com/Danny-Dasilva/fhttp"
+)
+
+func main() {
+	// Create HTTP client
+	httpClient := &fhttp.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Create headers
+	headers := make(fhttp.Header)
+	headers.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+	headers.Set("Accept", "text/event-stream")
+
+	// Create SSE client
+	sseClient := cycletls.NewSSEClient(httpClient, headers)
+
+	// Connect to SSE server with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sseResp, err := sseClient.Connect(ctx, "http://localhost:3333/events")
+	if err != nil {
+		log.Fatal("SSE connection failed: ", err)
+	}
+	defer sseResp.Close()
+
+	// Read events
+	eventCount := 0
+	for eventCount < 5 {
+		event, err := sseResp.NextEvent()
+		if err != nil {
+			log.Printf("Error reading event: %v\n", err)
+			break
+		}
+		
+		if event != nil {
+			eventCount++
+			fmt.Printf("Event #%d:\n", eventCount)
+			fmt.Printf("  Type: %s\n", event.Event)
+			fmt.Printf("  Data: %s\n", event.Data)
+			fmt.Printf("  ID: %s\n", event.ID)
+		}
+	}
+}
+```
+
+### Golang SSE with Browser Configuration
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	// Create browser configuration
+	browser := cycletls.Browser{
+		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+		JA3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		InsecureSkipVerify: true,
+	}
+
+	// Connect to SSE endpoint
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := browser.SSEConnect(ctx, "http://127.0.0.1:3333/events")
+	if err != nil {
+		log.Fatal("SSE connection failed: ", err)
+	}
+	defer response.Close()
+
+	// Process events
+	for {
+		event, err := response.NextEvent()
+		if err != nil {
+			log.Printf("Event stream ended: %v\n", err)
+			break
+		}
+		
+		if event != nil && event.Data != "" {
+			fmt.Printf("Received event: %s\n", event.Data)
+			
+			// Break after receiving specific event
+			if event.Data == "done" {
+				break
+			}
+		}
+	}
+}
+```
+
+</details>
+
+### How do I use JA4 fingerprinting?
+
+<details>
+
+JA4 is an enhanced TLS fingerprinting method that provides additional client identification capabilities.
+
+### Golang JA4 Fingerprinting
+
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	// Use both JA3 and JA4 fingerprints
+	response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
+		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+		Ja4:       "t13d1516h2_8daaf6152771_02713d6af862", // JA4 fingerprint
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+	}, "GET")
+
+	if err != nil {
+		log.Fatal("Request failed: ", err)
+	}
+
+	log.Println("Response with JA4:", response.Status)
+}
+```
+
+</details>
 
 ### How do I set/force HTTP1
 
@@ -1092,11 +1866,12 @@ const initCycleTLS = require('cycletls');
     ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
     userAgent:
       'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    forceHTTP1: false, //Set this field
+    forceHTTP1: true, // Set this field to force HTTP/1.1
   });
 
-  console.log(response);
-  //You can verify the HTTP_Version in the response
+  const data = await response.json();
+  console.log(data);
+  // You can verify the HTTP_Version in the response
   cycleTLS.exit();
 
 })();
