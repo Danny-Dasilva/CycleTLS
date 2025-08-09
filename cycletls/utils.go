@@ -236,6 +236,13 @@ type JA4Components struct {
 	UserAgentHash    string
 }
 
+// JA4HComponents represents the parsed components of a JA4H (HTTP Client) string
+type JA4HComponents struct {
+	HTTPMethodVersion string
+	HeadersHash       string  
+	CookiesHash       string
+}
+
 // ParseJA4String parses a JA4 string into its components
 // JA4 format: <TLS version><cipher hash>_<extensions hash>_<headers hash>_<UA hash>
 // Example: t13d_cd89_1952_bb99
@@ -282,6 +289,36 @@ func ParseJA4String(ja4 string) (*JA4Components, error) {
 		ExtensionsHash:   extensionsHash,
 		HeadersHash:      "", // Not used in 3-part format
 		UserAgentHash:    "", // Not used in 3-part format
+	}, nil
+}
+
+// ParseJA4HString parses a JA4H (HTTP Client) string into its components
+// JA4H format: <method_version>_<headers_hash>_<cookies_hash>
+// Example: po11_73a4f1e_8b3fce7
+func ParseJA4HString(ja4h string) (*JA4HComponents, error) {
+	if len(ja4h) < 8 { // minimum reasonable length for JA4H
+		return nil, errors.New("invalid JA4H string: too short")
+	}
+
+	// Split by underscores
+	parts := strings.Split(ja4h, "_")
+	if len(parts) != 3 {
+		return nil, errors.New("invalid JA4H string: incorrect format - expected 3 parts separated by underscores")
+	}
+
+	// Validate method version format (e.g., "po11" for POST HTTP/1.1, "ge20" for GET HTTP/2.0)
+	httpMethodVersion := parts[0]
+	if len(httpMethodVersion) < 4 {
+		return nil, errors.New("invalid JA4H string: HTTP method/version too short")
+	}
+
+	headersHash := parts[1]
+	cookiesHash := parts[2]
+
+	return &JA4HComponents{
+		HTTPMethodVersion: httpMethodVersion,
+		HeadersHash:       headersHash,
+		CookiesHash:       cookiesHash,
 	}, nil
 }
 
@@ -798,4 +835,65 @@ func PrettyStruct(data interface{}) (string, error) {
 		return "", err
 	}
 	return string(val), nil
+}
+
+// ApplyJA4HToRequest applies JA4H fingerprinting to an HTTP request
+// JA4H focuses on HTTP-level fingerprinting (headers, cookies, method/version)
+func ApplyJA4HToRequest(req *fhttp.Request, ja4h string) error {
+	components, err := ParseJA4HString(ja4h)
+	if err != nil {
+		return fmt.Errorf("failed to parse JA4H: %w", err)
+	}
+
+	// Extract HTTP method and version from JA4H
+	methodVersion := components.HTTPMethodVersion
+	if len(methodVersion) < 4 {
+		return errors.New("invalid JA4H method/version format")
+	}
+
+	// Parse method (first 2 characters: po=POST, ge=GET, pu=PUT, etc.)
+	methodCode := methodVersion[:2]
+	var method string
+	switch methodCode {
+	case "ge":
+		method = "GET"
+	case "po":
+		method = "POST"
+	case "pu":
+		method = "PUT"
+	case "he":
+		method = "HEAD"
+	case "de":
+		method = "DELETE"
+	case "pa":
+		method = "PATCH"
+	case "op":
+		method = "OPTIONS"
+	default:
+		method = "GET" // Default fallback
+	}
+
+	// Apply method to request
+	req.Method = method
+
+	// Parse HTTP version (last 2 characters: 11=HTTP/1.1, 20=HTTP/2.0)
+	versionCode := methodVersion[2:4]
+	switch versionCode {
+	case "11":
+		req.Proto = "HTTP/1.1"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 1
+	case "20":
+		req.Proto = "HTTP/2.0"
+		req.ProtoMajor = 2
+		req.ProtoMinor = 0
+	default:
+		// Keep existing protocol settings
+	}
+
+	// Note: Headers hash and cookies hash are used for identification
+	// but since they're hashes, we can't reconstruct the original headers/cookies
+	// In a real implementation, these would be used for matching against known fingerprints
+
+	return nil
 }

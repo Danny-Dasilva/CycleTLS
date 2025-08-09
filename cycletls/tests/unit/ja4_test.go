@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	fhttp "github.com/Danny-Dasilva/fhttp"
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	utls "github.com/refraction-networking/utls"
 )
@@ -70,8 +71,8 @@ func TestGenerateJA4H2(t *testing.T) {
 }
 
 func TestParseJA4String(t *testing.T) {
-	// Test case 1: Valid JA4 string
-	ja4String := "t13d_cd89_1952_bb99"
+	// Test case 1: Valid JA4 string (3-part format)
+	ja4String := "t13d1717h2_5b57614c22b0_f2748d6cd58d"
 	components, err := cycletls.ParseJA4String(ja4String)
 	if err != nil {
 		t.Errorf("ParseJA4String failed: %v", err)
@@ -81,20 +82,12 @@ func TestParseJA4String(t *testing.T) {
 		t.Errorf("TLS version incorrect: got %s, want t13", components.TLSVersion)
 	}
 
-	if components.CipherHash != "d" {
-		t.Errorf("Cipher hash incorrect: got %s, want d", components.CipherHash)
+	if components.CipherHash != "5b57614c22b0" {
+		t.Errorf("Cipher hash incorrect: got %s, want 5b57614c22b0", components.CipherHash)
 	}
 
-	if components.ExtensionsHash != "cd89" {
-		t.Errorf("Extensions hash incorrect: got %s, want cd89", components.ExtensionsHash)
-	}
-
-	if components.HeadersHash != "1952" {
-		t.Errorf("Headers hash incorrect: got %s, want 1952", components.HeadersHash)
-	}
-
-	if components.UserAgentHash != "bb99" {
-		t.Errorf("User agent hash incorrect: got %s, want bb99", components.UserAgentHash)
+	if components.ExtensionsHash != "f2748d6cd58d" {
+		t.Errorf("Extensions hash incorrect: got %s, want f2748d6cd58d", components.ExtensionsHash)
 	}
 
 	// Test case 2: Invalid JA4 string - too short
@@ -103,16 +96,22 @@ func TestParseJA4String(t *testing.T) {
 		t.Error("Expected error for short JA4 string")
 	}
 
-	// Test case 3: Invalid JA4 string - wrong format
-	_, err = cycletls.ParseJA4String("t13d_cd89_1952")
+	// Test case 3: Invalid JA4 string - wrong format (2 parts instead of 3)
+	_, err = cycletls.ParseJA4String("t13d1717h2_5b57614c22b0")
 	if err == nil {
 		t.Error("Expected error for malformed JA4 string")
+	}
+
+	// Test case 4: Invalid JA4 string - 4 parts (old format)
+	_, err = cycletls.ParseJA4String("t13d_cd89_1952_bb99")
+	if err == nil {
+		t.Error("Expected error for old 4-part JA4 format")
 	}
 }
 
 func TestJA4StringToSpec(t *testing.T) {
-	// Test case 1: TLS 1.3 JA4
-	ja4String := "t13d_cd89_1952_bb99"
+	// Test case 1: TLS 1.3 JA4 (3-part format)
+	ja4String := "t13d1516h2_8daaf6152771_02713d6af862"
 	userAgent := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 	
 	spec, err := cycletls.JA4StringToSpec(ja4String, userAgent, false)
@@ -129,8 +128,8 @@ func TestJA4StringToSpec(t *testing.T) {
 		t.Errorf("TLS max version incorrect: got %x, want %x", spec.TLSVersMax, 0x0304)
 	}
 
-	// Test case 2: TLS 1.2 JA4
-	ja4String = "t12d_cd89_1952_bb99"
+	// Test case 2: TLS 1.2 JA4 (3-part format)
+	ja4String = "t12d1516h2_8daaf6152771_02713d6af862"
 	
 	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
 	if err != nil {
@@ -161,10 +160,135 @@ func TestJA4StringToSpec(t *testing.T) {
 		t.Error("Expected ALPN extension with http/1.1 when forceHTTP1 is true")
 	}
 
-	// Test case 4: Invalid TLS version
-	ja4String = "t99d_cd89_1952_bb99"
+	// Test case 4: Invalid TLS version (3-part format)
+	ja4String = "t99d1516h2_8daaf6152771_02713d6af862"
 	_, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
 	if err == nil {
 		t.Error("Expected error for invalid TLS version")
+	}
+}
+
+func TestParseJA4HString(t *testing.T) {
+	// Test case 1: Valid JA4H string (HTTP Client fingerprint)
+	ja4hString := "ge11_73a4f1e_8b3fce7"
+	components, err := cycletls.ParseJA4HString(ja4hString)
+	if err != nil {
+		t.Errorf("ParseJA4HString failed: %v", err)
+	}
+
+	if components.HTTPMethodVersion != "ge11" {
+		t.Errorf("HTTP method/version incorrect: got %s, want ge11", components.HTTPMethodVersion)
+	}
+
+	if components.HeadersHash != "73a4f1e" {
+		t.Errorf("Headers hash incorrect: got %s, want 73a4f1e", components.HeadersHash)
+	}
+
+	if components.CookiesHash != "8b3fce7" {
+		t.Errorf("Cookies hash incorrect: got %s, want 8b3fce7", components.CookiesHash)
+	}
+
+	// Test case 2: Valid JA4H string with POST HTTP/2.0
+	ja4hString = "po20_ab123cd_ef456gh"
+	components, err = cycletls.ParseJA4HString(ja4hString)
+	if err != nil {
+		t.Errorf("ParseJA4HString failed: %v", err)
+	}
+
+	if components.HTTPMethodVersion != "po20" {
+		t.Errorf("HTTP method/version incorrect: got %s, want po20", components.HTTPMethodVersion)
+	}
+
+	// Test case 3: Invalid JA4H string - too short
+	_, err = cycletls.ParseJA4HString("ge1")
+	if err == nil {
+		t.Error("Expected error for short JA4H string")
+	}
+
+	// Test case 4: Invalid JA4H string - wrong format (2 parts instead of 3)
+	_, err = cycletls.ParseJA4HString("ge11_73a4f1e")
+	if err == nil {
+		t.Error("Expected error for malformed JA4H string")
+	}
+
+	// Test case 5: Invalid JA4H string - method/version too short
+	_, err = cycletls.ParseJA4HString("ge_73a4f1e_8b3fce7")
+	if err == nil {
+		t.Error("Expected error for short method/version in JA4H string")
+	}
+}
+
+func TestApplyJA4HToRequest(t *testing.T) {
+	// Create a test request
+	req, err := fhttp.NewRequest("GET", "https://example.com", nil)
+	if err != nil {
+		t.Errorf("Failed to create test request: %v", err)
+	}
+
+	// Test case 1: Apply GET HTTP/1.1 JA4H
+	ja4hString := "ge11_73a4f1e_8b3fce7"
+	err = cycletls.ApplyJA4HToRequest(req, ja4hString)
+	if err != nil {
+		t.Errorf("ApplyJA4HToRequest failed: %v", err)
+	}
+
+	if req.Method != "GET" {
+		t.Errorf("Method not applied correctly: got %s, want GET", req.Method)
+	}
+
+	if req.Proto != "HTTP/1.1" {
+		t.Errorf("Protocol not applied correctly: got %s, want HTTP/1.1", req.Proto)
+	}
+
+	if req.ProtoMajor != 1 || req.ProtoMinor != 1 {
+		t.Errorf("Protocol version not applied correctly: got %d.%d, want 1.1", req.ProtoMajor, req.ProtoMinor)
+	}
+
+	// Test case 2: Apply POST HTTP/2.0 JA4H
+	ja4hString = "po20_ab123cd_ef456gh"
+	err = cycletls.ApplyJA4HToRequest(req, ja4hString)
+	if err != nil {
+		t.Errorf("ApplyJA4HToRequest failed: %v", err)
+	}
+
+	if req.Method != "POST" {
+		t.Errorf("Method not applied correctly: got %s, want POST", req.Method)
+	}
+
+	if req.Proto != "HTTP/2.0" {
+		t.Errorf("Protocol not applied correctly: got %s, want HTTP/2.0", req.Proto)
+	}
+
+	if req.ProtoMajor != 2 || req.ProtoMinor != 0 {
+		t.Errorf("Protocol version not applied correctly: got %d.%d, want 2.0", req.ProtoMajor, req.ProtoMinor)
+	}
+
+	// Test case 3: Test other HTTP methods
+	testCases := []struct {
+		ja4h           string
+		expectedMethod string
+	}{
+		{"pu11_123456_789abc", "PUT"},
+		{"he11_123456_789abc", "HEAD"},
+		{"de11_123456_789abc", "DELETE"},
+		{"pa11_123456_789abc", "PATCH"},
+		{"op11_123456_789abc", "OPTIONS"},
+		{"xx11_123456_789abc", "GET"}, // Unknown method should default to GET
+	}
+
+	for _, tc := range testCases {
+		err = cycletls.ApplyJA4HToRequest(req, tc.ja4h)
+		if err != nil {
+			t.Errorf("ApplyJA4HToRequest failed for %s: %v", tc.ja4h, err)
+		}
+		if req.Method != tc.expectedMethod {
+			t.Errorf("Method not applied correctly for %s: got %s, want %s", tc.ja4h, req.Method, tc.expectedMethod)
+		}
+	}
+
+	// Test case 4: Invalid JA4H string
+	err = cycletls.ApplyJA4HToRequest(req, "invalid")
+	if err == nil {
+		t.Error("Expected error for invalid JA4H string")
 	}
 }

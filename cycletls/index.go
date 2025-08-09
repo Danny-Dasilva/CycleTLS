@@ -29,6 +29,7 @@ type Options struct {
 	// TLS fingerprinting options
 	Ja3                string            `json:"ja3"`
 	Ja4                string            `json:"ja4"`
+	Ja4H               string            `json:"ja4h"` // HTTP Client fingerprinting
 	HTTP2Fingerprint   string            `json:"http2Fingerprint"`
 	QUICFingerprint    string            `json:"quicFingerprint"`
 	
@@ -217,6 +218,14 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
+	// Apply JA4H fingerprinting if provided
+	if request.Options.Ja4H != "" {
+		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
+		if err != nil {
+			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
+		}
+	}
+
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel
 	activeRequestsMutex.Unlock()
@@ -287,6 +296,14 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	}
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
+
+	// Apply JA4H fingerprinting if provided
+	if request.Options.Ja4H != "" {
+		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
+		if err != nil {
+			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
+		}
+	}
 
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel

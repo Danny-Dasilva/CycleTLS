@@ -75,9 +75,6 @@ describe('Server-Sent Events Tests', () => {
       }
     });
 
-    // Debug: Log the response to understand what we're getting
-    console.log('GET Response status:', response.status);
-    console.log('GET Response headers:', response.headers);
     
     // Check that we got a successful response
     expect(response.status).toBe(200);
@@ -92,7 +89,6 @@ describe('Server-Sent Events Tests', () => {
     
     // Parse SSE events from the response
     const streamData = await response.text();
-    console.log('GET Stream data:', streamData);
     
     // Basic SSE parser
     const lines = streamData.split('\n');
@@ -139,7 +135,6 @@ describe('Server-Sent Events Tests', () => {
     
     // The response should contain SSE formatted data
     const responseText = await response.text();
-    console.log('Streaming test response length:', responseText.length);
     
     // Basic checks for SSE format
     expect(responseText).toBeDefined();

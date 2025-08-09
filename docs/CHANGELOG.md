@@ -1,6 +1,6 @@
 # CycleTLS Changelog
 
-## 2.0.0 - (8-5-2025)
+## 2.0.0 - (8-9-2025)
 ### Release Highlights
 ⚠️ **MAJOR BREAKING CHANGES** ⚠️
 

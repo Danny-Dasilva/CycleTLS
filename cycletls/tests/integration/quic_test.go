@@ -114,6 +114,12 @@ func TestQUICHttp3WithoutFingerprint(t *testing.T) {
 }
 
 func TestQUICTransportDirect(t *testing.T) {
+	// Skip QUIC tests in CI environment due to network restrictions
+	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping QUIC HTTP/3 test in CI environment due to network restrictions")
+		return
+	}
+
 	// Test HTTP/3 transport directly with QUIC fingerprint integration
 	// This tests that our QUIC fingerprint works through the roundtripper
 	tlsConfig := &tls.Config{

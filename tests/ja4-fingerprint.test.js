@@ -27,7 +27,6 @@ describe("JA4 Fingerprinting Tests", () => {
     expect(result.tls.ja4).toBeDefined();
     expect(result.http_version).toBe("h2");
     
-    console.log('Firefox peet.ws JA4:', result.tls.ja4);
   });
 
   test("Chrome JA4 fingerprint with peet.ws", async () => {
@@ -46,7 +45,6 @@ describe("JA4 Fingerprinting Tests", () => {
     expect(result.tls.ja4).toBeDefined();
     expect(result.http_version).toBe("h2");
     
-    console.log('Chrome peet.ws JA4:', result.tls.ja4);
   });
 
   test("Firefox JA4 fingerprint with scrapfly.io", async () => {
@@ -64,7 +62,6 @@ describe("JA4 Fingerprinting Tests", () => {
     expect(result.tls).toBeDefined();
     expect(result.http_protocol_version).toBe("HTTP/2.0");
     
-    console.log('Firefox scrapfly.io TLS data:', result.tls);
   });
 
   test("Chrome JA4 fingerprint with scrapfly.io", async () => {
@@ -82,6 +79,5 @@ describe("JA4 Fingerprinting Tests", () => {
     expect(result.tls).toBeDefined();
     expect(result.http_protocol_version).toBe("HTTP/2.0");
     
-    console.log('Chrome scrapfly.io TLS data:', result.tls);
   });
 });

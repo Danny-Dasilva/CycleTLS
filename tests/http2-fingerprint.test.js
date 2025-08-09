@@ -27,7 +27,6 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     expect(result.http2).toBeDefined();
     expect(result.http2.akamai_fingerprint).toBeDefined();
     
-    console.log('Firefox peet.ws HTTP/2:', result.http2.akamai_fingerprint);
   });
 
   test("Chrome HTTP/2 fingerprint with peet.ws", async () => {
@@ -46,7 +45,6 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     expect(result.http2).toBeDefined();
     expect(result.http2.akamai_fingerprint).toBeDefined();
     
-    console.log('Chrome peet.ws HTTP/2:', result.http2.akamai_fingerprint);
   });
 
   test("Firefox HTTP/2 fingerprint with scrapfly.io", async () => {
@@ -65,7 +63,6 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     expect(result.http2).toBeDefined();
     expect(result.http2.fingerprint).toBeDefined();
     
-    console.log('Firefox scrapfly.io HTTP/2:', result.http2.fingerprint);
   });
 
   test("Chrome HTTP/2 fingerprint with scrapfly.io", async () => {
@@ -84,6 +81,5 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     expect(result.http2).toBeDefined();
     expect(result.http2.fingerprint).toBeDefined();
     
-    console.log('Chrome scrapfly.io HTTP/2:', result.http2.fingerprint);
   });
 });

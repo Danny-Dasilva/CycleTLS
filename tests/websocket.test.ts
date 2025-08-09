@@ -60,15 +60,12 @@ describe('WebSocket Tests', () => {
         userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
       });
 
-      console.log('HTTP to WebSocket server status:', response.status);
-      console.log('HTTP to WebSocket server headers:', response.headers);
       
       // Regular HTTP requests to WebSocket servers typically return 400 (Bad Request)
       // since they expect WebSocket upgrade headers, or 408 (timeout)
       expect([200, 400, 404, 408, 426]).toContain(response.status);
       
     } catch (error) {
-      console.log('HTTP to WebSocket server test error:', error.message);
       // This may fail if server doesn't handle HTTP requests
       expect(true).toBe(true);
     }
