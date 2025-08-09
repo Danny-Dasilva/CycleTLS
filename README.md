@@ -115,6 +115,56 @@ const initCycleTLS = require('cycletls');
 
 JA4 is an enhanced TLS fingerprinting method that provides more detailed client identification:
 
+## JA4H HTTP Client Fingerprinting
+
+JA4H provides HTTP client fingerprinting based on HTTP headers, methods, and cookies. It complements TLS fingerprinting by analyzing the application layer behavior.
+
+### JavaScript JA4H Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // JA4H fingerprint format: method+version_headers_cookies
+  const response = await cycleTLS('https://tls.peet.ws/api/all', {
+    ja4h: 'ge11_73a4f1e_8b3fce7', // GET HTTP/1.1 with specific header/cookie hashes
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+  });
+
+  const data = await response.json();
+  console.log('JA4H:', data.http.ja4h);
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang JA4H Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // JA4H fingerprint
+    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+        Ja4H: "ge11_73a4f1e_8b3fce7", // HTTP client fingerprint
+        UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println("Response with JA4H:", response.Status)
+}
+```
+
 ### JavaScript Example
 ```js
 const initCycleTLS = require('cycletls');
@@ -495,9 +545,312 @@ Url is not optional, config is optional
   http2Fingerprint: '1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s'
   // QUIC fingerprint for HTTP/3
   quicFingerprint: '16030106f2010006ee03039a2b98d81139db0e128ea09eff...'
+  // JA4H HTTP client fingerprint
+  ja4h: 'ge11_73a4f1e_8b3fce7'
 }
 
 ```
+
+## Response Decompression
+
+CycleTLS automatically handles response decompression for compressed content. No additional configuration is needed.
+
+**Supported Compression Formats**
+* `gzip` - Automatically decompressed
+* `deflate` - Automatically decompressed  
+* `brotli` - Automatically decompressed
+
+### JavaScript Decompression Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // CycleTLS automatically handles compressed responses
+  const response = await cycleTLS('https://httpbin.org/gzip', {
+    headers: {
+      'Accept-Encoding': 'gzip, deflate, br' // Optional - CycleTLS sets this automatically
+    }
+  });
+
+  // Response is automatically decompressed
+  const data = await response.json();
+  console.log('Decompressed data:', data);
+
+  cycleTLS.exit();
+})();
+```
+
+### Golang Decompression Example
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // CycleTLS automatically handles compressed responses
+    response, err := client.Do("https://httpbin.org/gzip", cycletls.Options{
+        Headers: map[string]string{
+            "Accept-Encoding": "gzip, deflate, br", // Optional - set automatically
+        },
+    }, "GET")
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Response body is automatically decompressed
+    log.Println("Decompressed response:", response.Body)
+    
+    // Parse as JSON if needed
+    jsonData := response.JSONBody()
+    log.Println("Parsed JSON:", jsonData)
+}
+```
+
+**Note:** Decompression happens automatically based on the `Content-Encoding` header. You don't need to manually decompress responses.
+
+## Timeout and Error Handling
+
+CycleTLS provides comprehensive timeout handling and error responses for failed requests.
+
+### Timeout Configuration
+
+```js
+// JavaScript timeout example
+const response = await cycleTLS('https://httpbin.org/delay/10', {
+  timeout: 5, // 5 seconds timeout
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0'
+});
+```
+
+```go
+// Golang timeout example
+response, err := client.Do("https://httpbin.org/delay/10", cycletls.Options{
+    Timeout:   5, // 5 seconds timeout
+    UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+}, "GET")
+```
+
+### Timeout Error Response
+
+When a request times out, CycleTLS returns a response with:
+- **Status Code**: `408` (Request Timeout)
+- **Body**: Contains error message describing the timeout
+- **Error**: JavaScript will have the response object, Go will have `err != nil`
+
+### JavaScript Timeout Error Handling
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  try {
+    const response = await cycleTLS('https://httpbin.org/delay/10', {
+      timeout: 2, // Will timeout after 2 seconds
+    });
+
+    if (response.status === 408) {
+      console.log('Request timed out:', response.body);
+    } else {
+      const data = await response.json();
+      console.log('Success:', data);
+    }
+  } catch (error) {
+    console.error('Request failed:', error);
+  } finally {
+    cycleTLS.exit();
+  }
+})();
+```
+
+### Golang Timeout Error Handling
+
+```go
+package main
+
+import (
+    "log"
+    "strings"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    response, err := client.Do("https://httpbin.org/delay/10", cycletls.Options{
+        Timeout: 2, // Will timeout after 2 seconds
+    }, "GET")
+
+    if err != nil {
+        log.Printf("Request failed: %v", err)
+        return
+    }
+
+    // Check for timeout response
+    if response.Status == 408 {
+        log.Printf("Request timed out: %s", response.Body)
+        return
+    }
+
+    // Check for other error conditions
+    if strings.Contains(response.Body, "timeout") {
+        log.Printf("Timeout detected in response: %s", response.Body)
+        return
+    }
+
+    // Success case
+    log.Printf("Request succeeded: %d", response.Status)
+}
+```
+
+### Common Error Status Codes
+
+- **408**: Request timeout
+- **502**: Bad gateway (proxy/connection issues)
+- **503**: Service unavailable
+- **0**: Connection failed (network errors)
+
+## Proxy Support
+
+CycleTLS supports multiple proxy protocols for routing requests through intermediary servers.
+
+### Supported Proxy Types
+
+- **HTTP Proxy**: `http://proxy.example.com:8080`
+- **HTTPS Proxy**: `https://proxy.example.com:8080`
+- **SOCKS4**: `socks4://proxy.example.com:1080`
+- **SOCKS5**: `socks5://proxy.example.com:1080`
+- **SOCKS5h**: `socks5h://proxy.example.com:1080` (hostname resolution through proxy)
+
+### JavaScript Proxy Examples
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // HTTP Proxy with authentication
+  const httpResponse = await cycleTLS('https://httpbin.org/ip', {
+    proxy: 'http://username:password@proxy.example.com:8080'
+  });
+
+  // SOCKS5 Proxy
+  const socksResponse = await cycleTLS('https://httpbin.org/ip', {
+    proxy: 'socks5://proxy.example.com:1080'
+  });
+
+  // SOCKS5h (hostname resolution through proxy)
+  const socks5hResponse = await cycleTLS('https://httpbin.org/ip', {
+    proxy: 'socks5h://proxy.example.com:1080'
+  });
+
+  console.log('HTTP Proxy IP:', await httpResponse.json());
+  console.log('SOCKS5 IP:', await socksResponse.json());
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang Proxy Examples
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+    client := cycletls.Init()
+    defer client.Close()
+
+    // HTTP Proxy with authentication
+    httpResponse, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+        Proxy: "http://username:password@proxy.example.com:8080",
+    }, "GET")
+    
+    if err != nil {
+        log.Printf("HTTP proxy request failed: %v", err)
+    } else {
+        log.Printf("HTTP Proxy Response: %s", httpResponse.Body)
+    }
+
+    // SOCKS4 Proxy
+    socks4Response, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+        Proxy: "socks4://proxy.example.com:1080",
+    }, "GET")
+    
+    if err != nil {
+        log.Printf("SOCKS4 proxy request failed: %v", err)
+    } else {
+        log.Printf("SOCKS4 Response: %s", socks4Response.Body)
+    }
+
+    // SOCKS5 Proxy
+    socks5Response, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+        Proxy: "socks5://proxy.example.com:1080",
+    }, "GET")
+    
+    if err != nil {
+        log.Printf("SOCKS5 proxy request failed: %v", err)
+    } else {
+        log.Printf("SOCKS5 Response: %s", socks5Response.Body)
+    }
+
+    // SOCKS5h (hostname resolved through proxy)
+    socks5hResponse, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+        Proxy: "socks5h://proxy.example.com:1080",
+    }, "GET")
+    
+    if err != nil {
+        log.Printf("SOCKS5h proxy request failed: %v", err)
+    } else {
+        log.Printf("SOCKS5h Response: %s", socks5hResponse.Body)
+    }
+}
+```
+
+### Proxy Error Handling
+
+```go
+// Check for proxy connection errors
+response, err := client.Do("https://example.com", cycletls.Options{
+    Proxy: "socks5://proxy.example.com:1080",
+    Timeout: 10,
+}, "GET")
+
+if err != nil {
+    log.Printf("Proxy connection failed: %v", err)
+    return
+}
+
+// Check for proxy authentication errors
+if response.Status == 407 {
+    log.Printf("Proxy authentication required")
+    return
+}
+
+// Check for proxy server errors
+if response.Status == 502 {
+    log.Printf("Bad gateway - proxy server error")
+    return
+}
+```
+
+**Note**: SOCKS5h resolves hostnames through the proxy server, providing better privacy and allowing access to internal networks through the proxy.
 
 ## CycleTLS Response Schema
 
@@ -1199,32 +1552,39 @@ func main() {
 ```
 </details>
 
-### How do I download images?
+### How do I download images and videos?
 
 <details>
 
-Images with a `Content-Type` header of the following types are base 64 encoded. 
+Images and videos with supported `Content-Type` headers are returned as raw binary data stored in a string format.
 
-**Supported Image Types**
+**Supported Media Types**
 * `image/svg+xml`
 * `image/webp`
 * `image/jpeg`
 * `image/png`
+* `image/gif`
 * `application/pdf`
+* `video/mp4`
+* `video/webm`
+* `video/avi`
+* `video/quicktime`
+
+**Important:** The media data is NOT base64 encoded. It is raw binary data converted to a string format.
 
 To write them to a file you can use the below methods
 
-### Javascript Image Write to File
+### Javascript Media Download Example
 ```js
 const initCycleTLS = require("cycletls");
 var fs = require("fs");
 
-//Function to write image to a file
-const writeImage = (filename, data) => {
+//Function to write media file (images/videos)
+const writeMedia = (filename, data) => {
   let writeStream = fs.createWriteStream(filename);
 
-  // write some data with a base64 encoding
-  writeStream.write(data, "base64");
+  // write raw binary data (no encoding needed)
+  writeStream.write(Buffer.from(data, 'binary'));
   writeStream.on("finish", () => {
     console.log(`wrote to file ${filename}`);
   });
@@ -1235,57 +1595,91 @@ const writeImage = (filename, data) => {
 
 (async () => {
   const cycleTLS = await initCycleTLS();
-  // try {
 
+  // Download image
   const jpegImage = await cycleTLS("http://httpbin.org/image/jpeg", {
     ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
     userAgent:
       "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
   });
-  // Get image data and write to file
-  const imageData = await jpegImage.text(); // Image data is base64 encoded
-  writeImage("test.jpeg", imageData);
+  const imageData = await jpegImage.text(); // Raw binary data as string
+  writeMedia("test.jpeg", imageData);
+
+  // Download video
+  const videoResponse = await cycleTLS("https://sample-videos.com/zip/10/mp4/SampleVideo_360x240_1mb.mp4", {
+    ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+    userAgent:
+      "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+  const videoData = await videoResponse.text(); // Raw binary data as string
+  writeMedia("sample_video.mp4", videoData);
 
   cycleTLS.exit();
 })();
 
 ```
-### Golang Image Write to File
+### Golang Media Download Example
 ```golang
 package main
 
 import (
-    "encoding/base64"
+    "log"
     "os"
     "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
-func main() {
+func writeMedia(filepath string, data string) error {
+    // Convert string body to bytes (raw binary data)
+    bodyBytes := []byte(data)
+    
+    f, err := os.Create(filepath)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+    
+    if _, err := f.Write(bodyBytes); err != nil {
+        return err
+    }
+    
+    return f.Sync()
+}
 
+func main() {
     client := cycletls.Init()
+    defer client.Close()
+    
+    // Download image
     response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
       Body:      "",
       Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
       UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
     }, "GET")
-    // Decode Base64
-    dec, err := base64.StdEncoding.DecodeString(response.Body)
+    
     if err != nil {
-        panic(err)
+        log.Fatal("Image download failed: ", err)
     }
-    //create file to write
-    f, err := os.Create("test.jpeg")
+    
+    if err := writeMedia("test.jpeg", response.Body); err != nil {
+        log.Fatal("Image write failed: ", err)
+    }
+    log.Println("Image downloaded successfully")
+    
+    // Download video
+    videoResponse, err := client.Do("https://sample-videos.com/zip/10/mp4/SampleVideo_360x240_1mb.mp4", cycletls.Options{
+      Body:      "",
+      Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+      UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+    }, "GET")
+    
     if err != nil {
-        panic(err)
+        log.Fatal("Video download failed: ", err)
     }
-    defer f.Close()
-    //write b64 to file
-    if _, err := f.Write(dec); err != nil {
-        panic(err)
+    
+    if err := writeMedia("sample_video.mp4", videoResponse.Body); err != nil {
+        log.Fatal("Video write failed: ", err)
     }
-    if err := f.Sync(); err != nil {
-        panic(err)
-    }
+    log.Println("Video downloaded successfully")
 }
 
 ```
@@ -1747,14 +2141,14 @@ import (
 )
 
 func main() {
-	// Create browser configuration
+	// Create browser configuration with TLS fingerprinting
 	browser := cycletls.Browser{
 		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
 		JA3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		InsecureSkipVerify: true,
 	}
 
-	// Connect to SSE endpoint
+	// Connect to SSE endpoint with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -1764,7 +2158,7 @@ func main() {
 	}
 	defer response.Close()
 
-	// Process events
+	// Process events with detailed parsing
 	for {
 		event, err := response.NextEvent()
 		if err != nil {
@@ -1773,7 +2167,9 @@ func main() {
 		}
 		
 		if event != nil && event.Data != "" {
-			fmt.Printf("Received event: %s\n", event.Data)
+			fmt.Printf("Event Type: %s\n", event.Event)
+			fmt.Printf("Event ID: %s\n", event.ID)
+			fmt.Printf("Event Data: %s\n", event.Data)
 			
 			// Break after receiving specific event
 			if event.Data == "done" {
@@ -1781,6 +2177,37 @@ func main() {
 			}
 		}
 	}
+}
+```
+
+### Browser.SSEConnect Method
+
+The `Browser.SSEConnect` method provides SSE connections with TLS fingerprinting support:
+
+```go
+type Browser struct {
+    UserAgent          string
+    JA3                string
+    JA4                string
+    HTTP2Fingerprint   string
+    QUICFingerprint    string
+    InsecureSkipVerify bool
+    ForceHTTP1         bool
+    ForceHTTP3         bool
+}
+
+// SSEConnect establishes an SSE connection with browser fingerprinting
+func (b *Browser) SSEConnect(ctx context.Context, url string) (*SSEResponse, error)
+```
+
+### SSE Event Structure
+
+```go
+type SSEEvent struct {
+    ID    string  // Event ID from server
+    Event string  // Event type (custom event names)
+    Data  string  // Event data payload
+    Retry int64   // Reconnection time in milliseconds
 }
 ```
 
