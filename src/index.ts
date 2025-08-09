@@ -691,7 +691,7 @@ class CycleTLSClientImpl extends EventEmitter {
                 },
                 arrayBuffer: async (): Promise<ArrayBuffer> => {
                   const buffer = await streamToBuffer(liveStream);
-                  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+                  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
                 },
                 blob: async (): Promise<Blob> => {
                   const buffer = await streamToBuffer(liveStream);
@@ -913,7 +913,7 @@ function createResponseMethods(rawBuffer: Buffer, headers: { [key: string]: any 
     },
     
     arrayBuffer: async (): Promise<ArrayBuffer> => {
-      return rawBuffer.buffer.slice(rawBuffer.byteOffset, rawBuffer.byteOffset + rawBuffer.byteLength);
+      return rawBuffer.buffer.slice(rawBuffer.byteOffset, rawBuffer.byteOffset + rawBuffer.byteLength) as ArrayBuffer;
     },
     
     blob: async (): Promise<Blob> => {
