@@ -28,10 +28,10 @@ type Options struct {
 	
 	// TLS fingerprinting options
 	Ja3                string            `json:"ja3"`
-	Ja4                string            `json:"ja4"`
-	Ja4H               string            `json:"ja4h"` // HTTP Client fingerprinting
+	Ja4r               string            `json:"ja4r"`       // JA4 raw format with explicit cipher/extension values
 	HTTP2Fingerprint   string            `json:"http2Fingerprint"`
 	QUICFingerprint    string            `json:"quicFingerprint"`
+	DisableGrease      bool              `json:"disableGrease"` // Disable GREASE for exact JA4 matching
 	
 	// Browser identification
 	UserAgent          string            `json:"userAgent"`
@@ -85,9 +85,10 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	var browser = Browser{
 		// TLS fingerprinting options
 		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
+		JA4r:               request.Options.Ja4r,
 		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
 		QUICFingerprint:    request.Options.QUICFingerprint,
+		DisableGrease:      request.Options.DisableGrease,
 		
 		// Browser identification
 		UserAgent:          request.Options.UserAgent,
@@ -218,13 +219,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
-	// Apply JA4H fingerprinting if provided
-	if request.Options.Ja4H != "" {
-		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
-		if err != nil {
-			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
-		}
-	}
 
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel
@@ -241,7 +235,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	var browser = Browser{
 		// TLS fingerprinting options
 		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
+		JA4r:               request.Options.Ja4r,
 		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
 		QUICFingerprint:    request.Options.QUICFingerprint,
 		
@@ -297,13 +291,6 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
-	// Apply JA4H fingerprinting if provided
-	if request.Options.Ja4H != "" {
-		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
-		if err != nil {
-			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
-		}
-	}
 
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel
@@ -320,7 +307,7 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 	var browser = Browser{
 		// TLS fingerprinting options
 		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
+		JA4r:               request.Options.Ja4r,
 		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
 		QUICFingerprint:    request.Options.QUICFingerprint,
 		
@@ -391,7 +378,7 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 	var browser = Browser{
 		// TLS fingerprinting options
 		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
+		JA4r:               request.Options.Ja4r,
 		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
 		QUICFingerprint:    request.Options.QUICFingerprint,
 		
@@ -441,57 +428,7 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 	}
 }
 
-// func dispatcher(res fullRequest) (response Response, err error) {
-// 	defer res.client.CloseIdleConnections()
-// 	finalUrl := res.options.Options.URL
-// 	resp, err := res.client.Do(res.req)
-// 	if err != nil {
 
-// 		parsedError := parseError(err)
-
-// 		headers := make(map[string]string)
-// 		var cookies []*nhttp.Cookie
-// 		return Response{RequestID: res.options.RequestID, Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers, Cookies: cookies, FinalUrl: finalUrl}, nil //normally return error here
-
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
-// 		finalUrl = resp.Request.URL.String()
-// 	}
-
-// 	encoding := resp.Header["Content-Encoding"]
-// 	content := resp.Header["Content-Type"]
-// 	bodyBytes, err := io.ReadAll(resp.Body)
-
-// 	if err != nil {
-// 		log.Print("Parse Bytes" + err.Error())
-// 		return response, err
-// 	}
-
-// 	Body := DecompressBody(bodyBytes, encoding, content)
-// 	headers := make(map[string]string)
-
-// 	for name, values := range resp.Header {
-// 		if name == "Set-Cookie" {
-// 			headers[name] = strings.Join(values, "/,/")
-// 		} else {
-// 			for _, value := range values {
-// 				headers[name] = value
-// 			}
-// 		}
-// 	}
-// 	cookies := convertFHTTPCookiesToNetHTTPCookies(resp.Cookies())
-// 	return Response{
-// 		RequestID: res.options.RequestID,
-// 		Status:    resp.StatusCode,
-// 		Body:      Body,
-// 		Headers:   headers,
-// 		Cookies:   cookies,
-// 		FinalUrl:  finalUrl,
-// 	}, nil
-
-// }
 
 // // Queue queues request in worker pool
 // func (client CycleTLS) Queue(URL string, options Options, Method string) {
@@ -1315,7 +1252,7 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// Create browser from options
 	browser := Browser{
 		JA3:                options.Ja3,
-		JA4:                options.Ja4,
+		JA4r:               options.Ja4r,
 		HTTP2Fingerprint:   options.HTTP2Fingerprint,
 		QUICFingerprint:    options.QUICFingerprint,
 		UserAgent:          options.UserAgent,

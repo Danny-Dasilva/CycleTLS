@@ -20,9 +20,10 @@ type roundTripper struct {
 	
 	// TLS fingerprinting options
 	JA3                string
-	JA4                string
+	JA4r               string  // JA4 raw format with explicit cipher/extension values
 	HTTP2Fingerprint   string
 	QUICFingerprint    string
+	DisableGrease      bool
 	
 	// Browser identification
 	UserAgent          string
@@ -175,9 +176,9 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		if err != nil {
 			return nil, err
 		}
-	} else if rt.JA4 != "" {
-		// Use JA4 fingerprint
-		spec, err = JA4StringToSpec(rt.JA4, rt.UserAgent, rt.ForceHTTP1)
+	} else if rt.JA4r != "" {
+		// Use JA4r (raw) fingerprint
+		spec, err = JA4RStringToSpec(rt.JA4r, rt.UserAgent, rt.ForceHTTP1, rt.DisableGrease)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +227,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		var http2Transport http2.Transport
 		if rt.HTTP2Fingerprint != "" {
 			// Parse and apply HTTP/2 fingerprint
-			_, err := NewHTTP2Fingerprint(rt.HTTP2Fingerprint)
+			h2Fingerprint, err := NewHTTP2Fingerprint(rt.HTTP2Fingerprint)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse HTTP/2 fingerprint: %v", err)
 			}
@@ -235,8 +236,10 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 				DialTLS:     rt.dialTLSHTTP2,
 				PushHandler: &http2.DefaultPushHandler{},
 				Navigator:   parsedUserAgent.UserAgent,
-				// TODO: Add HTTP/2 settings from fingerprint
 			}
+			
+			// Apply HTTP/2 fingerprint settings
+			h2Fingerprint.Apply(&http2Transport)
 		} else {
 			http2Transport = http2.Transport{
 				DialTLS:     rt.dialTLSHTTP2,
@@ -247,10 +250,10 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		
 		rt.cachedTransports[addr] = &http2Transport
 	default:
-		// HTTP/1.x transport - enable connection reuse
+		// HTTP/1.x transport - configure to avoid idle channel errors
 		rt.cachedTransports[addr] = &http.Transport{
-			DialTLSContext:        rt.dialTLS,
-			// Connection reuse enabled by removing DisableKeepAlives
+			DialTLSContext:          rt.dialTLS,
+			DisableKeepAlives:       true, // Disable keep-alives to prevent idle channel errors
 		}
 	}
 
@@ -308,9 +311,10 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 	return &roundTripper{
 		dialer:             contextDialer,
 		JA3:                browser.JA3,
-		JA4:                browser.JA4,
+		JA4r:               browser.JA4r,
 		HTTP2Fingerprint:   browser.HTTP2Fingerprint,
 		QUICFingerprint:    browser.QUICFingerprint,
+		DisableGrease:      browser.DisableGrease,
 		UserAgent:          browser.UserAgent,
 		HeaderOrder:        browser.HeaderOrder,
 		TLSConfig:          browser.TLSConfig,
@@ -323,9 +327,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 	}
 }
 
-// Default JA3 fingerprints for common browsers
-const (
-	DefaultChrome_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
-	DefaultFirefox_JA3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0"
-	DefaultSafari_JA3 = "771,4865-4867-4866-49196-49195-52393-49200-49199-52392-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-13-28-21,29-23-24-25,0"
-)
+// Default JA3 fingerprint for Chrome
+const DefaultChrome_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+
+

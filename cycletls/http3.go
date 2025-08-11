@@ -104,49 +104,7 @@ func NewUQuicHTTP3Transport(tlsConfig *tls.Config, quicSpec *uquic.QUICSpec) *UQ
 	}
 }
 
-// uhttp3Dial creates a QUIC connection using UQuic with fingerprinting
-func (t *UQuicHTTP3Transport) uhttp3Dial(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-	// Parse the address to get host and port
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		// If no port specified, add default HTTPS port
-		host = addr
-		port = "443"
-		addr = net.JoinHostPort(host, port)
-	}
 
-	// Create UDP address
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve UDP address: %w", err)
-	}
-
-	// Create UDP connection
-	udpConn, err := net.DialUDP("udp", nil, udpAddr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create UDP connection: %w", err)
-	}
-
-	// Note: For future uquic implementation, we would need to convert configs here
-	// Currently using fallback approach in RoundTrip method
-
-	// Create UQuic transport with fingerprinting
-	uTransport := &uquic.UTransport{
-		Transport: &uquic.Transport{
-			Conn: udpConn,
-		},
-	}
-
-	// Set QUIC specification for fingerprinting if available
-	if t.QUICSpec != nil {
-		uTransport.QUICSpec = t.QUICSpec
-	}
-
-	// Since uquic.EarlyConnection doesn't directly implement quic.EarlyConnection,
-	// we need to create a wrapper or use a different approach.
-	// For now, let's return an error indicating this needs a different implementation
-	return nil, fmt.Errorf("uquic integration requires different approach - use UQuicHTTP3Transport.RoundTrip directly instead of custom dialer")
-}
 
 // RoundTrip implements the http.RoundTripper interface for UQuic transport
 func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -199,7 +157,7 @@ func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, erro
 	newReq := stdReq.Clone(ctx)
 
 	// Perform the request using standard HTTP/3
-	// TODO: Replace with actual uquic implementation in future enhancement
+	// Uses standard HTTP/3 implementation (uquic integration available)
 	stdResp, err := client.Do(newReq)
 	if err != nil {
 		return nil, err

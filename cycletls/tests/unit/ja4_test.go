@@ -133,7 +133,7 @@ func TestJA4StringToSpec(t *testing.T) {
 	ja4String := "t13d1516h2_8daaf6152771_02713d6af862"
 	userAgent := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 	
-	spec, err := cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	spec, err := cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestJA4StringToSpec(t *testing.T) {
 	// Test case 2: TLS 1.2 JA4 (3-part format)
 	ja4String = "t12d1516h2_8daaf6152771_02713d6af862"
 	
-	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed for TLS 1.2: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestJA4StringToSpec(t *testing.T) {
 	}
 
 	// Test case 3: Force HTTP/1
-	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, true)
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, true, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed with forceHTTP1: %v", err)
 	}
@@ -181,14 +181,14 @@ func TestJA4StringToSpec(t *testing.T) {
 
 	// Test case 4: Invalid TLS version (3-part format)
 	ja4String = "t99d1516h2_8daaf6152771_02713d6af862"
-	_, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	_, err = cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err == nil {
 		t.Error("Expected error for invalid TLS version")
 	}
 
 	// Test case 5: Real TLS 1.2 JA4 fingerprint from provided data
 	ja4String = "t12d1209h2_d34a8e72043a_b39be8c56a14"
-	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false)
+	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed for real TLS 1.2 JA4: %v", err)
 	}

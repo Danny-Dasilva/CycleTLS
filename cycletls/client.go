@@ -35,9 +35,10 @@ var (
 type Browser struct {
 	// TLS fingerprinting options
 	JA3                string
-	JA4                string
+	JA4r               string  // JA4 raw format with explicit cipher/extension values
 	HTTP2Fingerprint   string
 	QUICFingerprint    string
+	DisableGrease      bool
 
 	// Browser identification
 	UserAgent          string
@@ -127,7 +128,7 @@ func NewTransport(ja3 string, useragent string) fhttp.RoundTripper {
 // using JA4 fingerprinting.
 func NewTransportWithJA4(ja4 string, useragent string) fhttp.RoundTripper {
 	return newRoundTripper(Browser{
-		JA4:       ja4,
+		JA4r:      ja4,
 		UserAgent: useragent,
 	})
 }
@@ -158,9 +159,9 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 	}
 	
 	// Create a hash of the configuration that affects connection behavior
-	configStr := fmt.Sprintf("ja3:%s|ja4:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
+	configStr := fmt.Sprintf("ja3:%s|ja4r:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
 		browser.JA3,
-		browser.JA4,
+		browser.JA4r,
 		browser.HTTP2Fingerprint,
 		browser.QUICFingerprint,
 		browser.UserAgent,
@@ -299,12 +300,6 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 	// Create http headers directly
 	httpHeaders := make(fhttp.Header)
 	httpHeaders.Set("User-Agent", browser.UserAgent)
-	if browser.JA3 != "" {
-		httpHeaders.Set("JA3", browser.JA3)
-	}
-	if browser.JA4 != "" {
-		httpHeaders.Set("JA4", browser.JA4)
-	}
 
 	// Convert headers and create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(httpHeaders)
@@ -360,12 +355,6 @@ func (browser Browser) SSEConnect(ctx context.Context, urlStr string) (*SSERespo
 	// Create headers from browser settings
 	headers := make(fhttp.Header)
 	headers.Set("User-Agent", browser.UserAgent)
-	if browser.JA3 != "" {
-		headers.Set("JA3", browser.JA3)
-	}
-	if browser.JA4 != "" {
-		headers.Set("JA4", browser.JA4)
-	}
 
 	// Create SSE client
 	sseClient := NewSSEClient(&httpClient, headers)
