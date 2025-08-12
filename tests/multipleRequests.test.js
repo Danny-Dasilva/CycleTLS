@@ -20,7 +20,7 @@ var requestDict = {
       {
         name: "example1",
         value: "aaaaaaa",
-        expires: "Mon, 02-Jan-2022 15:04:05 EST",
+        expires: "2022-01-02T15:04:05Z",
       },
     ],
   },
@@ -29,61 +29,65 @@ var requestDict = {
 test("Multiple concurrent requests should complete successfully", async () => {
   const cycleTLS = await initCycleTLS({ port: 9150, timeout: 30000 });
   
-  const promises = Object.entries(requestDict).map(([url, params]) => {
-    return cycleTLS(
-      url,
-      {
-        body: params.body ?? "",
-        ja3: params.ja3 ?? ja3,
-        userAgent: params.userAgent ?? userAgent,
-        headers: params.headers,
-        cookies: params.cookies,
-        timeout: 30,
-      },
-      params.method ?? "GET"
-    );
-  });
+  try {
+    const promises = Object.entries(requestDict).map(([url, params]) => {
+      return cycleTLS(
+        url,
+        {
+          body: params.body ?? "",
+          ja3: params.ja3 ?? ja3,
+          userAgent: params.userAgent ?? userAgent,
+          headers: params.headers,
+          cookies: params.cookies,
+          timeout: 30,
+        },
+        params.method ?? "GET"
+      );
+    });
 
-  // Wait for all promises to resolve and check their status
-  const results = await Promise.all(promises);
+    // Wait for all promises to resolve and check their status
+    const results = await Promise.all(promises);
 
-  // Verify each response
-  results.forEach((response) => {
-    expect(response.status).toBe(200);
-  });
-  
-  await cycleTLS.exit();
+    // Verify each response
+    results.forEach((response) => {
+      expect(response.status).toBe(200);
+    });
+  } finally {
+    await cycleTLS.exit();
+  }
 });
 
 test("Sequential requests to same host should reuse connection", async () => {
   const cycleTLS = await initCycleTLS({ port: 9151, timeout: 30000 });
   
-  // Make multiple requests to same domain
-  const url = "https://httpbin.org";
-  
-  // First request
-  const response1 = await cycleTLS.get(`${url}/get`, {
-    ja3: ja3,
-    userAgent: userAgent,
-  });
-  expect(response1.status).toBe(200);
-  
-  // Second request - should reuse connection
-  const response2 = await cycleTLS.get(`${url}/get?second=true`, {
-    ja3: ja3,
-    userAgent: userAgent,
-  });
-  expect(response2.status).toBe(200);
-  
-  // Third request with different path but same domain - should still reuse connection
-  const response3 = await cycleTLS.get(`${url}/headers`, {
-    ja3: ja3,
-    userAgent: userAgent,
-  });
-  expect(response3.status).toBe(200);
-  
-  // The connection reuse is happening at the Go level, and we can't directly test it from JS
-  // But we can verify that all requests completed successfully
-  
-  await cycleTLS.exit();
+  try {
+    // Make multiple requests to same domain
+    const url = "https://httpbin.org";
+    
+    // First request
+    const response1 = await cycleTLS.get(`${url}/get`, {
+      ja3: ja3,
+      userAgent: userAgent,
+    });
+    expect(response1.status).toBe(200);
+    
+    // Second request - should reuse connection
+    const response2 = await cycleTLS.get(`${url}/get?second=true`, {
+      ja3: ja3,
+      userAgent: userAgent,
+    });
+    expect(response2.status).toBe(200);
+    
+    // Third request with different path but same domain - should still reuse connection
+    const response3 = await cycleTLS.get(`${url}/headers`, {
+      ja3: ja3,
+      userAgent: userAgent,
+    });
+    expect(response3.status).toBe(200);
+    
+    // The connection reuse is happening at the Go level, and we can't directly test it from JS
+    // But we can verify that all requests completed successfully
+  } finally {
+    await cycleTLS.exit();
+  }
 });

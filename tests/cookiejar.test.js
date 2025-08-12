@@ -1,11 +1,12 @@
 const initCycleTLS = require("../dist/index.js");
+jest.setTimeout(30000);
 
 const tough = require("tough-cookie");
 const Cookie = tough.Cookie;
 
 test("Should properly set and configure cookies", async () => {
   // Initiate cycleTLS and CookieJar
-  const cycleTLS = await initCycleTLS({port: 9091});
+  const cycleTLS = await initCycleTLS({port: 9991});
   const cookieJar = new tough.CookieJar();
 
   // Send an inital response to demonstrate no cookies being set, and verify it
