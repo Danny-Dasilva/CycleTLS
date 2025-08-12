@@ -12,6 +12,8 @@ Enhanced Binary Data Support, Cookie Jar Documentation & HTTP/3 Protocol Documen
 ### Bug Fixes
 - [Binary data corruption issues](https://github.com/Danny-Dasilva/CycleTLS/issues/297)
 - [Cookie jar documentation](https://github.com/Danny-Dasilva/CycleTLS/issues/345)
+- JA4r parsing issues have been fixed - with included tests
+
 
 #### Examples
 
