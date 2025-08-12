@@ -20,19 +20,19 @@ import (
 func GenerateJA4(tlsVersion uint16, cipherSuites []uint16, extensions []uint16, headers http.Header, userAgent string) string {
 	// Step 1: TLS version
 	tlsVersionStr := getTLSVersionString(tlsVersion)
-	
+
 	// Step 2: Cipher suites hash (first 1 character)
 	cipherHash := hashCipherSuites(cipherSuites)
-	
+
 	// Step 3: Extensions hash (first 4 characters)
 	extensionsHash := hashExtensions(extensions)
-	
+
 	// Step 4: HTTP headers hash (first 4 characters)
 	headersHash := hashHeaders(headers)
-	
+
 	// Step 5: User Agent hash (first 4 characters)
 	uaHash := hashUserAgent(userAgent)
-	
+
 	// Format: <TLS version><Cipher hash>_<Extensions hash>_<Headers hash>_<UA hash>
 	// JA4 format: t13d_cd89_1952_bb99 (19 chars total)
 	return fmt.Sprintf("%s%s_%s_%s_%s", tlsVersionStr, cipherHash[:1], extensionsHash[:4], headersHash[:4], uaHash[:4])
@@ -42,10 +42,10 @@ func GenerateJA4(tlsVersion uint16, cipherSuites []uint16, extensions []uint16, 
 func GenerateJA4HTTP(headers http.Header, userAgent string) string {
 	// Step 1: Headers hash (first 4 characters)
 	headersHash := hashHeaders(headers)
-	
+
 	// Step 2: User Agent hash (first 4 characters)
 	uaHash := hashUserAgent(userAgent)
-	
+
 	// Format: <Headers hash>_<UA hash>
 	return fmt.Sprintf("%s_%s", headersHash[:4], uaHash[:4])
 }
@@ -57,19 +57,19 @@ func GenerateJA4H2(settings []http2.Setting, streamDependency uint32, exclusive 
 	for _, s := range settings {
 		settingsStrs = append(settingsStrs, fmt.Sprintf("%d:%d", s.ID, s.Val))
 	}
-	
+
 	// Join settings with commas
 	settingsStr := strings.Join(settingsStrs, ",")
-	
+
 	// Calculate priority details
 	exclusiveFlag := 0
 	if exclusive {
 		exclusiveFlag = 1
 	}
-	
+
 	// Combine priority elements with a comma
 	priorityStr := strings.Join(priorityOrder, ",")
-	
+
 	// Final format: settings|streamDependency|exclusive|priorityOrder
 	return fmt.Sprintf("%s|%d|%d|%s", settingsStr, streamDependency, exclusiveFlag, priorityStr)
 }
@@ -98,7 +98,7 @@ func hashCipherSuites(ciphers []uint16) string {
 		cipherStrings[i] = fmt.Sprintf("%04x", cipher)
 	}
 	sort.Strings(cipherStrings)
-	
+
 	// Hash the joined string
 	h := sha256.New()
 	h.Write([]byte(strings.Join(cipherStrings, "")))
@@ -112,7 +112,7 @@ func hashExtensions(extensions []uint16) string {
 		extStrings[i] = fmt.Sprintf("%04x", ext)
 	}
 	sort.Strings(extStrings)
-	
+
 	// Hash the joined string
 	h := sha256.New()
 	h.Write([]byte(strings.Join(extStrings, "")))
@@ -126,7 +126,7 @@ func hashHeaders(headers http.Header) string {
 		headerNames = append(headerNames, textproto.CanonicalMIMEHeaderKey(name))
 	}
 	sort.Strings(headerNames)
-	
+
 	// Join header names
 	h := sha256.New()
 	h.Write([]byte(strings.Join(headerNames, ",")))

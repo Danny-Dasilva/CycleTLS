@@ -13,15 +13,15 @@ import (
 func TestDelayResponseOrder(t *testing.T) {
 	var (
 		ja3       = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
-		ja4       = "t13d_8a21_3269_e1c9" // Example JA4 fingerprint
+		ja4r      = "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601" // Chrome JA4R fingerprint
 		userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36"
 	)
-	
+
 	// Create client without worker pool
 	client := cycletls.Init()
 	defer client.Close() // Ensure resources are cleaned up
 
-	// Define the requests with both JA3 and JA4 testing
+	// Define the requests with both JA3 and JA4R testing
 	requests := []struct {
 		URL     string
 		Method  string
@@ -41,10 +41,10 @@ func TestDelayResponseOrder(t *testing.T) {
 			URL:    "http://httpbin.org/get",
 			Method: "GET",
 			Options: cycletls.Options{
-				Ja4:       ja4,
+				Ja4r:      ja4r,
 				UserAgent: userAgent,
 			},
-			Name: "JA4 Quick Request",
+			Name: "JA4R Quick Request",
 		},
 		{
 			URL:    "http://httpbin.org/post",
@@ -52,7 +52,7 @@ func TestDelayResponseOrder(t *testing.T) {
 			Options: cycletls.Options{
 				Ja3:       ja3,
 				UserAgent: userAgent,
-				Body:     `{"test": "data"}`,
+				Body:      `{"test": "data"}`,
 				Headers: map[string]string{
 					"Content-Type": "application/json",
 				},
@@ -80,17 +80,16 @@ func TestDelayResponseOrder(t *testing.T) {
 			t.Errorf("Request %s failed - no response received", req.Name)
 			continue
 		}
-		
+
 		if responses[i].Status < 200 || responses[i].Status >= 300 {
 			t.Errorf("Request %s returned status %d, expected 2xx", req.Name, responses[i].Status)
 		}
-		
+
 		// Verify URL contains expected path
 		if !containsExpectedPath(responses[i].FinalUrl, req.URL) {
 			t.Errorf("Request %s - unexpected final URL: %s", req.Name, responses[i].FinalUrl)
 		}
 	}
-	
 
 }
 
@@ -98,7 +97,7 @@ func TestDelayResponseOrder(t *testing.T) {
 func containsExpectedPath(finalURL, originalURL string) bool {
 	// Simple check to see if the path is preserved
 	// This handles redirects from http to https
-	return finalURL != "" && (finalURL == originalURL || 
+	return finalURL != "" && (finalURL == originalURL ||
 		strings.Contains(finalURL, "httpbin.org/delay") ||
 		strings.Contains(finalURL, "httpbin.org/get") ||
 		strings.Contains(finalURL, "httpbin.org/post"))

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"golang.org/x/net/proxy"
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/proxy"
 )
 
 // Global client pool for connection reuse
@@ -34,29 +34,29 @@ var (
 
 type Browser struct {
 	// TLS fingerprinting options
-	JA3                string
-	JA4r               string  // JA4 raw format with explicit cipher/extension values
-	HTTP2Fingerprint   string
-	QUICFingerprint    string
-	DisableGrease      bool
+	JA3              string
+	JA4r             string // JA4 raw format with explicit cipher/extension values
+	HTTP2Fingerprint string
+	QUICFingerprint  string
+	DisableGrease    bool
 
 	// Browser identification
-	UserAgent          string
-	
+	UserAgent string
+
 	// Connection options
 	Cookies            []Cookie
 	InsecureSkipVerify bool
 	ForceHTTP1         bool
 	ForceHTTP3         bool
-	
+
 	// Ordered HTTP header fields
-	HeaderOrder        []string
+	HeaderOrder []string
 
 	// TLS configuration
-	TLSConfig          *utls.Config
+	TLSConfig *utls.Config
 
 	// HTTP client
-	client            *fhttp.Client
+	client *fhttp.Client
 }
 
 // Protocol represents the HTTP protocol version
@@ -65,16 +65,16 @@ type Protocol string
 const (
 	// ProtocolHTTP1 represents HTTP/1.1
 	ProtocolHTTP1 Protocol = "http1"
-	
+
 	// ProtocolHTTP2 represents HTTP/2
 	ProtocolHTTP2 Protocol = "http2"
-	
+
 	// ProtocolHTTP3 represents HTTP/3
 	ProtocolHTTP3 Protocol = "http3"
-	
+
 	// ProtocolWebSocket represents WebSocket protocol
 	ProtocolWebSocket Protocol = "websocket"
-	
+
 	// ProtocolSSE represents Server-Sent Events
 	ProtocolSSE Protocol = "sse"
 )
@@ -157,7 +157,7 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 	for _, cookie := range browser.Cookies {
 		cookieStr += fmt.Sprintf("|cookie:%s=%s", cookie.Name, cookie.Value)
 	}
-	
+
 	// Create a hash of the configuration that affects connection behavior
 	configStr := fmt.Sprintf("ja3:%s|ja4r:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
 		browser.JA3,
@@ -173,7 +173,7 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 		browser.ForceHTTP3,
 		cookieStr,
 	)
-	
+
 	// Generate SHA256 hash for the key
 	hash := sha256.Sum256([]byte(configStr))
 	return fmt.Sprintf("%x", hash[:16]) // Use first 16 bytes for shorter key
@@ -185,14 +185,14 @@ func getOrCreateClient(browser Browser, timeout int, disableRedirect bool, userA
 	if !enableConnectionReuse {
 		return createNewClient(browser, timeout, disableRedirect, userAgent, proxyURL...)
 	}
-	
+
 	proxy := ""
 	if len(proxyURL) > 0 {
 		proxy = proxyURL[0]
 	}
-	
+
 	clientKey := generateClientKey(browser, timeout, disableRedirect, proxy)
-	
+
 	// Try to get existing client from pool
 	advancedClientPoolMutex.RLock()
 	if entry, exists := advancedClientPool[clientKey]; exists {
@@ -203,23 +203,23 @@ func getOrCreateClient(browser Browser, timeout int, disableRedirect bool, userA
 		return client, nil
 	}
 	advancedClientPoolMutex.RUnlock()
-	
+
 	// Create new client if not found in pool
 	advancedClientPoolMutex.Lock()
 	defer advancedClientPoolMutex.Unlock()
-	
+
 	// Double-check in case another goroutine created it while we were waiting for the write lock
 	if entry, exists := advancedClientPool[clientKey]; exists {
 		entry.LastUsed = time.Now()
 		return entry.Client, nil
 	}
-	
+
 	// Create new client
 	client, err := createNewClient(browser, timeout, disableRedirect, userAgent, proxyURL...)
 	if err != nil {
 		return fhttp.Client{}, err
 	}
-	
+
 	// Add to pool
 	now := time.Now()
 	advancedClientPool[clientKey] = &ClientPoolEntry{
@@ -227,7 +227,7 @@ func getOrCreateClient(browser Browser, timeout int, disableRedirect bool, userA
 		CreatedAt: now,
 		LastUsed:  now,
 	}
-	
+
 	return client, nil
 }
 
@@ -254,7 +254,7 @@ func createNewClient(browser Browser, timeout int, disableRedirect bool, userAge
 func cleanupClientPool(maxAge time.Duration) {
 	advancedClientPoolMutex.Lock()
 	defer advancedClientPoolMutex.Unlock()
-	
+
 	now := time.Now()
 	for key, entry := range advancedClientPool {
 		if now.Sub(entry.LastUsed) > maxAge {
@@ -267,14 +267,14 @@ func cleanupClientPool(maxAge time.Duration) {
 func clearAllConnections() {
 	advancedClientPoolMutex.Lock()
 	defer advancedClientPoolMutex.Unlock()
-	
+
 	// Close all connections in the pool before clearing
 	for _, entry := range advancedClientPool {
 		if transport, ok := entry.Client.Transport.(*roundTripper); ok {
 			transport.CloseIdleConnections()
 		}
 	}
-	
+
 	// Clear the entire pool
 	advancedClientPool = make(map[string]*ClientPoolEntry)
 }
@@ -304,13 +304,13 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 	// Convert headers and create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(httpHeaders)
 	wsClient := NewWebSocketClient(tlsConfig, convertedHeaders)
-	
+
 	// Connect and return
 	conn, resp, err := wsClient.Connect(urlStr)
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	// Convert response to fhttp.Response
 	fhttpResp := &fhttp.Response{
 		Status:        resp.Status,
@@ -321,14 +321,14 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 		Body:          resp.Body,
 		ContentLength: resp.ContentLength,
 	}
-	
+
 	// Convert headers
 	fhttpHeaders := make(fhttp.Header)
 	for k, v := range resp.Header {
 		fhttpHeaders[k] = v
 	}
 	fhttpResp.Header = fhttpHeaders
-	
+
 	// Convert request if present
 	if resp.Request != nil {
 		fhttpReq := &fhttp.Request{
@@ -340,7 +340,7 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 		}
 		fhttpResp.Request = fhttpReq
 	}
-	
+
 	return conn, fhttpResp, nil
 }
 
@@ -351,14 +351,14 @@ func (browser Browser) SSEConnect(ctx context.Context, urlStr string) (*SSERespo
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create headers from browser settings
 	headers := make(fhttp.Header)
 	headers.Set("User-Agent", browser.UserAgent)
 
 	// Create SSE client
 	sseClient := NewSSEClient(&httpClient, headers)
-	
+
 	// Connect to SSE endpoint
 	return sseClient.Connect(ctx, urlStr)
 }

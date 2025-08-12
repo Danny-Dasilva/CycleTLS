@@ -66,6 +66,8 @@ export interface CycleTLSRequestOptions {
   forceHTTP1?: boolean;
   forceHTTP3?: boolean;
   protocol?: string; // "http1", "http2", "http3", "websocket", "sse"
+  
+
 }
 
 export interface CycleTLSResponse {
@@ -576,6 +578,8 @@ class CycleTLSClientImpl extends EventEmitter {
     });
   }
 
+
+
   async request(
     url: string,
     options: CycleTLSRequestOptions,
@@ -624,6 +628,8 @@ class CycleTLSClientImpl extends EventEmitter {
 
       options.cookies = tempArr;
     }
+    
+
 
     // Track if we've connected to this host before for connection reuse
     const hasExistingConnection = this.connectionsByHost.has(hostKey);
@@ -700,7 +706,7 @@ class CycleTLSClientImpl extends EventEmitter {
                 }
               });
               
-              // Return response immediately with live stream
+                            // Return response immediately with live stream
               const streamMethods = createStreamResponseMethods(stream);
               
               resolveRequest({
@@ -726,7 +732,7 @@ class CycleTLSClientImpl extends EventEmitter {
                 response.data.headers
               );
               
-              // Create response methods
+                            // Create response methods
               const responseMethods = createResponseMethods(rawBuffer, response.data.headers);
               
               resolveRequest({

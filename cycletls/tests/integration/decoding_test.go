@@ -21,24 +21,23 @@ func TestDeflateDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Deflate request failed: %v", err)
 	}
-	
+
 	// Verify response status
 	if resp.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp.Status)
 	}
-	
+
 	// Parse JSON response - should be automatically decompressed
 	jsonBody := resp.JSONBody()
 	if jsonBody == nil {
 		t.Fatalf("Failed to parse JSON response body: %s", resp.Body)
 	}
-	
+
 	// Verify the deflated field indicates the response was deflate-compressed
 	deflated, ok := jsonBody["deflated"].(bool)
 	if !ok || !deflated {
 		t.Fatalf("Expected deflated=true in response, got: %v", jsonBody)
 	}
-	
 
 }
 func TestBrotliDecoding(t *testing.T) {
@@ -53,24 +52,23 @@ func TestBrotliDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brotli request failed: %v", err)
 	}
-	
+
 	// Verify response status
 	if resp.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp.Status)
 	}
-	
+
 	// Parse JSON response - should be automatically decompressed
 	jsonBody := resp.JSONBody()
 	if jsonBody == nil {
 		t.Fatalf("Failed to parse JSON response body: %s", resp.Body)
 	}
-	
+
 	// Verify the brotli field indicates the response was brotli-compressed
 	brotliCompressed, ok := jsonBody["brotli"].(bool)
 	if !ok || !brotliCompressed {
 		t.Fatalf("Expected brotli=true in response, got: %v", jsonBody)
 	}
-	
 
 }
 
@@ -86,23 +84,22 @@ func TestGZIPDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GZIP request failed: %v", err)
 	}
-	
+
 	// Verify response status
 	if resp.Status != 200 {
 		t.Fatalf("Expected status 200, got %d", resp.Status)
 	}
-	
+
 	// Parse JSON response - should be automatically decompressed
 	jsonBody := resp.JSONBody()
 	if jsonBody == nil {
 		t.Fatalf("Failed to parse JSON response body: %s", resp.Body)
 	}
-	
+
 	// Verify the gzipped field indicates the response was gzip-compressed
 	gzipCompressed, ok := jsonBody["gzipped"].(bool)
 	if !ok || !gzipCompressed {
 		t.Fatalf("Expected gzipped=true in response, got: %v", jsonBody)
 	}
-	
 
 }

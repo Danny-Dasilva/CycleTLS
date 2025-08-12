@@ -6,8 +6,6 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-
-
 var supportedSignatureAlgorithmsExtensions = map[string]utls.SignatureScheme{
 	"PKCS1WithSHA256":                     utls.PKCS1WithSHA256,
 	"PKCS1WithSHA384":                     utls.PKCS1WithSHA384,
@@ -58,12 +56,6 @@ var supportedSignatureAlgorithmsExtensions = map[string]utls.SignatureScheme{
 	"ecdsa_brainpoolP512r1tls13_sha512":   utls.SignatureScheme(0x081C),
 }
 
-
-
-
-
-
-
 // PreserveIDExtension is an interface for extensions that preserve their original extension ID
 type PreserveIDExtension interface {
 	utls.TLSExtension
@@ -82,20 +74,20 @@ func NewCustomApplicationSettingsExtension(extID uint16, protocols []string) *Cu
 	// Build the extension data according to ALPS specification
 	// Format: length (2 bytes) + protocol_list
 	var data []byte
-	
+
 	// Build protocol list: each protocol is length-prefixed
 	var protocolData []byte
 	for _, protocol := range protocols {
 		protocolData = append(protocolData, byte(len(protocol)))
 		protocolData = append(protocolData, []byte(protocol)...)
 	}
-	
+
 	// Add total length prefix (2 bytes)
 	lengthBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(lengthBytes, uint16(len(protocolData)))
 	data = append(data, lengthBytes...)
 	data = append(data, protocolData...)
-	
+
 	return &CustomApplicationSettingsExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -129,7 +121,7 @@ func NewCustomECHExtension(extID uint16) *CustomECHExtension {
 		0x00, 0x00, // cipher_suites length
 		// cipher_suites would follow
 	}
-	
+
 	return &CustomECHExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -156,13 +148,13 @@ func NewCustomCompressCertificateExtension(extID uint16, algorithms []utls.CertC
 	// Build extension data: algorithm list
 	var data []byte
 	data = append(data, byte(len(algorithms)*2)) // length of algorithms list
-	
+
 	for _, algo := range algorithms {
 		algoBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(algoBytes, uint16(algo))
 		data = append(data, algoBytes...)
 	}
-	
+
 	return &CustomCompressCertificateExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -189,7 +181,7 @@ type CustomRecordSizeLimitExtension struct {
 func NewCustomRecordSizeLimitExtension(extID uint16, limit uint16) *CustomRecordSizeLimitExtension {
 	data := make([]byte, 2)
 	binary.BigEndian.PutUint16(data, limit)
-	
+
 	return &CustomRecordSizeLimitExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -203,22 +195,22 @@ func NewCustomRecordSizeLimitExtension(extID uint16, limit uint16) *CustomRecord
 // CustomDelegatedCredentialsExtension preserves the original extension ID
 type CustomDelegatedCredentialsExtension struct {
 	*utls.GenericExtension
-	OriginalID           uint16
-	SignatureAlgorithms  []utls.SignatureScheme
+	OriginalID          uint16
+	SignatureAlgorithms []utls.SignatureScheme
 }
 
 // NewCustomDelegatedCredentialsExtension creates a new delegated credentials extension
 func NewCustomDelegatedCredentialsExtension(extID uint16, algorithms []utls.SignatureScheme) *CustomDelegatedCredentialsExtension {
-	// Build extension data: signature algorithms list  
+	// Build extension data: signature algorithms list
 	var data []byte
 	data = append(data, byte(len(algorithms)*2)) // length of algorithms list
-	
+
 	for _, algo := range algorithms {
 		algoBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(algoBytes, uint16(algo))
 		data = append(data, algoBytes...)
 	}
-	
+
 	return &CustomDelegatedCredentialsExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -242,7 +234,7 @@ func (c *CustomRecordSizeLimitExtension) GetPreservedID() uint16 {
 // CustomPostQuantumExtension for post-quantum key exchange extensions
 type CustomPostQuantumExtension struct {
 	*utls.GenericExtension
-	OriginalID uint16
+	OriginalID       uint16
 	KeyExchangeGroup uint16
 }
 
@@ -250,15 +242,15 @@ type CustomPostQuantumExtension struct {
 func NewCustomPostQuantumExtension(extID uint16, group uint16) *CustomPostQuantumExtension {
 	// Simple placeholder data for post-quantum extension
 	data := make([]byte, 4)
-	binary.BigEndian.PutUint16(data[0:2], group) // key exchange group
+	binary.BigEndian.PutUint16(data[0:2], group)  // key exchange group
 	binary.BigEndian.PutUint16(data[2:4], 0x0000) // placeholder for additional data
-	
+
 	return &CustomPostQuantumExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
 			Data: data,
 		},
-		OriginalID: extID,
+		OriginalID:       extID,
 		KeyExchangeGroup: group,
 	}
 }
@@ -278,7 +270,7 @@ type CustomGREASEExtension struct {
 func NewCustomGREASEExtension(extID uint16) *CustomGREASEExtension {
 	// GREASE extensions typically have empty or minimal data
 	data := []byte{}
-	
+
 	return &CustomGREASEExtension{
 		GenericExtension: &utls.GenericExtension{
 			Id:   extID,
@@ -373,16 +365,16 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 			utls.CertCompressionBrotli,
 		})
 	case 0x001c: // Record Size Limit
-	return NewCustomRecordSizeLimitExtension(extID, 0x4001)
-case 0x0022: // Delegated Credentials - PROBLEMATIC EXTENSION
-	// This extension causes connection resets with some servers (like peet.ws)
-	// Instead of implementing the complex RFC format, use a simpler fallback
-	// that maintains compatibility but avoids server-side rejections
-	return &utls.GenericExtension{
-		Id:   extID,
-		Data: []byte{0x00, 0x04, 0x04, 0x03, 0x08, 0x04}, // Minimal valid data
-	}
-case 0x0023: // Session Ticket
+		return NewCustomRecordSizeLimitExtension(extID, 0x4001)
+	case 0x0022: // Delegated Credentials - PROBLEMATIC EXTENSION
+		// This extension causes connection resets with some servers (like peet.ws)
+		// Instead of implementing the complex RFC format, use a simpler fallback
+		// that maintains compatibility but avoids server-side rejections
+		return &utls.GenericExtension{
+			Id:   extID,
+			Data: []byte{0x00, 0x04, 0x04, 0x03, 0x08, 0x04}, // Minimal valid data
+		}
+	case 0x0023: // Session Ticket
 		return &utls.SessionTicketExtension{}
 	case 0x002b: // Supported Versions
 		if tlsVersion == utls.VersionTLS13 {

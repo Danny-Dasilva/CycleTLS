@@ -118,7 +118,7 @@ func (wsr *WebSocketResponse) Close() error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Close the connection
 		return wsr.Conn.Close()
 	}

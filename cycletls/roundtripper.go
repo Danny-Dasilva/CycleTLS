@@ -4,43 +4,43 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"strings"
-	"sync"
 	http "github.com/Danny-Dasilva/fhttp"
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
+	"net"
+	"strings"
+	"sync"
 )
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
 type roundTripper struct {
 	sync.Mutex
-	
+
 	// TLS fingerprinting options
-	JA3                string
-	JA4r               string  // JA4 raw format with explicit cipher/extension values
-	HTTP2Fingerprint   string
-	QUICFingerprint    string
-	DisableGrease      bool
-	
+	JA3              string
+	JA4r             string // JA4 raw format with explicit cipher/extension values
+	HTTP2Fingerprint string
+	QUICFingerprint  string
+	DisableGrease    bool
+
 	// Browser identification
-	UserAgent          string
-	HeaderOrder        []string
-	
+	UserAgent   string
+	HeaderOrder []string
+
 	// Connection options
 	TLSConfig          *utls.Config
 	InsecureSkipVerify bool
 	Cookies            []Cookie
 	ForceHTTP1         bool
 	ForceHTTP3         bool
-	
-	// Caching
-	cachedConnections  map[string]net.Conn
-	cachedTransports   map[string]http.RoundTripper
 
-	dialer             proxy.ContextDialer
+	// Caching
+	cachedConnections map[string]net.Conn
+	cachedTransports  map[string]http.RoundTripper
+
+	dialer proxy.ContextDialer
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -61,27 +61,27 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		req.AddCookie(cookie)
 	}
-	
+
 	// Apply user agent
 	req.Header.Set("User-Agent", rt.UserAgent)
-	
+
 	// Apply header order if specified (for regular headers, not pseudo-headers)
 	if len(rt.HeaderOrder) > 0 {
 		req.Header = ConvertHttpHeader(MarshalHeader(req.Header, rt.HeaderOrder))
-		
+
 		// Note: rt.HeaderOrder contains regular headers like "cache-control", "accept", etc.
 		// Do NOT overwrite http.PHeaderOrderKey which contains pseudo-headers like ":method", ":path"
 		// The pseudo-header order is already set correctly in index.go based on UserAgent parsing
 	}
-	
+
 	// Get address for dialing
 	addr := rt.getDialTLSAddr(req)
-	
+
 	// Check if we need HTTP/3
 	if rt.ForceHTTP3 {
 		// Use HTTP/3 transport with UQuic if QUIC fingerprint is provided
 		tlsConfig := ConvertUtlsConfig(rt.TLSConfig)
-		
+
 		if rt.QUICFingerprint != "" {
 			// Create UQuic spec from fingerprint
 			quicSpec, err := CreateUQuicSpecFromFingerprint(rt.QUICFingerprint)
@@ -90,7 +90,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 				transport := NewHTTP3Transport(tlsConfig)
 				return transport.RoundTrip(req)
 			}
-			
+
 			// Use UQuic transport
 			transport := NewHTTP3TransportWithUQuic(tlsConfig, quicSpec)
 			return transport.RoundTrip(req)
@@ -100,14 +100,14 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			return transport.RoundTrip(req)
 		}
 	}
-	
+
 	// Use cached transport if available, otherwise create a new one
 	if _, ok := rt.cachedTransports[addr]; !ok {
 		if err := rt.getTransport(req, addr); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	// Perform the request
 	return rt.cachedTransports[addr].RoundTrip(req)
 }
@@ -117,7 +117,7 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 	case "http":
 		// Allow connection reuse by removing DisableKeepAlives
 		rt.cachedTransports[addr] = &http.Transport{
-			DialContext:           rt.dialer.DialContext,
+			DialContext: rt.dialer.DialContext,
 		}
 		return nil
 	case "https":
@@ -148,7 +148,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if conn := rt.cachedConnections[addr]; conn != nil {
 		return conn, nil
 	}
-	
+
 	// Establish raw connection
 	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
 	if err != nil {
@@ -160,9 +160,9 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if host, _, err = net.SplitHostPort(addr); err != nil {
 		host = addr
 	}
-	
+
 	var spec *utls.ClientHelloSpec
-	
+
 	// Determine which fingerprint to use
 	if rt.QUICFingerprint != "" {
 		// Use QUIC fingerprint
@@ -192,8 +192,8 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 
 	// Create TLS client
 	conn := utls.UClient(rawConn, &utls.Config{
-		ServerName:         host, 
-		OmitEmptyPsk:       true, 
+		ServerName:         host,
+		OmitEmptyPsk:       true,
 		InsecureSkipVerify: rt.InsecureSkipVerify,
 	}, utls.HelloCustom)
 
@@ -222,7 +222,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	case http2.NextProtoTLS:
 		// HTTP/2 transport
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
-		
+
 		// Use HTTP/2 fingerprint if specified
 		var http2Transport http2.Transport
 		if rt.HTTP2Fingerprint != "" {
@@ -231,13 +231,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse HTTP/2 fingerprint: %v", err)
 			}
-			
+
 			http2Transport = http2.Transport{
 				DialTLS:     rt.dialTLSHTTP2,
 				PushHandler: &http2.DefaultPushHandler{},
 				Navigator:   parsedUserAgent.UserAgent,
 			}
-			
+
 			// Apply HTTP/2 fingerprint settings
 			h2Fingerprint.Apply(&http2Transport)
 		} else {
@@ -247,13 +247,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 				Navigator:   parsedUserAgent.UserAgent,
 			}
 		}
-		
+
 		rt.cachedTransports[addr] = &http2Transport
 	default:
 		// HTTP/1.x transport - configure to avoid idle channel errors
 		rt.cachedTransports[addr] = &http.Transport{
-			DialTLSContext:          rt.dialTLS,
-			DisableKeepAlives:       true, // Disable keep-alives to prevent idle channel errors
+			DialTLSContext:    rt.dialTLS,
+			DisableKeepAlives: true, // Disable keep-alives to prevent idle channel errors
 		}
 	}
 
@@ -280,7 +280,7 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
 	rt.Lock()
 	defer rt.Unlock()
-	
+
 	// If we have a specific address to keep, only close other connections
 	if len(selectedAddr) > 0 && selectedAddr[0] != "" {
 		addr := selectedAddr[0]
@@ -329,5 +329,3 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 
 // Default JA3 fingerprint for Chrome
 const DefaultChrome_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
-
-

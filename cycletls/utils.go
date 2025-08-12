@@ -14,10 +14,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andybalholm/brotli"
 	fhttp "github.com/Danny-Dasilva/fhttp"
-	utls "github.com/refraction-networking/utls"
+	"github.com/andybalholm/brotli"
 	uquic "github.com/refraction-networking/uquic"
+	utls "github.com/refraction-networking/utls"
 )
 
 const (
@@ -131,8 +131,6 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	respBody, err := io.ReadAll(br)
 	return respBody, err
 }
-
-
 
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
@@ -667,7 +665,6 @@ func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGre
 		}
 		extensions = append(extensions, alpnExt)
 	}
-
 
 	return &utls.ClientHelloSpec{
 		TLSVersMin:         tlsMinVersion,

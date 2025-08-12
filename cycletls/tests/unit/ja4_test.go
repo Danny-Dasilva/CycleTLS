@@ -51,10 +51,10 @@ func TestGenerateJA4(t *testing.T) {
 func TestGenerateJA4H2(t *testing.T) {
 	// Create sample HTTP/2 settings
 	h2Settings := []http2.Setting{
-		{ID: 1, Val: 65536},       // HEADER_TABLE_SIZE
-		{ID: 2, Val: 0},           // ENABLE_PUSH
-		{ID: 4, Val: 6291456},     // INITIAL_WINDOW_SIZE
-		{ID: 6, Val: 262144},      // MAX_HEADER_LIST_SIZE
+		{ID: 1, Val: 65536},   // HEADER_TABLE_SIZE
+		{ID: 2, Val: 0},       // ENABLE_PUSH
+		{ID: 4, Val: 6291456}, // INITIAL_WINDOW_SIZE
+		{ID: 6, Val: 262144},  // MAX_HEADER_LIST_SIZE
 	}
 
 	streamDependency := uint32(15663105)
@@ -132,7 +132,7 @@ func TestJA4StringToSpec(t *testing.T) {
 	// Test case 1: TLS 1.3 JA4 (3-part format)
 	ja4String := "t13d1516h2_8daaf6152771_02713d6af862"
 	userAgent := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-	
+
 	spec, err := cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed: %v", err)
@@ -149,7 +149,7 @@ func TestJA4StringToSpec(t *testing.T) {
 
 	// Test case 2: TLS 1.2 JA4 (3-part format)
 	ja4String = "t12d1516h2_8daaf6152771_02713d6af862"
-	
+
 	spec, err = cycletls.JA4StringToSpec(ja4String, userAgent, false, false)
 	if err != nil {
 		t.Errorf("JA4StringToSpec failed for TLS 1.2: %v", err)
