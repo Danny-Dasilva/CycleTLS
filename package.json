@@ -1,6 +1,6 @@
 {
   "name": "cycletls",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Spoof TLS/JA3 fingerprint in JS with help from Go",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
