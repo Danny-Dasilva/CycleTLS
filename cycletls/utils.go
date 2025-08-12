@@ -912,6 +912,11 @@ func QUICStringToSpec(quicFingerprint string, userAgent string, forceHTTP1 bool)
 		return nil, errors.New("empty QUIC fingerprint")
 	}
 
+	// Basic validation - QUIC fingerprints should be reasonably long
+	if len(quicFingerprint) < 100 {
+		return nil, errors.New("invalid QUIC fingerprint: too short")
+	}
+
 	parsedUserAgent := parseUserAgent(userAgent)
 	extMap := genMap(false)
 
