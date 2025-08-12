@@ -18,7 +18,7 @@ Accepting Community Support and PR's
 [![npm version](https://img.shields.io/npm/v/cycletls.svg)](https://www.npmjs.org/package/cycletls)
  <a href="https://discord.gg/gsmxMHrwhu">
   <img src="https://img.shields.io/discord/1100945880888115200?logo=discord"
-      alt="chat on Discord"></a>
+	  alt="chat on Discord"></a>
 </div>
 
 If you have a API change or feature request feel free to open an [Issue](https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose)
@@ -94,10 +94,10 @@ const initCycleTLS = require('cycletls');
 
   // Send request
   const response = await cycleTLS('https://ja3er.com/json', {
-    body: '',
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    proxy: 'http://username:password@hostname.com:443', 
+	body: '',
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	proxy: 'http://username:password@hostname.com:443'
   }, 'get');
 
   // Parse response as JSON
@@ -115,6 +115,7 @@ const initCycleTLS = require('cycletls');
 
 JA4 is an enhanced TLS fingerprinting method that provides more detailed client identification:
 
+
 ### JavaScript Example
 ```js
 const initCycleTLS = require('cycletls');
@@ -124,7 +125,7 @@ const initCycleTLS = require('cycletls');
 
   // Firefox JA4 fingerprint
   const response = await cycleTLS('https://tls.peet.ws/api/all', {
-    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d'
+	ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d'
   });
 
   const data = await response.json();
@@ -141,24 +142,24 @@ const initCycleTLS = require('cycletls');
 package main
 
 import (
-    "log"
-    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func main() {
-    client := cycletls.Init()
-    defer client.Close()
+	client := cycletls.Init()
+	defer client.Close()
 
-    // Chrome JA4 fingerprint
-    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
-        Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
-        UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-    }, "GET")
-    
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Println("Response with JA4:", response.Status)
+	// Chrome JA4 fingerprint
+	response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+		Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+	}, "GET")
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Response with JA4:", response.Status)
 }
 ```
 
@@ -175,7 +176,9 @@ const initCycleTLS = require('cycletls');
 
   // Firefox HTTP/2 fingerprint
   const response = await cycleTLS('https://tls.peet.ws/api/all', {
-    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s'
+	http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
   });
 
   const data = await response.json();
@@ -191,24 +194,24 @@ const initCycleTLS = require('cycletls');
 package main
 
 import (
-    "log"
-    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func main() {
-    client := cycletls.Init()
-    defer client.Close()
+	client := cycletls.Init()
+	defer client.Close()
 
-    // Firefox HTTP/2 fingerprint
-    response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
-        HTTP2Fingerprint: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
-        UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
-    }, "GET")
-    
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Println("Response with HTTP/2 fingerprint:", response.Status)
+	// Firefox HTTP/2 fingerprint
+	response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
+		HTTP2Fingerprint: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+	}, "GET")
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Response with HTTP/2 fingerprint:", response.Status)
 }
 ```
 
@@ -228,9 +231,9 @@ const initCycleTLS = require('cycletls');
 
   // Complete Firefox browser fingerprint
   const response = await cycleTLS('https://tls.peet.ws/api/all', {
-    ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
-    http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+	ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+	http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
   });
 
   const data = await response.json();
@@ -256,24 +259,26 @@ const initCycleTLS = require('cycletls');
 
   // Get streaming response
   const response = await cycleTLS.get('https://httpbin.org/stream/3', {
-    headers: { Authorization: `Bearer your_token_here` },
-    responseType: 'stream'
+	headers: { Authorization: `Bearer your_token_here` },
+	responseType: 'stream',
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0'
   });
 
   const stream = response.data;
 
   stream.on('data', data => {
-    console.log('Received chunk:', data.toString());
+	console.log('Received chunk:', data.toString());
   });
 
   stream.on('end', () => {
-    console.log("stream done");
-    cycleTLS.exit();
+	console.log("stream done");
+	cycleTLS.exit();
   });
 
   stream.on('error', (error) => {
-    console.error('Stream error:', error);
-    cycleTLS.exit();
+	console.error('Stream error:', error);
+	cycleTLS.exit();
   });
 })();
 ```
@@ -287,37 +292,37 @@ const initCycleTLS = require('cycletls');
   const cycleTLS = await initCycleTLS();
 
   try {
-    const response = await cycleTLS.get('https://httpbin.org/drip?numbytes=100&duration=2', {
-      responseType: 'stream',
-      ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-      userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    });
+	const response = await cycleTLS.get('https://httpbin.org/drip?numbytes=100&duration=2', {
+	  responseType: 'stream',
+	  ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	});
 
-    console.log('Status:', response.status);
-    console.log('Headers:', response.headers);
+	console.log('Status:', response.status);
+	console.log('Headers:', response.headers);
 
-    const chunks = [];
-    
-    response.data.on('data', (chunk) => {
-      chunks.push(chunk);
-      console.log(`Received ${chunk.length} bytes`);
-    });
+	const chunks = [];
+	
+	response.data.on('data', (chunk) => {
+	  chunks.push(chunk);
+	  console.log(`Received ${chunk.length} bytes`);
+	});
 
-    response.data.on('end', () => {
-      console.log('Stream complete');
-      const fullData = Buffer.concat(chunks);
-      console.log('Total received:', fullData.length, 'bytes');
-      cycleTLS.exit();
-    });
+	response.data.on('end', () => {
+	  console.log('Stream complete');
+	  const fullData = Buffer.concat(chunks);
+	  console.log('Total received:', fullData.length, 'bytes');
+	  cycleTLS.exit();
+	});
 
-    response.data.on('error', (error) => {
-      console.error('Stream error:', error);
-      cycleTLS.exit();
-    });
+	response.data.on('error', (error) => {
+	  console.error('Stream error:', error);
+	  cycleTLS.exit();
+	});
 
   } catch (error) {
-    console.error('Request failed:', error);
-    cycleTLS.exit();
+	console.error('Request failed:', error);
+	cycleTLS.exit();
   }
 })();
 ```
@@ -356,11 +361,11 @@ func main() {
 	defer client.Close()
 
 	response, err := client.Do("https://ja3er.com/json", cycletls.Options{
-		Body : "",
+		Body: "",
 		Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
 		EnableConnectionReuse: true, // Enable connection reuse for better performance
-	  }, "GET");
+	}, "GET")
 	if err != nil {
 		log.Print("Request Failed: " + err.Error())
 	}
@@ -382,9 +387,9 @@ func main() {
 	ja3 := "771,52393-52392-52244-52243-49195-49199-49196-49200-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-30032-11-10,29-23-24,0"
 	ua := "Chrome Version 57.0.2987.110 (64-bit) Linux"
 
- 	 cycleClient := &http.Client{
- 		Transport:     cycletls.NewTransport(ja3, ua),
- 	 }
+	 cycleClient := &http.Client{
+		Transport:     cycletls.NewTransport(ja3, ua),
+	 }
 
 	resp, err := cycleClient.Get("https://tls.peet.ws/")
 	...
@@ -457,15 +462,15 @@ Url is not optional, config is optional
   headers: { "Authorization": "Bearer someexampletoken" }
   // Custom cookies to send
   Cookies: [{
-    "name": "key",
-    "value": "val",
-    "path":  "/docs",
-    "domain":  "google.com",
-                "expires": "Mon, 02-Jan-2022 15:04:05 EST"
-    "maxAge": 90,
-    "secure": false,
-    "httpOnly": true,
-    "sameSite": "Lax"		
+	"name": "key",
+	"value": "val",
+	"path":  "/docs",
+	"domain":  "google.com",
+				"expires": "Mon, 02-Jan-2022 15:04:05 EST"
+	"maxAge": 90,
+	"secure": false,
+	"httpOnly": true,
+	"sameSite": "Lax"		
   }],
   // Body to send with request (must be a string - cannot pass an object)
   body: '',
@@ -495,9 +500,315 @@ Url is not optional, config is optional
   http2Fingerprint: '1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s'
   // QUIC fingerprint for HTTP/3
   quicFingerprint: '16030106f2010006ee03039a2b98d81139db0e128ea09eff...'
+  // JA4H HTTP client fingerprint
+  ja4h: 'ge11_73a4f1e_8b3fce7'
 }
 
 ```
+
+## Response Decompression
+
+CycleTLS automatically handles response decompression for compressed content. No additional configuration is needed.
+
+**Supported Compression Formats**
+* `gzip` - Automatically decompressed
+* `deflate` - Automatically decompressed  
+* `brotli` - Automatically decompressed
+
+### JavaScript Decompression Example
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // CycleTLS automatically handles compressed responses
+  const response = await cycleTLS('https://httpbin.org/gzip', {
+	headers: {
+	  'Accept-Encoding': 'gzip, deflate, br' // Optional - CycleTLS sets this automatically
+	}
+  });
+
+  // Response is automatically decompressed
+  const data = await response.json();
+  console.log('Decompressed data:', data);
+
+  cycleTLS.exit();
+})();
+```
+
+### Golang Decompression Example
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	// CycleTLS automatically handles compressed responses
+	response, err := client.Do("https://httpbin.org/gzip", cycletls.Options{
+		Headers: map[string]string{
+			"Accept-Encoding": "gzip, deflate, br", // Optional - set automatically
+		},
+	}, "GET")
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	// Response body is automatically decompressed
+	log.Println("Decompressed response:", response.Body)
+	
+	// Parse as JSON if needed
+	jsonData := response.JSONBody()
+	log.Println("Parsed JSON:", jsonData)
+}
+```
+
+**Note:** Decompression happens automatically based on the `Content-Encoding` header. You don't need to manually decompress responses.
+
+## Timeout and Error Handling
+
+CycleTLS provides comprehensive timeout handling and error responses for failed requests.
+
+### Timeout Configuration
+
+```js
+// JavaScript timeout example
+const response = await cycleTLS('https://httpbin.org/delay/10', {
+  timeout: 5, // 5 seconds timeout
+  ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0'
+});
+```
+
+```go
+// Golang timeout example
+response, err := client.Do("https://httpbin.org/delay/10", cycletls.Options{
+	Timeout:   5, // 5 seconds timeout
+	UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+}, "GET")
+```
+
+### Timeout Error Response
+
+When a request times out, CycleTLS returns a response with:
+- **Status Code**: `408` (Request Timeout)
+- **Body**: Contains error message describing the timeout
+- **Error**: JavaScript will have the response object, Go will have `err != nil`
+
+### JavaScript Timeout Error Handling
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  try {
+	const response = await cycleTLS('https://httpbin.org/delay/10', {
+	  timeout: 2, // Will timeout after 2 seconds
+	  ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0'
+	});
+
+	if (response.status === 408) {
+	  console.log('Request timed out:', response.body);
+	} else {
+	  const data = await response.json();
+	  console.log('Success:', data);
+	}
+  } catch (error) {
+	console.error('Request failed:', error);
+  } finally {
+	cycleTLS.exit();
+  }
+})();
+```
+
+### Golang Timeout Error Handling
+
+```go
+package main
+
+import (
+	"log"
+	"strings"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	response, err := client.Do("https://httpbin.org/delay/10", cycletls.Options{
+		Timeout: 2, // Will timeout after 2 seconds
+	}, "GET")
+
+	if err != nil {
+		log.Printf("Request failed: %v", err)
+		return
+	}
+
+	// Check for timeout response
+	if response.Status == 408 {
+		log.Printf("Request timed out: %s", response.Body)
+		return
+	}
+
+	// Check for other error conditions
+	if strings.Contains(response.Body, "timeout") {
+		log.Printf("Timeout detected in response: %s", response.Body)
+		return
+	}
+
+	// Success case
+	log.Printf("Request succeeded: %d", response.Status)
+}
+```
+
+### Common Error Status Codes
+
+- **408**: Request timeout
+- **502**: Bad gateway (proxy/connection issues)
+- **503**: Service unavailable
+- **0**: Connection failed (network errors)
+
+## Proxy Support
+
+CycleTLS supports multiple proxy protocols for routing requests through intermediary servers.
+
+### Supported Proxy Types
+
+- **HTTP Proxy**: `http://proxy.example.com:8080`
+- **HTTPS Proxy**: `https://proxy.example.com:8080`
+- **SOCKS4**: `socks4://proxy.example.com:1080`
+- **SOCKS5**: `socks5://proxy.example.com:1080`
+- **SOCKS5h**: `socks5h://proxy.example.com:1080` (hostname resolution through proxy)
+
+### JavaScript Proxy Examples
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // HTTP Proxy with authentication
+  const httpResponse = await cycleTLS('https://httpbin.org/ip', {
+	proxy: 'http://username:password@proxy.example.com:8080'
+  });
+
+  // SOCKS5 Proxy
+  const socksResponse = await cycleTLS('https://httpbin.org/ip', {
+	proxy: 'socks5://proxy.example.com:1080'
+  });
+
+  // SOCKS5h (hostname resolution through proxy)
+  const socks5hResponse = await cycleTLS('https://httpbin.org/ip', {
+	proxy: 'socks5h://proxy.example.com:1080'
+  });
+
+  console.log('HTTP Proxy IP:', await httpResponse.json());
+  console.log('SOCKS5 IP:', await socksResponse.json());
+  
+  cycleTLS.exit();
+})();
+```
+
+### Golang Proxy Examples
+
+```go
+package main
+
+import (
+	"log"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+
+	// HTTP Proxy with authentication
+	httpResponse, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Proxy: "http://username:password@proxy.example.com:8080",
+	}, "GET")
+	
+	if err != nil {
+		log.Printf("HTTP proxy request failed: %v", err)
+	} else {
+		log.Printf("HTTP Proxy Response: %s", httpResponse.Body)
+	}
+
+	// SOCKS4 Proxy
+	socks4Response, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Proxy: "socks4://proxy.example.com:1080",
+	}, "GET")
+	
+	if err != nil {
+		log.Printf("SOCKS4 proxy request failed: %v", err)
+	} else {
+		log.Printf("SOCKS4 Response: %s", socks4Response.Body)
+	}
+
+	// SOCKS5 Proxy
+	socks5Response, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Proxy: "socks5://proxy.example.com:1080",
+	}, "GET")
+	
+	if err != nil {
+		log.Printf("SOCKS5 proxy request failed: %v", err)
+	} else {
+		log.Printf("SOCKS5 Response: %s", socks5Response.Body)
+	}
+
+	// SOCKS5h (hostname resolved through proxy)
+	socks5hResponse, err := client.Do("https://httpbin.org/ip", cycletls.Options{
+		Proxy: "socks5h://proxy.example.com:1080",
+	}, "GET")
+	
+	if err != nil {
+		log.Printf("SOCKS5h proxy request failed: %v", err)
+	} else {
+		log.Printf("SOCKS5h Response: %s", socks5hResponse.Body)
+	}
+}
+```
+
+### Proxy Error Handling
+
+```go
+// Check for proxy connection errors
+response, err := client.Do("https://example.com", cycletls.Options{
+	Proxy: "socks5://proxy.example.com:1080",
+	Timeout: 10,
+}, "GET")
+
+if err != nil {
+	log.Printf("Proxy connection failed: %v", err)
+	return
+}
+
+// Check for proxy authentication errors
+if response.Status == 407 {
+	log.Printf("Proxy authentication required")
+	return
+}
+
+// Check for proxy server errors
+if response.Status == 502 {
+	log.Printf("Bad gateway - proxy server error")
+	return
+}
+```
+
+**Note**: SOCKS5h resolves hostnames through the proxy server, providing better privacy and allowing access to internal networks through the proxy.
 
 ## CycleTLS Response Schema
 
@@ -509,8 +820,8 @@ Url is not optional, config is optional
   body: "",
   // Headers returned from the server (Object)
   headers: {
-    "some": "header",
-    ...
+	"some": "header",
+	...
   },
   // FinalUrl returned from the server (String). This field is useful when redirection is active.
   finalUrl: "https://final.url/"	
@@ -538,21 +849,21 @@ const userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/201001
 // Defining multiple requests
 const requestDict = {
   "https://httpbin.org/user-agent": {
-    ja3: ja3,
-    userAgent: userAgent,
+	ja3: ja3,
+	userAgent: userAgent,
   },
   "http://httpbin.org/post": {
-    body: '{"field":"POST-VAL"}',
-    method: "POST",
+	body: '{"field":"POST-VAL"}',
+	method: "POST",
   },
   "http://httpbin.org/cookies": {
-    cookies: [
-      {
-        name: "example1",
-        value: "aaaaaaa",
-        expires: "Mon, 02-Jan-2022 15:04:05 EST",
-      },
-    ],
+	cookies: [
+	  {
+		name: "example1",
+		value: "aaaaaaa",
+		expires: "Mon, 02-Jan-2022 15:04:05 EST",
+	  },
+	],
   },
 };
 
@@ -563,19 +874,19 @@ const requestDict = {
 
   // Create promises for all requests
   const promises = Object.entries(requestDict).map(async ([url, params]) => {
-    const response = await cycleTLS(
-      url, {
-        body: params.body ?? "",
-        ja3: params.ja3 ?? ja3,
-        userAgent: params.userAgent ?? userAgent,
-        headers: params.headers,
-        cookies: params.cookies,
-      }, params.method ?? "GET");
+	const response = await cycleTLS(
+	  url, {
+		body: params.body ?? "",
+		ja3: params.ja3 ?? ja3,
+		userAgent: params.userAgent ?? userAgent,
+		headers: params.headers,
+		cookies: params.cookies,
+	  }, params.method ?? "GET");
 
-    // Parse response based on content type
-    const data = await response.json();
-    console.log(url, data);
-    return { url, data };
+	// Parse response based on content type
+	const data = await response.json();
+	console.log(url, data);
+	return { url, data };
   });
 
   // Wait for all requests to complete
@@ -722,20 +1033,20 @@ const initCycleTLS = require("cycletls");
   // Initiate cycleTLS
   const cycleTLS = await initCycleTLS();
   const response = await cycleTLS("https://httpbin.org/cookies", {
-    cookies: {
-      cookie1: "value1",
-      cookie2: "value2",
-    },
+	cookies: {
+	  cookie1: "value1",
+	  cookie2: "value2",
+	},
   });
   
   const data = await response.json();
   console.log(data);
   /* Expected
   {
-    "cookies": {
-      "cookie1": "value1",
-      "cookie2": "value2"
-    }
+	"cookies": {
+	  "cookie1": "value1",
+	  "cookie2": "value2"
+	}
   }
   */
   cycleTLS.exit();
@@ -775,30 +1086,30 @@ const initCycleTLS = require("cycletls");
   // Initiate cycleTLS
   const cycleTLS = await initCycleTLS();
   const complexCookies = [
-    {
-      name: "cookie1",
-      value: "value1",
-      domain: "httpbin.org",
-    },
-    {
-      name: "cookie2",
-      value: "value2",
-      domain: "httpbin.org",
-    },
+	{
+	  name: "cookie1",
+	  value: "value1",
+	  domain: "httpbin.org",
+	},
+	{
+	  name: "cookie2",
+	  value: "value2",
+	  domain: "httpbin.org",
+	},
   ];
 
   const response = await cycleTLS("https://httpbin.org/cookies", {
-    cookies: complexCookies,
+	cookies: complexCookies,
   });
 
   const data = await response.json();
   console.log(data);
   /* Expected
   {
-    "cookies": {
-      "cookie1": "value1",
-      "cookie2": "value2"
-    }
+	"cookies": {
+	  "cookie1": "value1",
+	  "cookie2": "value2"
+	}
   }
   */
   cycleTLS.exit();
@@ -811,35 +1122,35 @@ const initCycleTLS = require("cycletls");
 package main
 
 import (
-    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func main() {
-    resp, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	resp, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
 		UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
 		Cookies: []cycletls.Cookie{{Name: "cookie1", Value: "value1"},
 			{Name: "cookie2", Value: "value2"}},
-    }, "GET")
-    if err != nil {
-      log.Print("Request Failed: " + err.Error())
-    }
-    log.Println(resp.Body)
-    /* Expected
-    {
-      "cookies": {
-        "cookie1": "value1", 
-        "cookie2": "value2"
-      }
-      }
-    */
-    
-    // Alternatively if you want access to values within a map
-    log.Println(resp.JSONBody())
-    /* Expected
-    map[cookies:map[cookie1:value1 cookie2:value2]]
-    */
+	}, "GET")
+	if err != nil {
+	  log.Print("Request Failed: " + err.Error())
+	}
+	log.Println(resp.Body)
+	/* Expected
+	{
+	  "cookies": {
+		"cookie1": "value1", 
+		"cookie2": "value2"
+	  }
+	  }
+	*/
+	
+	// Alternatively if you want access to values within a map
+	log.Println(resp.JSONBody())
+	/* Expected
+	map[cookies:map[cookie1:value1 cookie2:value2]]
+	*/
 }
 
 ```
@@ -869,23 +1180,23 @@ const Cookie = tough.Cookie;
 
   // Capture a set cookie
   const firstResponse = await cycleTLS.get(
-    "https://httpbin.org/cookies/set?freeform=test",
-    {
-      disableRedirect: true,
-    }
+	"https://httpbin.org/cookies/set?freeform=test",
+	{
+	  disableRedirect: true,
+	}
   );
   
   // Now use the processCookies function to add the cookies from the response headers to the cookie jar
   await processCookies(
-    firstResponse,
-    "https://httpbin.org/cookies/set?freeform=test",
-    cookieJar
+	firstResponse,
+	"https://httpbin.org/cookies/set?freeform=test",
+	cookieJar
   );
   // Now send a second to verify we have our cookies
   const secondResponse = await cycleTLS.get("https://httpbin.org/cookies", {
-    headers: {
-      cookie: await cookieJar.getCookieString("https://httpbin.org/cookies"),
-    },
+	headers: {
+	  cookie: await cookieJar.getCookieString("https://httpbin.org/cookies"),
+	},
   });
   
   // Verify cookies were set
@@ -893,9 +1204,9 @@ const Cookie = tough.Cookie;
   console.log(data)
   /* Expected
   {
-    "cookies": {
-      "freeform": "test"
-    }
+	"cookies": {
+	  "freeform": "test"
+	}
   }
   */
   cycleTLS.exit();
@@ -903,11 +1214,11 @@ const Cookie = tough.Cookie;
 
 async function processCookies(response, url, cookieJar) {
   if (response.headers["Set-Cookie"] instanceof Array) {
-    response.headers["Set-Cookie"].map(
-      async (cookieString) => await cookieJar.setCookie(cookieString, url)
-    );
+	response.headers["Set-Cookie"].map(
+	  async (cookieString) => await cookieJar.setCookie(cookieString, url)
+	);
   } else {
-    await cookieJar.setCookie(response.headers["Set-Cookie"], url);
+	await cookieJar.setCookie(response.headers["Set-Cookie"], url);
   }
 }
 ```
@@ -930,7 +1241,7 @@ func main() {
 	client := cycletls.Init()
 	jar, err := cookiejar.New(nil)
   if err != nil {
-      log.Fatal(err)
+	  log.Fatal(err)
   }
 	// First request to set cookie
 	firstResponse, err := client.Do("https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
@@ -949,15 +1260,15 @@ func main() {
 
 	// Second request to verify cookies, including the cookies from the first response
 	secondResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
-    Body: "",
-    Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-    UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
-    Headers: map[string]string{
-        "Cookie": getHeadersFromJar(jar, firstURL),
-    },
+	Body: "",
+	Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+	UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
+	Headers: map[string]string{
+		"Cookie": getHeadersFromJar(jar, firstURL),
+	},
 	}, "GET")
 	if err != nil {
-	    log.Fatal(err)
+		log.Fatal(err)
 	}
 
 	log.Println("Second Response body:", secondResponse.Body)
@@ -965,12 +1276,12 @@ func main() {
 
 
 func getHeadersFromJar(jar *cookiejar.Jar, url *url.URL) string {
-    cookies := jar.Cookies(url)
-    var cookieStrs []string
-    for _, cookie := range cookies {
-        cookieStrs = append(cookieStrs, cookie.Name+"="+cookie.Value)
-    }
-    return strings.Join(cookieStrs, "; ")
+	cookies := jar.Cookies(url)
+	var cookieStrs []string
+	for _, cookie := range cookies {
+		cookieStrs = append(cookieStrs, cookie.Name+"="+cookie.Value)
+	}
+	return strings.Join(cookieStrs, "; ")
 }
 
 ```
@@ -994,8 +1305,8 @@ const FormData = require('form-data');
   formData.append("key2", "value2");
   
   const response = await cycleTLS('http://httpbin.org/post', {
-      body: formData,
-      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
+	  body: formData,
+	  headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
   const data = await response.json();
@@ -1021,8 +1332,8 @@ const fs = require('fs');
   formData.append('file', fileStream);
 
   const response = await cycleTLS('http://httpbin.org/post', {
-      body: formData,
-      headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
+	  body: formData,
+	  headers: formData.getHeaders(), // Use formData.getHeaders() for proper content-type
   }, 'post');
 
   const data = await response.json();
@@ -1098,20 +1409,20 @@ func main() {
   // Add a file
   fileWriter, err := multipartWriter.CreateFormFile("fieldname", "filename")
   if err != nil {
-      log.Fatal("CreateFormFile Error: ", err)
+	  log.Fatal("CreateFormFile Error: ", err)
   }
 
   // Open the file that you want to upload
   file, err := os.Open("path/to/your/file")
   if err != nil {
-      log.Fatal("File Open Error: ", err)
+	  log.Fatal("File Open Error: ", err)
   }
   defer file.Close()
 
   // Copy the file to the multipart writer
   _, err = io.Copy(fileWriter, file)
   if err != nil {
-      log.Fatal("File Copy Error: ", err)
+	  log.Fatal("File Copy Error: ", err)
   }
 
   // Close the writer before making the request
@@ -1119,14 +1430,14 @@ func main() {
   multipartWriter.Close()
 
   response, err := client.Do("http://httpbin.org/post", cycletls.Options{
-      Body: requestBody.String(),
-      Headers: map[string]string{
-          "Content-Type": contentType,
-      },
+	  Body: requestBody.String(),
+	  Headers: map[string]string{
+		  "Content-Type": contentType,
+	  },
   }, "POST")
 
   if err != nil {
-      log.Print("Request Failed: " + err.Error())
+	  log.Print("Request Failed: " + err.Error())
   }
 
   log.Println(response.Body)
@@ -1152,10 +1463,10 @@ const initCycleTLS = require("cycletls");
   urlEncodedData.append('key2', 'value2');
 
   const response = await cycleTLS('http://httpbin.org/post', {
-      body: urlEncodedData,
-      headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-      },
+	  body: urlEncodedData,
+	  headers: {
+		  'Content-Type': 'application/x-www-form-urlencoded',
+	  },
   }, 'post');
 
   const data = await response.json();
@@ -1170,9 +1481,9 @@ const initCycleTLS = require("cycletls");
 package main
 
 import (
-    "log"
+	"log"
 	  "net/url"
-    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 func main() {
@@ -1199,93 +1510,186 @@ func main() {
 ```
 </details>
 
-### How do I download images?
+### How do I download images and videos?
 
 <details>
 
-Images with a `Content-Type` header of the following types are base 64 encoded. 
+Images and videos with supported `Content-Type` headers are returned as raw binary data stored in a string format.
 
-**Supported Image Types**
+**Supported Media Types**
 * `image/svg+xml`
 * `image/webp`
 * `image/jpeg`
 * `image/png`
+* `image/gif`
 * `application/pdf`
+* `video/mp4`
+* `video/webm`
+* `video/avi`
+* `video/quicktime`
+
+**Important:** The media data is NOT base64 encoded. It is raw binary data converted to a string format.
 
 To write them to a file you can use the below methods
 
-### Javascript Image Write to File
+### Javascript Media Download Example
 ```js
 const initCycleTLS = require("cycletls");
 var fs = require("fs");
 
-//Function to write image to a file
-const writeImage = (filename, data) => {
-  let writeStream = fs.createWriteStream(filename);
-
-  // write some data with a base64 encoding
-  writeStream.write(data, "base64");
-  writeStream.on("finish", () => {
-    console.log(`wrote to file ${filename}`);
-  });
-  
-  // close the stream
-  writeStream.end();
-};
-
 (async () => {
   const cycleTLS = await initCycleTLS();
-  // try {
 
+  // Download image using arrayBuffer() - correct method
   const jpegImage = await cycleTLS("http://httpbin.org/image/jpeg", {
-    ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
-    userAgent:
-      "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+	ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+	userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
   });
-  // Get image data and write to file
-  const imageData = await jpegImage.text(); // Image data is base64 encoded
-  writeImage("test.jpeg", imageData);
+  
+  const jpegBuffer = await jpegImage.arrayBuffer();
+  fs.writeFileSync('./images/output.jpeg', Buffer.from(jpegBuffer));
+  console.log('JPEG image downloaded');
+
+  // Download PNG
+  const pngImage = await cycleTLS("http://httpbin.org/image/png", {
+	ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+	userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+  
+  const pngBuffer = await pngImage.arrayBuffer();
+  fs.writeFileSync('./images/output.png', Buffer.from(pngBuffer));
+  console.log('PNG image downloaded');
+
+  // Download WebP
+  const webpImage = await cycleTLS("http://httpbin.org/image/webp", {
+	ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+	userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+  
+  const webpBuffer = await webpImage.arrayBuffer();
+  fs.writeFileSync('./images/output.webp', Buffer.from(webpBuffer));
+  console.log('WebP image downloaded');
+
+  // Download video
+  const videoResponse = await cycleTLS("https://sample-videos.com/zip/10/mp4/SampleVideo_360x240_1mb.mp4", {
+	ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+	userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+  
+  const videoBuffer = await videoResponse.arrayBuffer();
+  fs.writeFileSync('./videos/sample_video.mp4', Buffer.from(videoBuffer));
+  console.log('Video downloaded');
 
   cycleTLS.exit();
 })();
 
 ```
-### Golang Image Write to File
+
+### Streaming Binary Data Example
+
+For large files or real-time binary streaming:
+
+```js
+const initCycleTLS = require("cycletls");
+var fs = require("fs");
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Stream large video file
+  const response = await cycleTLS("https://sample-videos.com/zip/25/mp4/SampleVideo_1280x720_5mb.mp4", {
+	responseType: 'stream',
+	ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+	userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+  });
+
+  const stream = response.data;
+  const writeStream = fs.createWriteStream('./videos/large_video.mp4');
+
+  let totalSize = 0;
+  
+  stream.on('data', (chunk) => {
+	totalSize += chunk.length;
+	console.log(`Downloaded ${totalSize} bytes`);
+	writeStream.write(chunk);
+  });
+
+  stream.on('end', () => {
+	writeStream.end();
+	console.log(`Stream complete. Total size: ${totalSize} bytes`);
+	cycleTLS.exit();
+  });
+
+  stream.on('error', (error) => {
+	console.error('Stream error:', error);
+	writeStream.end();
+	cycleTLS.exit();
+  });
+})();
+```
+
+### Golang Media Download Example
 ```golang
 package main
 
 import (
-    "encoding/base64"
-    "os"
-    "github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
+	"os"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
-func main() {
+func writeMedia(filepath string, data string) error {
+	// Convert string body to bytes (raw binary data)
+	bodyBytes := []byte(data)
+	
+	f, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	
+	if _, err := f.Write(bodyBytes); err != nil {
+		return err
+	}
+	
+	return f.Sync()
+}
 
-    client := cycletls.Init()
-    response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
-      Body:      "",
-      Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
-      UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
-    }, "GET")
-    // Decode Base64
-    dec, err := base64.StdEncoding.DecodeString(response.Body)
-    if err != nil {
-        panic(err)
-    }
-    //create file to write
-    f, err := os.Create("test.jpeg")
-    if err != nil {
-        panic(err)
-    }
-    defer f.Close()
-    //write b64 to file
-    if _, err := f.Write(dec); err != nil {
-        panic(err)
-    }
-    if err := f.Sync(); err != nil {
-        panic(err)
-    }
+func main() {
+	client := cycletls.Init()
+	defer client.Close()
+	
+	// Download image
+	response, err := client.Do("http://httpbin.org/image/jpeg", cycletls.Options{
+	  Body:      "",
+	  Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+	  UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	
+	if err != nil {
+		log.Fatal("Image download failed: ", err)
+	}
+	
+	if err := writeMedia("test.jpeg", response.Body); err != nil {
+		log.Fatal("Image write failed: ", err)
+	}
+	log.Println("Image downloaded successfully")
+	
+	// Download video
+	videoResponse, err := client.Do("https://sample-videos.com/zip/10/mp4/SampleVideo_360x240_1mb.mp4", cycletls.Options{
+	  Body:      "",
+	  Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
+	  UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
+	}, "GET")
+	
+	if err != nil {
+		log.Fatal("Video download failed: ", err)
+	}
+	
+	if err := writeMedia("sample_video.mp4", videoResponse.Body); err != nil {
+		log.Fatal("Video write failed: ", err)
+	}
+	log.Println("Video downloaded successfully")
 }
 
 ```
@@ -1466,17 +1870,17 @@ const initCycleTLS = require('cycletls');
 
   // WebSocket connection with TLS fingerprinting
   const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    headers: {
-      'Sec-WebSocket-Protocol': 'echo-protocol'
-    }
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	headers: {
+	  'Sec-WebSocket-Protocol': 'echo-protocol'
+	}
   });
 
   // Check connection status
   if (wsResponse.status === 101) {
-    console.log('WebSocket upgrade successful');
-    console.log('Response headers:', wsResponse.headers);
+	console.log('WebSocket upgrade successful');
+	console.log('Response headers:', wsResponse.headers);
   }
 
   cycleTLS.exit();
@@ -1605,12 +2009,12 @@ const initCycleTLS = require('cycletls');
 
   // SSE connection with TLS fingerprinting
   const sseResponse = await cycleTLS.sse('https://example.com/events', {
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    headers: {
-      'Accept': 'text/event-stream',
-      'Cache-Control': 'no-cache'
-    }
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	headers: {
+	  'Accept': 'text/event-stream',
+	  'Cache-Control': 'no-cache'
+	}
   });
 
   // Parse real-time events
@@ -1631,13 +2035,13 @@ const initCycleTLS = require('cycletls');
 
   // SSE with streaming for real-time processing
   const response = await cycleTLS.get('https://example.com/events', {
-    responseType: 'stream',
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    headers: {
-      'Accept': 'text/event-stream',
-      'Cache-Control': 'no-cache'
-    }
+	responseType: 'stream',
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	headers: {
+	  'Accept': 'text/event-stream',
+	  'Cache-Control': 'no-cache'
+	}
   });
 
   // Process SSE stream in real-time
@@ -1645,32 +2049,32 @@ const initCycleTLS = require('cycletls');
   let buffer = '';
 
   stream.on('data', (chunk) => {
-    buffer += chunk.toString();
-    const lines = buffer.split('
+	buffer += chunk.toString();
+	const lines = buffer.split('
 ');
-    
-    // Process complete lines, keep incomplete line in buffer
-    buffer = lines.pop() || '';
-    
-    for (const line of lines) {
-      if (line.startsWith('data:')) {
-        const eventData = line.substring(5).trim();
-        console.log('Event data:', eventData);
-      } else if (line.startsWith('event:')) {
-        const eventType = line.substring(6).trim();
-        console.log('Event type:', eventType);
-      }
-    }
+	
+	// Process complete lines, keep incomplete line in buffer
+	buffer = lines.pop() || '';
+	
+	for (const line of lines) {
+	  if (line.startsWith('data:')) {
+		const eventData = line.substring(5).trim();
+		console.log('Event data:', eventData);
+	  } else if (line.startsWith('event:')) {
+		const eventType = line.substring(6).trim();
+		console.log('Event type:', eventType);
+	  }
+	}
   });
 
   stream.on('end', () => {
-    console.log('SSE stream ended');
-    cycleTLS.exit();
+	console.log('SSE stream ended');
+	cycleTLS.exit();
   });
 
   stream.on('error', (error) => {
-    console.error('SSE stream error:', error);
-    cycleTLS.exit();
+	console.error('SSE stream error:', error);
+	cycleTLS.exit();
   });
 })();
 ```
@@ -1747,14 +2151,14 @@ import (
 )
 
 func main() {
-	// Create browser configuration
+	// Create browser configuration with TLS fingerprinting
 	browser := cycletls.Browser{
 		UserAgent:          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
 		JA3:                "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		InsecureSkipVerify: true,
 	}
 
-	// Connect to SSE endpoint
+	// Connect to SSE endpoint with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -1764,7 +2168,7 @@ func main() {
 	}
 	defer response.Close()
 
-	// Process events
+	// Process events with detailed parsing
 	for {
 		event, err := response.NextEvent()
 		if err != nil {
@@ -1773,7 +2177,9 @@ func main() {
 		}
 		
 		if event != nil && event.Data != "" {
-			fmt.Printf("Received event: %s\n", event.Data)
+			fmt.Printf("Event Type: %s\n", event.Event)
+			fmt.Printf("Event ID: %s\n", event.ID)
+			fmt.Printf("Event Data: %s\n", event.Data)
 			
 			// Break after receiving specific event
 			if event.Data == "done" {
@@ -1781,6 +2187,37 @@ func main() {
 			}
 		}
 	}
+}
+```
+
+### Browser.SSEConnect Method
+
+The `Browser.SSEConnect` method provides SSE connections with TLS fingerprinting support:
+
+```go
+type Browser struct {
+	UserAgent          string
+	JA3                string
+	JA4                string
+	HTTP2Fingerprint   string
+	QUICFingerprint    string
+	InsecureSkipVerify bool
+	ForceHTTP1         bool
+	ForceHTTP3         bool
+}
+
+// SSEConnect establishes an SSE connection with browser fingerprinting
+func (b *Browser) SSEConnect(ctx context.Context, url string) (*SSEResponse, error)
+```
+
+### SSE Event Structure
+
+```go
+type SSEEvent struct {
+	ID    string  // Event ID from server
+	Event string  // Event type (custom event names)
+	Data  string  // Event data payload
+	Retry int64   // Reconnection time in milliseconds
 }
 ```
 
@@ -1862,11 +2299,11 @@ const initCycleTLS = require('cycletls');
   const cycleTLS = await initCycleTLS();
 
   const response = await cycleTLS('https://ja3er.com/json', {
-     body: '',
-    ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-    userAgent:
-      'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
-    forceHTTP1: true, // Set this field to force HTTP/1.1
+	 body: '',
+	ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
+	userAgent:
+	  'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
+	forceHTTP1: true, // Set this field to force HTTP/1.1
   });
 
   const data = await response.json();
