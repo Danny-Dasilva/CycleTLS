@@ -6,14 +6,13 @@ toolchain go1.24.4
 
 replace github.com/Danny-Dasilva/CycleTLS/cycletls => ../cycletls
 
+require github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.26
+
 require (
-	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.26 // indirect
 	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/gaukas/clienthellod v0.4.2 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
-	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect

@@ -24,7 +24,7 @@ func SimpleFileWriteTest(t *testing.T) {
 	}
 	// Convert string body to bytes (raw binary data)
 	bodyBytes := []byte(response.Body)
-	
+
 	//create file to write
 	f, err := os.Create("test.jpeg")
 	if err != nil {
@@ -43,7 +43,7 @@ func SimpleFileWriteTest(t *testing.T) {
 func WriteFile(Body string, Filepath string) {
 	// Convert string body to bytes (raw binary data)
 	bodyBytes := []byte(Body)
-	
+
 	//create file to write
 	f, err := os.Create(Filepath)
 	if err != nil {

@@ -23,12 +23,12 @@ const { performance } = require("perf_hooks");
         {
           name: "example1",
           value: "aaaaaaa",
-          expires: "Mon, 02-Jan-2022 15:04:05 EST",
+          expires: "2022-01-02T15:04:05Z",
         },
         {
           name: "example2",
           value: "bbbbbbbbb",
-          expires: "Tue, 06-Jan-2022 2:03:05 EST",
+          expires: "2022-01-06T02:03:05Z",
         },
       ],
     });

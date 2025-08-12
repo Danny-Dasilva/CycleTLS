@@ -11,7 +11,6 @@ import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
-
 func TestForceHTTP1_h2(t *testing.T) {
 
 	client := cycletls.Init()

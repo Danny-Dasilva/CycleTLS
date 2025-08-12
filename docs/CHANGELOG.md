@@ -1,5 +1,110 @@
 # CycleTLS Changelog
 
+## 2.0.3 - (11-12-2025)
+### Release Highlights
+Enhanced Binary Data Support, Cookie Jar Documentation & HTTP/3 Protocol Documentation
+
+### Enhancements
+- Binary Request Support - Added `BodyBytes []byte` field to `Options` struct for sending binary data without string conversion overhead
+- Binary Response Support - Added `BodyBytes []byte` field to `Response` struct for accessing raw binary response data  
+- Memory Optimization - Direct byte handling eliminates string conversion overhead for binary content like images, files, and other binary data
+
+### Bug Fixes
+- [Binary data corruption issues](https://github.com/Danny-Dasilva/CycleTLS/issues/297)
+- [Cookie jar documentation](https://github.com/Danny-Dasilva/CycleTLS/issues/345)
+- JA4r parsing issues have been fixed - with included tests
+
+
+#### Examples
+
+**Binary Data Support:**
+```golang
+// Upload binary image data
+imageData, _ := os.ReadFile("image.jpg")
+response, err := client.Do("https://api.example.com/upload", cycletls.Options{
+    BodyBytes: imageData,  // Direct binary upload
+    Headers: map[string]string{"Content-Type": "image/jpeg"},
+}, "POST")
+
+// Access binary response data  
+downloadResp, _ := client.Do("https://api.example.com/download", cycletls.Options{}, "GET")
+binaryData := downloadResp.BodyBytes  // Raw []byte data
+stringData := downloadResp.Body       // Same data as string (backward compatibility)
+```
+
+**JavaScript/TypeScript Binary Data Support:**
+```js
+const initCycleTLS = require('cycletls');
+const fs = require('fs');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+
+  // Upload binary image data
+  const imageData = fs.readFileSync('image.jpg');
+  const uploadResponse = await cycleTLS('https://api.example.com/upload', {
+    body: imageData.toString('binary'), // Convert Buffer to binary string
+    headers: { 'Content-Type': 'image/jpeg' }
+  }, 'POST');
+
+  // Download binary data using arrayBuffer()
+  const downloadResponse = await cycleTLS('https://api.example.com/download');
+  const binaryData = await downloadResponse.arrayBuffer(); // Clean binary data
+  const buffer = Buffer.from(binaryData);
+  fs.writeFileSync('downloaded-file.jpg', buffer);
+
+  cycleTLS.exit();
+})();
+```
+
+
+
+## 2.0.2 - (8-12-2025)
+### Release Highlights
+Automatic cookie jar support and enhanced cookie management
+
+### Enhancements
+- [Automatic cookie jar support for CycleTLS](https://github.com/Danny-Dasilva/CycleTLS/issues/368)
+- Thread-safe AutoCookieJar wrapper around Go's standard cookiejar
+- EnableCookieJar boolean option for both Go and TypeScript APIs
+- Automatic cookie storage/retrieval based on Set-Cookie headers
+- Backward compatibility with manual cookie approaches
+- RFC 6265 standards compliance for cookie handling
+
+### Examples
+
+**Automatic Cookie Jar (Go):**
+```go
+client := cycletls.Init()
+
+// First request - cookies automatically stored
+response1, err := client.Do("https://httpbin.org/cookies/set?session=12345", cycletls.Options{
+    EnableCookieJar: true,
+    DisableRedirect: true,
+}, "GET")
+
+// Second request - cookies automatically sent
+response2, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+    EnableCookieJar: true,
+}, "GET")
+```
+
+**Automatic Cookie Jar (TypeScript):**
+```js
+const cycleTLS = await initCycleTLS();
+
+// First request - cookies automatically stored
+await cycleTLS.get('https://httpbin.org/cookies/set?session=12345', {
+    enableCookieJar: true,
+    disableRedirect: true
+});
+
+// Second request - cookies automatically sent
+const response = await cycleTLS.get('https://httpbin.org/cookies', {
+    enableCookieJar: true
+});
+```
+
 ## 2.0.0 - (8-9-2025)
 ### Release Highlights
 ⚠️ **MAJOR BREAKING CHANGES** ⚠️

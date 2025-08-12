@@ -13,45 +13,78 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/gorilla/websocket"
 	utls "github.com/refraction-networking/utls"
 )
 
+// Time wraps time.Time overriddin the json marshal/unmarshal to pass
+// timestamp as integer
+type Time struct {
+	time.Time
+}
+
+// A Cookie represents an HTTP cookie as sent in the Set-Cookie header of an
+// HTTP response or the Cookie header of an HTTP request.
+//
+// See https://tools.ietf.org/html/rfc6265 for details.
+type Cookie struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+
+	Path        string `json:"path"`   // optional
+	Domain      string `json:"domain"` // optional
+	Expires     time.Time
+	JSONExpires Time   `json:"expires"`    // optional
+	RawExpires  string `json:"rawExpires"` // for reading cookies only
+
+	// MaxAge=0 means no 'Max-Age' attribute specified.
+	// MaxAge<0 means delete cookie now, equivalently 'Max-Age: 0'
+	// MaxAge>0 means Max-Age attribute present and given in seconds
+	MaxAge   int            `json:"maxAge"`
+	Secure   bool           `json:"secure"`
+	HTTPOnly bool           `json:"httpOnly"`
+	SameSite nhttp.SameSite `json:"sameSite"`
+	Raw      string
+	Unparsed []string `json:"unparsed"` // Raw text of unparsed attribute-value pairs
+}
+
 // Options sets CycleTLS client options
 type Options struct {
-	URL                string            `json:"url"`
-	Method             string            `json:"method"`
-	Headers            map[string]string `json:"headers"`
-	Body               string            `json:"body"`
-	
+	URL       string            `json:"url"`
+	Method    string            `json:"method"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body"`
+	BodyBytes []byte            `json:"bodyBytes"` // New field for binary request data
+
 	// TLS fingerprinting options
-	Ja3                string            `json:"ja3"`
-	Ja4                string            `json:"ja4"`
-	Ja4H               string            `json:"ja4h"` // HTTP Client fingerprinting
-	HTTP2Fingerprint   string            `json:"http2Fingerprint"`
-	QUICFingerprint    string            `json:"quicFingerprint"`
-	
+	Ja3              string `json:"ja3"`
+	Ja4r             string `json:"ja4r"` // JA4 raw format with explicit cipher/extension values
+	HTTP2Fingerprint string `json:"http2Fingerprint"`
+	QUICFingerprint  string `json:"quicFingerprint"`
+	DisableGrease    bool   `json:"disableGrease"` // Disable GREASE for exact JA4 matching
+
 	// Browser identification
-	UserAgent          string            `json:"userAgent"`
-	
+	UserAgent string `json:"userAgent"`
+
 	// Connection options
-	Proxy              string            `json:"proxy"`
-	Cookies            []Cookie          `json:"cookies"`
-	Timeout            int               `json:"timeout"`
-	DisableRedirect    bool              `json:"disableRedirect"`
-	HeaderOrder        []string          `json:"headerOrder"`
-	OrderAsProvided    bool              `json:"orderAsProvided"` //TODO
-	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
-	
+	Proxy              string   `json:"proxy"`
+	Cookies            []Cookie `json:"cookies"`
+	Timeout            int      `json:"timeout"`
+	DisableRedirect    bool     `json:"disableRedirect"`
+	HeaderOrder        []string `json:"headerOrder"`
+	OrderAsProvided    bool     `json:"orderAsProvided"` //TODO
+	InsecureSkipVerify bool     `json:"insecureSkipVerify"`
+
 	// Protocol options
-	ForceHTTP1         bool              `json:"forceHTTP1"`
-	ForceHTTP3         bool              `json:"forceHTTP3"`
-	Protocol           string            `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
-	
+	ForceHTTP1 bool   `json:"forceHTTP1"`
+	ForceHTTP3 bool   `json:"forceHTTP3"`
+	Protocol   string `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
+
 	// Connection reuse options
-	EnableConnectionReuse bool            `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
+	EnableConnectionReuse bool `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
 }
 
 type cycleTLSRequest struct {
@@ -61,11 +94,11 @@ type cycleTLSRequest struct {
 
 // rename to request+client+options
 type fullRequest struct {
-	req        *http.Request
-	client     http.Client
-	options    cycleTLSRequest
-	sseClient  *SSEClient      // For SSE connections
-	wsClient   *WebSocketClient // For WebSocket connections
+	req       *http.Request
+	client    http.Client
+	options   cycleTLSRequest
+	sseClient *SSEClient       // For SSE connections
+	wsClient  *WebSocketClient // For WebSocket connections
 }
 
 // CycleTLS creates full request and response
@@ -84,22 +117,23 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	var browser = Browser{
 		// TLS fingerprinting options
-		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
-		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
-		QUICFingerprint:    request.Options.QUICFingerprint,
-		
+		JA3:              request.Options.Ja3,
+		JA4r:             request.Options.Ja4r,
+		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
+		QUICFingerprint:  request.Options.QUICFingerprint,
+		DisableGrease:    request.Options.DisableGrease,
+
 		// Browser identification
-		UserAgent:          request.Options.UserAgent,
-		
+		UserAgent: request.Options.UserAgent,
+
 		// Connection options
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
-		
+
 		// Header ordering
-		HeaderOrder:        request.Options.HeaderOrder,
+		HeaderOrder: request.Options.HeaderOrder,
 	}
 
 	// Handle protocol-specific clients
@@ -121,7 +155,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		// Only disable if explicitly set to false
 		enableConnectionReuse = false
 	}
-	
+
 	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
@@ -134,7 +168,14 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		log.Fatal(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	// Handle both string body and byte body
+	var bodyReader io.Reader
+	if len(request.Options.BodyBytes) > 0 {
+		bodyReader = bytes.NewReader(request.Options.BodyBytes)
+	} else {
+		bodyReader = strings.NewReader(request.Options.Body)
+	}
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, bodyReader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -218,14 +259,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
-	// Apply JA4H fingerprinting if provided
-	if request.Options.Ja4H != "" {
-		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
-		if err != nil {
-			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
-		}
-	}
-
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel
 	activeRequestsMutex.Unlock()
@@ -236,26 +269,26 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 // dispatchHTTP3Request handles HTTP/3 specific request processing
 func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Create browser configuration for HTTP/3
 	var browser = Browser{
 		// TLS fingerprinting options
-		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
-		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
-		QUICFingerprint:    request.Options.QUICFingerprint,
-		
+		JA3:              request.Options.Ja3,
+		JA4r:             request.Options.Ja4r,
+		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
+		QUICFingerprint:  request.Options.QUICFingerprint,
+
 		// Browser identification
-		UserAgent:          request.Options.UserAgent,
-		
+		UserAgent: request.Options.UserAgent,
+
 		// Connection options
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         false, // Force HTTP/3
 		ForceHTTP3:         true,  // Force HTTP/3
-		
+
 		// Header ordering
-		HeaderOrder:        request.Options.HeaderOrder,
+		HeaderOrder: request.Options.HeaderOrder,
 	}
 
 	// Default to true for connection reuse
@@ -264,7 +297,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		// Only disable if explicitly set to false
 		enableConnectionReuse = false
 	}
-	
+
 	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
@@ -277,7 +310,14 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		log.Fatal(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, strings.NewReader(request.Options.Body))
+	// Handle both string body and byte body
+	var bodyReader io.Reader
+	if len(request.Options.BodyBytes) > 0 {
+		bodyReader = bytes.NewReader(request.Options.BodyBytes)
+	} else {
+		bodyReader = strings.NewReader(request.Options.Body)
+	}
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, bodyReader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -297,14 +337,6 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	req.Header.Set("Host", u.Host)
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
-	// Apply JA4H fingerprinting if provided
-	if request.Options.Ja4H != "" {
-		err := ApplyJA4HToRequest(req, request.Options.Ja4H)
-		if err != nil {
-			log.Printf("Warning: failed to apply JA4H fingerprint: %v", err)
-		}
-	}
-
 	activeRequestsMutex.Lock()
 	activeRequests[request.RequestID] = cancel
 	activeRequestsMutex.Unlock()
@@ -315,26 +347,26 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 // dispatchSSERequest handles SSE specific request processing
 func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Create browser configuration for SSE
 	var browser = Browser{
 		// TLS fingerprinting options
-		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
-		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
-		QUICFingerprint:    request.Options.QUICFingerprint,
-		
+		JA3:              request.Options.Ja3,
+		JA4r:             request.Options.Ja4r,
+		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
+		QUICFingerprint:  request.Options.QUICFingerprint,
+
 		// Browser identification
-		UserAgent:          request.Options.UserAgent,
-		
+		UserAgent: request.Options.UserAgent,
+
 		// Connection options
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
-		
+
 		// Header ordering
-		HeaderOrder:        request.Options.HeaderOrder,
+		HeaderOrder: request.Options.HeaderOrder,
 	}
 
 	// Default to true for connection reuse
@@ -343,7 +375,7 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		// Only disable if explicitly set to false
 		enableConnectionReuse = false
 	}
-	
+
 	client, err := newClientWithReuse(
 		browser,
 		request.Options.Timeout,
@@ -361,10 +393,10 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 	for k, v := range request.Options.Headers {
 		headers.Set(k, v)
 	}
-	
+
 	// Create SSE client
 	sseClient := NewSSEClient(&client, headers)
-	
+
 	// Create a placeholder request for consistency
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.Options.URL, nil)
 	if err != nil {
@@ -386,43 +418,43 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 // dispatchWebSocketRequest handles WebSocket specific request processing
 func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Create browser configuration for WebSocket
 	var browser = Browser{
 		// TLS fingerprinting options
-		JA3:                request.Options.Ja3,
-		JA4:                request.Options.Ja4,
-		HTTP2Fingerprint:   request.Options.HTTP2Fingerprint,
-		QUICFingerprint:    request.Options.QUICFingerprint,
-		
+		JA3:              request.Options.Ja3,
+		JA4r:             request.Options.Ja4r,
+		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
+		QUICFingerprint:  request.Options.QUICFingerprint,
+
 		// Browser identification
-		UserAgent:          request.Options.UserAgent,
-		
+		UserAgent: request.Options.UserAgent,
+
 		// Connection options
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         false, // WebSocket doesn't support HTTP/3
-		
+
 		// Header ordering
-		HeaderOrder:        request.Options.HeaderOrder,
+		HeaderOrder: request.Options.HeaderOrder,
 	}
 
 	// Get TLS config for WebSocket
 	tlsConfig := &utls.Config{
 		InsecureSkipVerify: browser.InsecureSkipVerify,
 	}
-	
+
 	// Prepare headers for WebSocket
 	headers := make(http.Header)
 	for k, v := range request.Options.Headers {
 		headers.Set(k, v)
 	}
-	
+
 	// Create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(headers)
 	wsClient := NewWebSocketClient(tlsConfig, convertedHeaders)
-	
+
 	// Create a placeholder request for consistency
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.Options.URL, nil)
 	if err != nil {
@@ -440,58 +472,6 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		wsClient: wsClient,
 	}
 }
-
-// func dispatcher(res fullRequest) (response Response, err error) {
-// 	defer res.client.CloseIdleConnections()
-// 	finalUrl := res.options.Options.URL
-// 	resp, err := res.client.Do(res.req)
-// 	if err != nil {
-
-// 		parsedError := parseError(err)
-
-// 		headers := make(map[string]string)
-// 		var cookies []*nhttp.Cookie
-// 		return Response{RequestID: res.options.RequestID, Status: parsedError.StatusCode, Body: parsedError.ErrorMsg + "-> \n" + string(err.Error()), Headers: headers, Cookies: cookies, FinalUrl: finalUrl}, nil //normally return error here
-
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
-// 		finalUrl = resp.Request.URL.String()
-// 	}
-
-// 	encoding := resp.Header["Content-Encoding"]
-// 	content := resp.Header["Content-Type"]
-// 	bodyBytes, err := io.ReadAll(resp.Body)
-
-// 	if err != nil {
-// 		log.Print("Parse Bytes" + err.Error())
-// 		return response, err
-// 	}
-
-// 	Body := DecompressBody(bodyBytes, encoding, content)
-// 	headers := make(map[string]string)
-
-// 	for name, values := range resp.Header {
-// 		if name == "Set-Cookie" {
-// 			headers[name] = strings.Join(values, "/,/")
-// 		} else {
-// 			for _, value := range values {
-// 				headers[name] = value
-// 			}
-// 		}
-// 	}
-// 	cookies := convertFHTTPCookiesToNetHTTPCookies(resp.Cookies())
-// 	return Response{
-// 		RequestID: res.options.RequestID,
-// 		Status:    resp.StatusCode,
-// 		Body:      Body,
-// 		Headers:   headers,
-// 		Cookies:   cookies,
-// 		FinalUrl:  finalUrl,
-// 	}, nil
-
-// }
 
 // // Queue queues request in worker pool
 // func (client CycleTLS) Queue(URL string, options Options, Method string) {
@@ -575,13 +555,13 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 		dispatchSSEAsync(res, chanWrite)
 		return
 	}
-	
+
 	// Handle WebSocket connections
 	if res.wsClient != nil {
 		dispatchWebSocketAsync(res, chanWrite)
 		return
 	}
-	
+
 	defer func() {
 		activeRequestsMutex.Lock()
 		delete(activeRequests, res.options.RequestID)
@@ -593,12 +573,12 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 	hostPort := urlObj.Host
 	if !strings.Contains(hostPort, ":") {
 		if urlObj.Scheme == "https" {
-			hostPort = hostPort + ":443"  // Default HTTPS port
+			hostPort = hostPort + ":443" // Default HTTPS port
 		} else {
-			hostPort = hostPort + ":80"   // Default HTTP port
+			hostPort = hostPort + ":80" // Default HTTP port
 		}
 	}
-	
+
 	// Don't close connections when finished - they'll be reused for the same host
 	// Instead, tell the roundtripper to keep this connection but close others
 	defer func() {
@@ -607,7 +587,7 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 			transport.CloseIdleConnections(hostPort)
 		}
 	}()
-	
+
 	finalUrl := res.options.Options.URL
 
 	resp, err := res.client.Do(res.req)
@@ -798,7 +778,7 @@ func dispatchSSEAsync(res fullRequest, chanWrite chan []byte) {
 		// Send error response
 		var b bytes.Buffer
 		var requestIDLength = len(res.options.RequestID)
-		
+
 		b.WriteByte(byte(requestIDLength >> 8))
 		b.WriteByte(byte(requestIDLength))
 		b.WriteString(res.options.RequestID)
@@ -807,14 +787,14 @@ func dispatchSSEAsync(res fullRequest, chanWrite chan []byte) {
 		b.WriteString("error")
 		b.WriteByte(byte(0 >> 8)) // Status code 0
 		b.WriteByte(byte(0))
-		
+
 		var message = "SSE connection failed: " + err.Error()
 		var messageLength = len(message)
-		
+
 		b.WriteByte(byte(messageLength >> 8))
 		b.WriteByte(byte(messageLength))
 		b.WriteString(message)
-		
+
 		chanWrite <- b.Bytes()
 		return
 	}
@@ -884,7 +864,7 @@ func dispatchSSEAsync(res fullRequest, chanWrite chan []byte) {
 				debugLogger.Printf("SSE read error: %s", err.Error())
 				break
 			}
-			
+
 			if event == nil {
 				continue
 			}
@@ -896,7 +876,7 @@ func dispatchSSEAsync(res fullRequest, chanWrite chan []byte) {
 				"id":    event.ID,
 				"retry": event.Retry,
 			}
-			
+
 			eventBytes, err := json.Marshal(eventData)
 			if err != nil {
 				debugLogger.Printf("SSE event marshal error: %s", err.Error())
@@ -954,33 +934,33 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite chan []byte) {
 		// Send error response
 		var b bytes.Buffer
 		var requestIDLength = len(res.options.RequestID)
-		
+
 		b.WriteByte(byte(requestIDLength >> 8))
 		b.WriteByte(byte(requestIDLength))
 		b.WriteString(res.options.RequestID)
 		b.WriteByte(0)
 		b.WriteByte(5)
 		b.WriteString("error")
-		
+
 		statusCode := 0
 		if resp != nil {
 			statusCode = resp.StatusCode
 		}
-		
+
 		b.WriteByte(byte(statusCode >> 8))
 		b.WriteByte(byte(statusCode))
-		
+
 		var message = "WebSocket connection failed: " + err.Error()
 		var messageLength = len(message)
-		
+
 		b.WriteByte(byte(messageLength >> 8))
 		b.WriteByte(byte(messageLength))
 		b.WriteString(message)
-		
+
 		chanWrite <- b.Bytes()
 		return
 	}
-	
+
 	wsResp := &WebSocketResponse{
 		Conn:     conn,
 		Response: resp,
@@ -1041,9 +1021,9 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite chan []byte) {
 			"status":  "connected",
 			"message": "WebSocket connection established",
 		}
-		
+
 		msgBytes, _ := json.Marshal(successMsg)
-		
+
 		var b bytes.Buffer
 		requestIDLength := len(res.options.RequestID)
 		bodyChunkLength := len(msgBytes)
@@ -1095,7 +1075,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite chan []byte) {
 				"messageType": messageType,
 				"data":        string(message),
 			}
-			
+
 			msgBytes, err := json.Marshal(msgData)
 			if err != nil {
 				debugLogger.Printf("WebSocket message marshal error: %s", err.Error())
@@ -1267,12 +1247,13 @@ func main() {
 
 // Backward compatibility types and functions for integration tests
 type Response struct {
-	RequestID string                 `json:"requestId"`
-	Status    int                    `json:"status"`
-	Body      string                 `json:"body"`
-	Headers   map[string]string      `json:"headers"`
-	Cookies   []*nhttp.Cookie        `json:"cookies"`
-	FinalUrl  string                 `json:"finalUrl"`
+	RequestID string            `json:"requestId"`
+	Status    int               `json:"status"`
+	Body      string            `json:"body"`
+	BodyBytes []byte            `json:"bodyBytes"` // New field for binary response data
+	Headers   map[string]string `json:"headers"`
+	Cookies   []*nhttp.Cookie   `json:"cookies"`
+	FinalUrl  string            `json:"finalUrl"`
 }
 
 // JSONBody parses the response body as JSON
@@ -1315,7 +1296,7 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// Create browser from options
 	browser := Browser{
 		JA3:                options.Ja3,
-		JA4:                options.Ja4,
+		JA4r:               options.Ja4r,
 		HTTP2Fingerprint:   options.HTTP2Fingerprint,
 		QUICFingerprint:    options.QUICFingerprint,
 		UserAgent:          options.UserAgent,
@@ -1325,7 +1306,7 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		ForceHTTP3:         options.ForceHTTP3,
 		HeaderOrder:        options.HeaderOrder,
 	}
-	
+
 	// Note: Don't automatically set HeaderOrder from UserAgent here as it can interfere with connection management
 	// The pseudo-header order should be set through explicit HTTP2Fingerprint or Options.HeaderOrder
 
@@ -1336,7 +1317,7 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		// Only disable if explicitly set to false
 		enableConnectionReuse = false
 	}
-	
+
 	httpClient, err := newClientWithReuse(
 		browser,
 		options.Timeout,
@@ -1350,7 +1331,13 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	}
 
 	// Create request using fhttp
-	req, err := http.NewRequest(Method, URL, strings.NewReader(options.Body))
+	var bodyReader io.Reader
+	if len(options.BodyBytes) > 0 {
+		bodyReader = bytes.NewReader(options.BodyBytes)
+	} else {
+		bodyReader = strings.NewReader(options.Body)
+	}
+	req, err := http.NewRequest(Method, URL, bodyReader)
 	if err != nil {
 		return Response{}, err
 	}
@@ -1358,7 +1345,7 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// Set pseudo-header order based on UserAgent - only for HTTP/2, not HTTP/3
 	headerOrder := parseUserAgent(options.UserAgent).HeaderOrder
 	req.Header = http.Header{}
-	
+
 	// Only set PHeaderOrderKey for HTTP/2, not HTTP/3
 	if !options.ForceHTTP3 {
 		req.Header[http.PHeaderOrderKey] = headerOrder
@@ -1429,10 +1416,11 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	}
 
 	return Response{
-		Status:   resp.StatusCode,
-		Body:     string(bodyBytes),
-		Headers:  headers,
-		Cookies:  netCookies,
-		FinalUrl: finalUrl,
+		Status:    resp.StatusCode,
+		Body:      string(bodyBytes),
+		BodyBytes: bodyBytes, // Provide raw bytes for binary data
+		Headers:   headers,
+		Cookies:   netCookies,
+		FinalUrl:  finalUrl,
 	}, nil
 }

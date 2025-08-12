@@ -26,7 +26,7 @@ func NewHTTP2Fingerprint(fingerprint string) (*HTTP2Fingerprint, error) {
 
 	// Parse settings
 	settingsStr := parts[0]
-	
+
 	// Determine the separator used in the settings string
 	var settingsParts []string
 	if strings.Contains(settingsStr, ";") && !strings.Contains(settingsStr, ",") {
@@ -36,7 +36,7 @@ func NewHTTP2Fingerprint(fingerprint string) (*HTTP2Fingerprint, error) {
 		// Default to comma separator
 		settingsParts = strings.Split(settingsStr, ",")
 	}
-	
+
 	settings := make([]http2.Setting, 0, len(settingsParts))
 
 	for _, setting := range settingsParts {

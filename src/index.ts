@@ -46,10 +46,10 @@ export interface CycleTLSRequestOptions {
   
   // TLS fingerprinting options
   ja3?: string;
-  ja4?: string;
-  ja4h?: string; // HTTP Client fingerprinting
+  ja4r?: string;         // JA4 raw format with explicit cipher/extension values
   http2Fingerprint?: string;
   quicFingerprint?: string;
+  disableGrease?: boolean; // Disable GREASE for exact JA4 matching
   
   // Browser identification
   userAgent?: string;
@@ -66,6 +66,8 @@ export interface CycleTLSRequestOptions {
   forceHTTP1?: boolean;
   forceHTTP3?: boolean;
   protocol?: string; // "http1", "http2", "http3", "websocket", "sse"
+  
+
 }
 
 export interface CycleTLSResponse {
@@ -576,6 +578,8 @@ class CycleTLSClientImpl extends EventEmitter {
     });
   }
 
+
+
   async request(
     url: string,
     options: CycleTLSRequestOptions,
@@ -591,7 +595,7 @@ class CycleTLSClientImpl extends EventEmitter {
     options ??= {}
 
     // Set default fingerprinting options - prefer JA3 if multiple options are provided
-    if (!options?.ja3 && !options?.ja4 && !options?.ja4h && !options?.http2Fingerprint && !options?.quicFingerprint) {
+    if (!options?.ja3 && !options?.ja4r && !options?.http2Fingerprint && !options?.quicFingerprint) {
       options.ja3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0";
     }
     
@@ -624,6 +628,8 @@ class CycleTLSClientImpl extends EventEmitter {
 
       options.cookies = tempArr;
     }
+    
+
 
     // Track if we've connected to this host before for connection reuse
     const hasExistingConnection = this.connectionsByHost.has(hostKey);
@@ -700,7 +706,7 @@ class CycleTLSClientImpl extends EventEmitter {
                 }
               });
               
-              // Return response immediately with live stream
+                            // Return response immediately with live stream
               const streamMethods = createStreamResponseMethods(stream);
               
               resolveRequest({
@@ -726,7 +732,7 @@ class CycleTLSClientImpl extends EventEmitter {
                 response.data.headers
               );
               
-              // Create response methods
+                            // Create response methods
               const responseMethods = createResponseMethods(rawBuffer, response.data.headers);
               
               resolveRequest({

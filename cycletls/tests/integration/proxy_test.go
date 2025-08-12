@@ -32,12 +32,12 @@ func TestProxySuccess(t *testing.T) {
 		t.Skip("Skipping this test on non-linux platforms")
 		return
 	}
-	
+
 	// Wait for proxy to be ready
 	if err := waitForProxy("127.0.0.1:9050", 30*time.Second); err != nil {
 		t.Fatalf("SOCKS proxy not ready: %v", err)
 	}
-	
+
 	client := cycletls.Init()
 	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{
@@ -59,12 +59,12 @@ func TestSocks4Proxy(t *testing.T) {
 		t.Skip("Skipping this test on non-linux platforms")
 		return
 	}
-	
+
 	// Wait for proxy to be ready
 	if err := waitForProxy("127.0.0.1:9050", 30*time.Second); err != nil {
 		t.Fatalf("SOCKS proxy not ready: %v", err)
 	}
-	
+
 	client := cycletls.Init()
 	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{
@@ -88,12 +88,12 @@ func TestSocks5hProxy(t *testing.T) {
 		t.Skip("Skipping this test on non-linux platforms")
 		return
 	}
-	
+
 	// Wait for proxy to be ready
 	if err := waitForProxy("127.0.0.1:9050", 30*time.Second); err != nil {
 		t.Fatalf("SOCKS proxy not ready: %v", err)
 	}
-	
+
 	client := cycletls.Init()
 	defer client.Close() // Ensure resources are cleaned up
 	resp, err := client.Do("https://httpbin.org/ip", cycletls.Options{

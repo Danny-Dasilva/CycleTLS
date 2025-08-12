@@ -61,12 +61,12 @@ const myRequests: Request[] = [
             {
                 "name": "example1",
                 "value": "aaaaaaa",
-                "expires": "Mon, 02-Jan-2022 15:04:05 EST"
+                "expires": "2022-01-02T15:04:05Z"
             },
             {
                 "name": "example2",
                 "value": "bbbbbbbbb",
-                "expires": "Tue, 06-Jan-2022 2:03:05 EST"
+                "expires": "2022-01-06T02:03:05Z"
             }]
     },
     { url: "http://httpbin.org/ip" },  //log ip 
@@ -80,34 +80,36 @@ const myRequests: Request[] = [
 test('Should Return 200 for all responses', async () => {
     const cycleTLS = await initCycleTLS({port: 9123});
 
-    for (let request of myRequests) {
-        const response = await cycleTLS(request.url, {
-            body: request.body,
-            ja3: request.ja3,
-            userAgent: request.userAgent,
-            headers: request.headers,
-            cookies: request.cookies,
-        }, request.method);
+    try {
+        for (let request of myRequests) {
+            const response = await cycleTLS(request.url, {
+                body: request.body,
+                ja3: request.ja3,
+                userAgent: request.userAgent,
+                headers: request.headers,
+                cookies: request.cookies,
+            }, request.method);
 
-        // Handle different response types based on URL
-        let result;
-        if (request.url.includes('/html') || request.url.includes('example.com')) { 
-            // These URLs return HTML, not JSON
-            result = await response.text();
-            expect(typeof result).toBe('string');
-        } else {
-            // These URLs return JSON - but some might fail, so let's be safe
-            try {
-                result = await response.json();
-                expect(typeof result).toBe('object');
-            } catch (error) {
-                // If JSON parsing fails, fall back to text
+            // Handle different response types based on URL
+            let result;
+            if (request.url.includes('/html') || request.url.includes('example.com')) { 
+                // These URLs return HTML, not JSON
                 result = await response.text();
                 expect(typeof result).toBe('string');
+            } else {
+                // These URLs return JSON - but some might fail, so let's be safe
+                try {
+                    result = await response.json();
+                    expect(typeof result).toBe('object');
+                } catch (error) {
+                    // If JSON parsing fails, fall back to text
+                    result = await response.text();
+                    expect(typeof result).toBe('string');
+                }
             }
+            expect(response.status).toBe(200)
         }
-        expect(response.status).toBe(200)
+    } finally {
+        await cycleTLS.exit()
     }
-    await cycleTLS.exit()
-
 });

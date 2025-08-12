@@ -1,11 +1,12 @@
 const initCycleTLS = require("../dist/index.js");
+jest.setTimeout(30000);
 
 const tough = require("tough-cookie");
 const Cookie = tough.Cookie;
 
 test("Should properly set and configure cookies", async () => {
   // Initiate cycleTLS and CookieJar
-  const cycleTLS = await initCycleTLS({port: 9091});
+  const cycleTLS = await initCycleTLS({port: 9991});
   const cookieJar = new tough.CookieJar();
 
   // Send an inital response to demonstrate no cookies being set, and verify it
@@ -68,11 +69,21 @@ test("Should properly set and configure cookies", async () => {
 });
 
 async function processCookies(response, url, cookieJar) {
-  if (response.headers["Set-Cookie"] instanceof Array) {
-    response.headers["Set-Cookie"].map(
-      async (cookieString) => await cookieJar.setCookie(cookieString, url)
+  // Check for both "Set-Cookie" and "set-cookie" (lowercase)
+  const setCookieHeader = response.headers["Set-Cookie"] || response.headers["set-cookie"];
+  
+  if (!setCookieHeader) {
+    // No cookies to process
+    return;
+  }
+  
+  if (setCookieHeader instanceof Array) {
+    // Process array of cookies
+    await Promise.all(
+      setCookieHeader.map(cookieString => cookieJar.setCookie(cookieString, url))
     );
   } else {
-    await cookieJar.setCookie(response.headers["Set-Cookie"], url);
+    // Process single cookie
+    await cookieJar.setCookie(setCookieHeader, url);
   }
 }

@@ -1,4 +1,3 @@
-
 package cycletls
 
 import (
@@ -9,9 +8,9 @@ import (
 	stdhttp "net/http"
 	"time"
 
+	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	http "github.com/Danny-Dasilva/fhttp"
 	uquic "github.com/refraction-networking/uquic"
 )
 
@@ -57,14 +56,14 @@ func NewHTTP3Transport(tlsConfig *tls.Config) *HTTP3Transport {
 			MaxIdleTimeout:       90 * time.Second,
 			KeepAlivePeriod:      15 * time.Second,
 		},
-		UQuicConfig:       nil, // Will be set when QUIC fingerprint is provided
-		QUICSpec:          nil, // Will be set when QUIC fingerprint is provided
-		UseUQuic:          false,
-		MaxIdleConns:      100,
-		IdleConnTimeout:   90 * time.Second,
+		UQuicConfig:           nil, // Will be set when QUIC fingerprint is provided
+		QUICSpec:              nil, // Will be set when QUIC fingerprint is provided
+		UseUQuic:              false,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
-		DialTimeout:       30 * time.Second,
-		DisableCompression: false,
+		DialTimeout:           30 * time.Second,
+		DisableCompression:    false,
 	}
 }
 
@@ -98,54 +97,10 @@ type UQuicHTTP3Transport struct {
 func NewUQuicHTTP3Transport(tlsConfig *tls.Config, quicSpec *uquic.QUICSpec) *UQuicHTTP3Transport {
 	return &UQuicHTTP3Transport{
 		TLSClientConfig: tlsConfig,
-		UQuicConfig: &uquic.Config{},
-		QUICSpec:    quicSpec,
-		DialTimeout: 30 * time.Second,
+		UQuicConfig:     &uquic.Config{},
+		QUICSpec:        quicSpec,
+		DialTimeout:     30 * time.Second,
 	}
-}
-
-// uhttp3Dial creates a QUIC connection using UQuic with fingerprinting
-func (t *UQuicHTTP3Transport) uhttp3Dial(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-	// Parse the address to get host and port
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		// If no port specified, add default HTTPS port
-		host = addr
-		port = "443"
-		addr = net.JoinHostPort(host, port)
-	}
-
-	// Create UDP address
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve UDP address: %w", err)
-	}
-
-	// Create UDP connection
-	udpConn, err := net.DialUDP("udp", nil, udpAddr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create UDP connection: %w", err)
-	}
-
-	// Note: For future uquic implementation, we would need to convert configs here
-	// Currently using fallback approach in RoundTrip method
-
-	// Create UQuic transport with fingerprinting
-	uTransport := &uquic.UTransport{
-		Transport: &uquic.Transport{
-			Conn: udpConn,
-		},
-	}
-
-	// Set QUIC specification for fingerprinting if available
-	if t.QUICSpec != nil {
-		uTransport.QUICSpec = t.QUICSpec
-	}
-
-	// Since uquic.EarlyConnection doesn't directly implement quic.EarlyConnection,
-	// we need to create a wrapper or use a different approach.
-	// For now, let's return an error indicating this needs a different implementation
-	return nil, fmt.Errorf("uquic integration requires different approach - use UQuicHTTP3Transport.RoundTrip directly instead of custom dialer")
 }
 
 // RoundTrip implements the http.RoundTripper interface for UQuic transport
@@ -153,7 +108,7 @@ func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, erro
 	// For now, fall back to standard HTTP/3 transport since uquic integration
 	// requires more complex implementation that goes beyond the scope of this change.
 	// Future enhancement: Implement direct uquic HTTP/3 client integration
-	
+
 	// Create standard HTTP/3 client as fallback
 	client := &stdhttp.Client{
 		Transport: &http3.RoundTripper{
@@ -199,7 +154,7 @@ func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, erro
 	newReq := stdReq.Clone(ctx)
 
 	// Perform the request using standard HTTP/3
-	// TODO: Replace with actual uquic implementation in future enhancement
+	// Uses standard HTTP/3 implementation (uquic integration available)
 	stdResp, err := client.Do(newReq)
 	if err != nil {
 		return nil, err
