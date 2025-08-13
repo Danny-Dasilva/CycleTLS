@@ -6,7 +6,7 @@ toolchain go1.24.4
 
 replace github.com/Danny-Dasilva/CycleTLS/cycletls => ../cycletls
 
-require github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.26
+require github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.27
 
 require (
 	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 // indirect
