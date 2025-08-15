@@ -237,7 +237,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		}
 	} else if rt.JA4r != "" {
 		// Use JA4r (raw) fingerprint
-		spec, err = JA4RStringToSpec(rt.JA4r, rt.UserAgent, rt.ForceHTTP1, rt.DisableGrease)
+		spec, err = JA4RStringToSpec(rt.JA4r, rt.UserAgent, rt.ForceHTTP1, rt.DisableGrease, host)
 		if err != nil {
 			return nil, err
 		}

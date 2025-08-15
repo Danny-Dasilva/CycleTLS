@@ -16,7 +16,6 @@ require (
 )
 
 require (
-	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/gaukas/clienthellod v0.4.2 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect

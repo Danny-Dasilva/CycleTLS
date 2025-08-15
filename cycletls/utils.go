@@ -666,7 +666,7 @@ func ParseJA4HString(ja4h string) (*JA4HComponents, error) {
 // that would produce a similar fingerprint
 
 // JA4RStringToSpec creates a ClientHelloSpec from a JA4_r (raw) string
-func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGrease bool) (*utls.ClientHelloSpec, error) {
+func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGrease bool, serverName string) (*utls.ClientHelloSpec, error) {
 	components, err := ParseJA4RString(ja4r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse JA4_r: %w", err)
@@ -748,22 +748,22 @@ func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGre
 	// 1. SNI indicator is "d" (domain)
 	// 2. SNI (0x0000) is not already in the extensions list  
 	// 3. The claimed extension count is higher than our actual count
-	// 4. The difference is more than just ALPN (avoid adding SNI for equivalent fingerprints)
 	extensionDeficit := components.ExtensionCount - actualExtensionCount
-	shouldAddSNI := components.SNI == "d" && !hasSNIExtension && extensionDeficit > 0 &&
-		!(extensionDeficit == 1 && components.ALPN != "" && !hasALPNExtension)
+	shouldAddSNI := components.SNI == "d" && !hasSNIExtension && extensionDeficit > 0
 
-	// Process extensions from JA4_r FIRST to maintain original order
-	for _, extCode := range components.Extensions {
-		if ext := CreateExtensionFromID(extCode, tlsVersion, components, disableGrease); ext != nil {
-			extensions = append(extensions, ext)
+	// Add SNI extension FIRST if needed (0x0000 comes first numerically)
+	if shouldAddSNI {
+		sniExt := &utls.SNIExtension{
+			ServerName: serverName,
 		}
+		extensions = append(extensions, sniExt)
 	}
 
-	// Add SNI extension AFTER the original extensions if needed
-	if shouldAddSNI {
-		sniExt := &utls.SNIExtension{}
-		extensions = append(extensions, sniExt)
+	// Process extensions from JA4_r AFTER SNI to maintain proper numerical order
+	for _, extCode := range components.Extensions {
+		if ext := CreateExtensionFromID(extCode, tlsVersion, components, disableGrease, serverName); ext != nil {
+			extensions = append(extensions, ext)
+		}
 	}
 
 	// Add ALPN extension manually if:

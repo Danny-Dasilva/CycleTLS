@@ -292,10 +292,12 @@ func IsGREASEValue(extID uint16) bool {
 }
 
 // CreateExtensionFromID creates an appropriate extension for the given ID
-func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComponents, disableGrease bool) utls.TLSExtension {
+func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComponents, disableGrease bool, serverName string) utls.TLSExtension {
 	switch extID {
 	case 0x0000: // Server Name Indication
-		return &utls.SNIExtension{}
+		return &utls.SNIExtension{
+			ServerName: serverName,
+		}
 	case 0x0005: // Status Request
 		return &utls.StatusRequestExtension{}
 	case 0x000a: // Supported Groups (Elliptic Curves)
