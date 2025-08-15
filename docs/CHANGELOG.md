@@ -1,5 +1,76 @@
 # CycleTLS Changelog
 
+
+
+## 2.0.4 - (8-13-2024)
+
+### Added
+- **Force TLS 1.3 Renegotiation Support** - Intelligent automatic upgrade from TLS 1.2 to TLS 1.3
+  - New `TLS13AutoRetry` parameter enables automatic TLS version negotiation
+  - Proactive TLS 1.3 upgrade for JA3 fingerprints with version 771 (TLS 1.2)
+  - Automatic fallback mechanism to original TLS 1.2 if TLS 1.3 fails
+
+- **Post-Quantum Curve Support** - Enhanced curve compatibility for emerging standards
+  - Added support for X25519MLKEM768 (curve 4588)
+  - Added support for SecP256r1MLKEM768 (curve 4587)
+  - Added support for SecP384r1MLKEM1024 (curve 4589)
+  - Intelligent filtering of curves for TLS 1.3 compatibility
+
+### Changed
+- **Simplified TLS 1.3 Configuration** - Reduced complexity from 6 parameters to 1
+  - Removed `ForceTLS13` - redundant with auto-retry logic
+  - Removed `TLS13CompatCurves` - now handled automatically
+  - Removed `PreferTLS13` - preference handled by auto-retry
+  - Removed `TLS13FallbackMode` - simplified to single retry mechanism
+  - Removed `DisableTLS13Retry` - inverted logic to use `TLS13AutoRetry`
+  - Consolidated all TLS 1.3 logic under single `TLS13AutoRetry` parameter
+
+- **Enhanced JA3 Processing**
+  - `convertJA3ForTLS13()` now upgrades TLS version from 771 to 772
+  - Improved curve filtering to ensure TLS 1.3 compatibility
+  - Better handling of post-quantum and hybrid curves
+
+### Fixed
+- Chrome 138 JA3 fingerprints with TLS 1.2 (771) now properly negotiate TLS 1.3
+- Curve compatibility issues with post-quantum curves in TLS 1.3 handshakes
+- Unnecessary retry cycles eliminated through proactive TLS version upgrade
+
+### Technical Details
+
+#### TLS13AutoRetry Parameter
+
+The `TLS13AutoRetry` parameter provides intelligent TLS version negotiation:
+
+```go
+// Basic usage - automatically handles TLS 1.3 upgrade when needed
+response, err := client.Do("https://example.com", cycletls.Options{
+    Ja3:            "771,4865-4866...", // TLS 1.2 JA3
+    TLS13AutoRetry: true,                // Enable automatic TLS 1.3 upgrade
+}, "GET")
+```
+
+**How it works:**
+1. Detects JA3 fingerprints with TLS version 771 (TLS 1.2)
+2. Proactively upgrades to TLS 1.3 (version 772) when `TLS13AutoRetry: true`
+3. Filters incompatible curves (e.g., post-quantum curves not in RFC 8446)
+4. Attempts connection with upgraded TLS 1.3 specification
+5. Falls back to original TLS 1.2 if server doesn't support TLS 1.3
+
+#### Supported TLS 1.3 Curves
+
+Standard curves (RFC 8446):
+- secp256r1 (P-256) - curve 23
+- secp384r1 (P-384) - curve 24
+- secp521r1 (P-521) - curve 25
+- X25519 - curve 29
+- X448 - curve 30
+
+Post-quantum hybrid curves (emerging standards):
+- SecP256r1MLKEM768 - curve 4587 (0x11EB)
+- X25519MLKEM768 - curve 4588 (0x11EC)
+- SecP384r1MLKEM1024 - curve 4589 (0x11ED)
+
+
 ## 2.0.3 - (11-12-2025)
 ### Release Highlights
 Enhanced Binary Data Support, Cookie Jar Documentation & HTTP/3 Protocol Documentation

@@ -83,6 +83,9 @@ type Options struct {
 	ForceHTTP3 bool   `json:"forceHTTP3"`
 	Protocol   string `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
 
+	// TLS 1.3 specific options
+	TLS13AutoRetry     bool     `json:"tls13AutoRetry"`     // Automatically retry with TLS 1.3 compatible curves (default: true)
+
 	// Connection reuse options
 	EnableConnectionReuse bool `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
 }
@@ -131,6 +134,9 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
+
+		// TLS 1.3 specific options
+		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -266,6 +272,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	return fullRequest{req: req, client: client, options: request}
 }
 
+
 // dispatchHTTP3Request handles HTTP/3 specific request processing
 func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -277,6 +284,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		JA4r:             request.Options.Ja4r,
 		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
 		QUICFingerprint:  request.Options.QUICFingerprint,
+		DisableGrease:    request.Options.DisableGrease,
 
 		// Browser identification
 		UserAgent: request.Options.UserAgent,
@@ -286,6 +294,9 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         false, // Force HTTP/3
 		ForceHTTP3:         true,  // Force HTTP/3
+
+		// TLS 1.3 specific options (HTTP/3 requires TLS 1.3)
+		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -355,6 +366,7 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		JA4r:             request.Options.Ja4r,
 		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
 		QUICFingerprint:  request.Options.QUICFingerprint,
+		DisableGrease:    request.Options.DisableGrease,
 
 		// Browser identification
 		UserAgent: request.Options.UserAgent,
@@ -364,6 +376,9 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
+
+		// TLS 1.3 specific options
+		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -426,6 +441,7 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		JA4r:             request.Options.Ja4r,
 		HTTP2Fingerprint: request.Options.HTTP2Fingerprint,
 		QUICFingerprint:  request.Options.QUICFingerprint,
+		DisableGrease:    request.Options.DisableGrease,
 
 		// Browser identification
 		UserAgent: request.Options.UserAgent,
@@ -435,6 +451,9 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         false, // WebSocket doesn't support HTTP/3
+
+		// TLS 1.3 specific options
+		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,

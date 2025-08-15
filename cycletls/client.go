@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	utls "github.com/refraction-networking/utls"
+	uquic "github.com/refraction-networking/uquic"
 	"golang.org/x/net/proxy"
 )
 
@@ -38,6 +39,7 @@ type Browser struct {
 	JA4r             string // JA4 raw format with explicit cipher/extension values
 	HTTP2Fingerprint string
 	QUICFingerprint  string
+	USpec            *uquic.QUICSpec // UQuic QUIC specification for HTTP3 fingerprinting
 	DisableGrease    bool
 
 	// Browser identification
@@ -48,6 +50,9 @@ type Browser struct {
 	InsecureSkipVerify bool
 	ForceHTTP1         bool
 	ForceHTTP3         bool
+
+	// TLS 1.3 specific options
+	TLS13AutoRetry     bool
 
 	// Ordered HTTP header fields
 	HeaderOrder []string

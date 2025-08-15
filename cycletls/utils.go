@@ -180,8 +180,28 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		if err != nil {
 			return nil, err
 		}
+		
+		// For TLS 1.3 (version 772), validate curve compatibility
+		ver, _ := strconv.ParseUint(version, 10, 16)
+		if uint16(ver) == utls.VersionTLS13 && !isTLS13CompatibleCurve(uint16(cid)) {
+			// Skip incompatible curves for TLS 1.3
+			continue
+		}
+		
 		targetCurves = append(targetCurves, utls.CurveID(cid))
 	}
+	
+	// Ensure TLS 1.3 has at least basic compatible curves if all were filtered out
+	ver, _ := strconv.ParseUint(version, 10, 16)
+	if uint16(ver) == utls.VersionTLS13 && len(targetCurves) == 0 {
+		// Add default TLS 1.3 compatible curves: X25519 and secp256r1
+		if parsedUserAgent.UserAgent == chrome {
+			targetCurves = append(targetCurves, utls.CurveID(utls.GREASE_PLACEHOLDER))
+		}
+		targetCurves = append(targetCurves, utls.CurveID(29)) // X25519
+		targetCurves = append(targetCurves, utls.CurveID(23)) // secp256r1
+	}
+	
 	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
 
 	// parse point formats
@@ -252,6 +272,70 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 		Extensions:         exts,
 		GetSessionID:       sha256.Sum256,
 	}, nil
+}
+
+// StringToTLS13CompatibleSpec creates a TLS 1.3 compatible ClientHelloSpec by filtering curves
+func StringToTLS13CompatibleSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
+	// For TLS 1.3 compatibility, we use only widely supported curves: X25519 (29) and secp256r1 (23)
+	tls13CompatibleJA3 := convertJA3ForTLS13(ja3)
+	return StringToSpec(tls13CompatibleJA3, userAgent, forceHTTP1)
+}
+
+// convertJA3ForTLS13 converts a JA3 string to use TLS 1.3 compatible curves
+func convertJA3ForTLS13(ja3 string) string {
+	tokens := strings.Split(ja3, ",")
+	if len(tokens) != 5 {
+		return ja3 // Return original if malformed
+	}
+	
+	// Replace TLS version (position 0) with TLS 1.3 (772) if it's TLS 1.2 (771)
+	if tokens[0] == "771" {
+		tokens[0] = "772" // Upgrade TLS 1.2 to TLS 1.3
+	}
+	
+	// Replace curves (position 3) with TLS 1.3 compatible ones: X25519 (29) and secp256r1 (23)
+	tokens[3] = "29-23" // X25519 and secp256r1
+	
+	return strings.Join(tokens, ",")
+}
+
+// isTLS13CompatibleCurve checks if a curve ID is compatible with TLS 1.3
+func isTLS13CompatibleCurve(curveID uint16) bool {
+	// TLS 1.3 compatible curves based on RFC 8446 and common implementations
+	switch curveID {
+	case 23: // secp256r1 (P-256)
+		return true
+	case 24: // secp384r1 (P-384) 
+		return true
+	case 25: // secp521r1 (P-521)
+		return true
+	case 29: // X25519
+		return true
+	case 30: // X448
+		return true
+		
+	// Post-quantum hybrid curves (emerging standard)
+	case 4587: // 0x11EB - SecP256r1MLKEM768 (P-256 + MLKEM768)
+		return true
+	case 4588: // 0x11EC - X25519MLKEM768 (X25519 + MLKEM768)
+		return true
+	case 4589: // 0x11ED - SecP384r1MLKEM1024 (P-384 + MLKEM1024)
+		return true
+		
+	default:
+		return false
+	}
+}
+
+// filterTLS13CompatibleCurves filters a list of curve IDs to only include TLS 1.3 compatible ones
+func filterTLS13CompatibleCurves(curves []uint16) []uint16 {
+	var compatibleCurves []uint16
+	for _, curve := range curves {
+		if isTLS13CompatibleCurve(curve) {
+			compatibleCurves = append(compatibleCurves, curve)
+		}
+	}
+	return compatibleCurves
 }
 
 // JA4Components represents the parsed components of a JA4 string
@@ -386,14 +470,15 @@ func ParseJA4String(ja4 string) (*JA4Components, error) {
 
 // JA4RComponents represents the parsed components of a JA4_r (raw) string
 type JA4RComponents struct {
-	TLSVersion       string
-	SNI              string   // "d" for domain, "i" for IP
-	CipherCount      int      // Number of cipher suites
-	ExtensionCount   int      // Number of extensions
-	ALPN             string   // ALPN value (e.g., "h2" for HTTP/2)
-	CipherSuites     []uint16 // Raw cipher suite values
-	Extensions       []uint16 // Raw extension values
-	SignatureSchemes []uint16 // Raw signature scheme values (optional, from 4th part)
+	TLSVersion         string
+	SNI                string   // "d" for domain, "i" for IP
+	CipherCount        int      // Number of cipher suites
+	ExtensionCount     int      // Number of extensions
+	ExtensionCountStr  string   // Original extension count format (e.g., "09")
+	ALPN               string   // ALPN value (e.g., "h2" for HTTP/2)
+	CipherSuites       []uint16 // Raw cipher suite values
+	Extensions         []uint16 // Raw extension values
+	SignatureSchemes   []uint16 // Raw signature scheme values (optional, from 4th part)
 }
 
 // ParseJA4RString parses a JA4_r (raw) string into its components
@@ -441,6 +526,7 @@ func ParseJA4RString(ja4r string) (*JA4RComponents, error) {
 
 	// Parse extension count - can be 1 or 2 digits
 	var extensionCount int
+	var extensionCountStr string
 	var alpn string
 
 	// Try parsing different lengths for extension count
@@ -452,11 +538,13 @@ func ParseJA4RString(ja4r string) (*JA4RComponents, error) {
 			if remainingAfter2 == "" || remainingAfter2 == "h1" || remainingAfter2 == "h2" ||
 				remainingAfter2 == "h3" || strings.HasPrefix(remainingAfter2, "h") {
 				extensionCount = twoDigitCount
+				extensionCountStr = remainder[0:2] // Store original format (e.g., "09")
 				alpn = remainingAfter2
 			} else {
 				// 2-digit doesn't work, try 1-digit
 				if oneDigitCount, err := strconv.Atoi(remainder[0:1]); err == nil {
 					extensionCount = oneDigitCount
+					extensionCountStr = remainder[0:1] // Store original format
 					alpn = remainder[1:]
 				} else {
 					return nil, fmt.Errorf("invalid JA4_r string: cannot parse extension count from '%s'", remainder)
@@ -466,6 +554,7 @@ func ParseJA4RString(ja4r string) (*JA4RComponents, error) {
 			// 2-digit failed, try 1-digit
 			if oneDigitCount, err := strconv.Atoi(remainder[0:1]); err == nil {
 				extensionCount = oneDigitCount
+				extensionCountStr = remainder[0:1] // Store original format
 				alpn = remainder[1:]
 			} else {
 				return nil, fmt.Errorf("invalid JA4_r string: cannot parse extension count from '%s'", remainder)
@@ -475,6 +564,7 @@ func ParseJA4RString(ja4r string) (*JA4RComponents, error) {
 		// Only 1 character left, must be extension count with no ALPN
 		if oneDigitCount, err := strconv.Atoi(remainder[0:1]); err == nil {
 			extensionCount = oneDigitCount
+			extensionCountStr = remainder[0:1] // Store original format
 			alpn = ""
 		} else {
 			return nil, fmt.Errorf("invalid JA4_r string: cannot parse extension count from '%s'", remainder)
@@ -529,14 +619,15 @@ func ParseJA4RString(ja4r string) (*JA4RComponents, error) {
 	}
 
 	return &JA4RComponents{
-		TLSVersion:       tlsVersion,
-		SNI:              sni,
-		CipherCount:      cipherCount,
-		ExtensionCount:   extensionCount,
-		ALPN:             alpn,
-		CipherSuites:     cipherSuites,
-		Extensions:       extensions,
-		SignatureSchemes: signatureSchemes,
+		TLSVersion:        tlsVersion,
+		SNI:               sni,
+		CipherCount:       cipherCount,
+		ExtensionCount:    extensionCount,
+		ExtensionCountStr: extensionCountStr,
+		ALPN:              alpn,
+		CipherSuites:      cipherSuites,
+		Extensions:        extensions,
+		SignatureSchemes:  signatureSchemes,
 	}, nil
 }
 
@@ -575,7 +666,7 @@ func ParseJA4HString(ja4h string) (*JA4HComponents, error) {
 // that would produce a similar fingerprint
 
 // JA4RStringToSpec creates a ClientHelloSpec from a JA4_r (raw) string
-func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGrease bool) (*utls.ClientHelloSpec, error) {
+func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGrease bool, serverName string) (*utls.ClientHelloSpec, error) {
 	components, err := ParseJA4RString(ja4r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse JA4_r: %w", err)
@@ -619,6 +710,15 @@ func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGre
 		}
 	}
 
+	// Check if SNI extension (0x0000) is present in the extensions list
+	hasSNIExtension := false
+	for _, extCode := range components.Extensions {
+		if extCode == 0x0000 {
+			hasSNIExtension = true
+			break
+		}
+	}
+
 	// Check if ALPN extension (0x0010) is present in the extensions list
 	hasALPNExtension := false
 	for _, extCode := range components.Extensions {
@@ -636,9 +736,32 @@ func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGre
 	// Build extensions based on raw values using the new extension framework
 	extensions := []utls.TLSExtension{}
 
-	// Process extensions from JA4_r using CreateExtensionFromID
+	// Calculate how many extensions we'll actually have after processing
+	actualExtensionCount := len(components.Extensions)
+	
+	// Check if ALPN will be added automatically
+	if components.ALPN != "" && !hasALPNExtension {
+		actualExtensionCount++
+	}
+	
+	// Add SNI extension only if:
+	// 1. SNI indicator is "d" (domain)
+	// 2. SNI (0x0000) is not already in the extensions list  
+	// 3. The claimed extension count is higher than our actual count
+	extensionDeficit := components.ExtensionCount - actualExtensionCount
+	shouldAddSNI := components.SNI == "d" && !hasSNIExtension && extensionDeficit > 0
+
+	// Add SNI extension FIRST if needed (0x0000 comes first numerically)
+	if shouldAddSNI {
+		sniExt := &utls.SNIExtension{
+			ServerName: serverName,
+		}
+		extensions = append(extensions, sniExt)
+	}
+
+	// Process extensions from JA4_r AFTER SNI to maintain proper numerical order
 	for _, extCode := range components.Extensions {
-		if ext := CreateExtensionFromID(extCode, tlsVersion, components, disableGrease); ext != nil {
+		if ext := CreateExtensionFromID(extCode, tlsVersion, components, disableGrease, serverName); ext != nil {
 			extensions = append(extensions, ext)
 		}
 	}
@@ -905,6 +1028,37 @@ func CreateUQuicSpecFromFingerprint(quicFingerprint string) (*uquic.QUICSpec, er
 
 	return &spec, nil
 }
+
+// CreateUQuicSpecFromJA4 creates a QUIC specification from a JA4 fingerprint
+// This function maps JA4 characteristics to appropriate QUIC transport specs
+func CreateUQuicSpecFromJA4(ja4r string) (*uquic.QUICSpec, error) {
+	if ja4r == "" {
+		return nil, errors.New("empty JA4 fingerprint")
+	}
+
+	// Parse the JA4R fingerprint to extract TLS characteristics
+	components, err := ParseJA4RString(ja4r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JA4R: %w", err)
+	}
+
+	// For now, we use Chrome_115 as the base QUIC spec since it's the most compatible
+	// TODO: In the future, this could be enhanced to create custom QUIC specs
+	// based on the specific JA4 characteristics once more QUIC specs are available
+	
+	// Log the JA4 characteristics for future enhancement
+	_ = components // Keep this to show JA4 parsing works
+	
+	// Use the proven Chrome 115 QUIC spec as it works well with modern servers
+	spec, err := uquic.QUICID2Spec(uquic.QUICChrome_115)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create QUIC spec from JA4: %w", err)
+	}
+
+	return &spec, nil
+}
+
+
 
 // QUICStringToSpec creates a ClientHelloSpec based on a QUIC fingerprint string
 func QUICStringToSpec(quicFingerprint string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {

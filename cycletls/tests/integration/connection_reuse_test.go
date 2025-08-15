@@ -4,6 +4,7 @@
 package cycletls_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -61,6 +62,12 @@ func TestConnectionReuse(t *testing.T) {
 		}
 	}
 
+	// Configure server TLS for HTTP/2
+	server.TLS = &tls.Config{
+		NextProtos:         []string{"h2", "http/1.1"},
+		InsecureSkipVerify: true, // Skip certificate verification for test server
+	}
+	
 	// Start TLS server
 	server.StartTLS()
 	defer server.Close()
@@ -189,6 +196,12 @@ func TestConnectionReuseDisabled(t *testing.T) {
 		}
 	}
 
+	// Configure server TLS for HTTP/2
+	server.TLS = &tls.Config{
+		NextProtos:         []string{"h2", "http/1.1"},
+		InsecureSkipVerify: true, // Skip certificate verification for test server
+	}
+	
 	// Start TLS server
 	server.StartTLS()
 	defer server.Close()

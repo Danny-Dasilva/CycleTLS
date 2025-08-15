@@ -113,6 +113,11 @@ async function testJA4RRoundtrip(testName, inputJA4R, expectedExtensions = null)
             name: "TLS 1.2 JA4R Test", 
             ja4r: "t12d128h2_002f,0035,009c,009d,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0804,0401,0503,0805,0501,0806,0601,0201",
             expectedExt: ['0005', '000a', '000b', '000d', '0017', '0023', 'ff01']
+        },
+        {
+            name: "TLS 1.2 JA4R Test (1209h2)", 
+            ja4r: "t12d1209h2_002f,0035,009c,009d,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0804,0401,0503,0805,0501,0806,0601,0201",
+            expectedExt: ['0005', '000a', '000b', '000d', '0017', '0023', 'ff01']
         }
     ];
     
