@@ -111,9 +111,9 @@ func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	// Create standard HTTP/3 client as fallback
 	client := &stdhttp.Client{
-		Transport: &http3.RoundTripper{
+		Transport: &http3.Transport{
 			TLSClientConfig: t.TLSClientConfig,
-			QuicConfig: &quic.Config{
+			QUICConfig: &quic.Config{
 				HandshakeIdleTimeout:           30 * time.Second,
 				MaxIdleTimeout:                 90 * time.Second,
 				KeepAlivePeriod:                15 * time.Second,
@@ -219,9 +219,9 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Create an HTTP/3 client
 	client := &stdhttp.Client{
-		Transport: &http3.RoundTripper{
+		Transport: &http3.Transport{
 			TLSClientConfig: t.TLSClientConfig,
-			QuicConfig:      t.QuicConfig,
+			QUICConfig:      t.QuicConfig,
 		},
 	}
 
@@ -259,9 +259,9 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // ConfigureHTTP3Client configures an http.Client to use HTTP/3
 func ConfigureHTTP3Client(client *stdhttp.Client, tlsConfig *tls.Config) {
-	client.Transport = &http3.RoundTripper{
+	client.Transport = &http3.Transport{
 		TLSClientConfig: tlsConfig,
-		QuicConfig: &quic.Config{
+		QUICConfig: &quic.Config{
 			HandshakeIdleTimeout:           30 * time.Second,
 			MaxIdleTimeout:                 90 * time.Second,
 			KeepAlivePeriod:                15 * time.Second,
@@ -277,11 +277,11 @@ type HTTP3RoundTripper struct {
 	// QuicConfig is the QUIC configuration
 	QuicConfig *quic.Config
 
-	// Forwarder is the underlying HTTP/3 round tripper
-	Forwarder *http3.RoundTripper
+	// Forwarder is the underlying HTTP/3 transport
+	Forwarder *http3.Transport
 
 	// Dialer is the custom dialer for HTTP/3 connections
-	Dialer func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
+	Dialer func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error)
 }
 
 // NewHTTP3RoundTripper creates a new HTTP/3 round tripper with custom fingerprinting
@@ -292,9 +292,9 @@ func NewHTTP3RoundTripper(tlsConfig *tls.Config, quicConfig *quic.Config) *HTTP3
 	}
 
 	// Create the forwarder with default dialer
-	rt.Forwarder = &http3.RoundTripper{
+	rt.Forwarder = &http3.Transport{
 		TLSClientConfig: tlsConfig,
-		QuicConfig:      quicConfig,
+		QUICConfig:      quicConfig,
 	}
 
 	return rt
@@ -337,9 +337,9 @@ func (rt *HTTP3RoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		}
 
 		// Create a custom HTTP/3 client with our dialer
-		customRT := &http3.RoundTripper{
+		customRT := &http3.Transport{
 			TLSClientConfig: rt.TLSClientConfig,
-			QuicConfig:      rt.QuicConfig,
+			QUICConfig:      rt.QuicConfig,
 			Dial:            rt.Dialer,
 		}
 
@@ -394,7 +394,7 @@ func (rt *HTTP3RoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 // HTTP3Connection represents an HTTP/3 connection with associated metadata
 type HTTP3Connection struct {
-	QuicConn interface{} // Can be quic.EarlyConnection or uquic.EarlyConnection
+	QuicConn interface{} // Can be *quic.Conn or uquic.EarlyConnection
 	RawConn  net.PacketConn
 	Proxys   []string
 	IsUQuic  bool // Flag to indicate if this is a UQuic connection

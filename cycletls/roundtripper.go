@@ -582,10 +582,10 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 		tlsConfig = &tls.Config{}
 	}
 	
-	// Create HTTP/3 RoundTripper - let it establish its own connections for now
-	roundTripper := &http3.RoundTripper{
+	// Create HTTP/3 Transport - let it establish its own connections for now
+	roundTripper := &http3.Transport{
 		TLSClientConfig: tlsConfig,
-		QuicConfig: &quic.Config{
+		QUICConfig: &quic.Config{
 			HandshakeIdleTimeout:           30 * time.Second,
 			MaxIdleTimeout:                 90 * time.Second,
 			KeepAlivePeriod:                15 * time.Second,
