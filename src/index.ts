@@ -388,6 +388,7 @@ class SharedInstance extends EventEmitter {
 
         if (this.pingInterval) {
           clearInterval(this.pingInterval);
+          this.pingInterval = null;
         }
 
         // Ping every 30 seconds
@@ -405,7 +406,9 @@ class SharedInstance extends EventEmitter {
       })
 
       server.on("close", () => {
+        clearInterval(this.connectionTimeout);
         clearInterval(this.pingInterval);
+        this.pingInterval = null;
         this.connectionTimeout = null;
       })
 
