@@ -170,6 +170,7 @@ class SharedInstance extends EventEmitter {
   private executablePath?: string;
   private isHost: boolean = false;
   private connectionTimeout: NodeJS.Timeout | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
   private failedInitialization: boolean = false;
   private isShuttingDown: boolean = false;
   private httpServer: http.Server | null = null;
@@ -385,8 +386,28 @@ class SharedInstance extends EventEmitter {
           }
         });
 
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+        }
+
+        // Ping every 30 seconds
+        this.pingInterval = setInterval(() => {
+          if(!this.server || this.server.readyState !== WebSocket.OPEN) return;
+
+          this.server.ping();
+        }, 30 * 1000);
+
         resolve();
       });
+
+      server.on("ping", () => {
+        server.pong();
+      })
+
+      server.on("close", () => {
+        clearInterval(this.pingInterval);
+        this.connectionTimeout = null;
+      })
 
       server.on("error", (err) => {
         // On error, remove the listeners and try again after a short delay.
