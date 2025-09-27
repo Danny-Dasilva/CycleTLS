@@ -1062,6 +1062,28 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite chan []byte) {
 		chanWrite <- b.Bytes()
 	}
 
+	// Set up ping/pong handlers for keep-alive
+	conn.SetPingHandler(func(message string) error {
+		debugLogger.Printf("WebSocket received ping, sending pong")
+
+		err := conn.WriteMessage(websocket.PongMessage, []byte(message))
+
+		if err != nil {
+			debugLogger.Printf("WebSocket pong write error: %s", err.Error())
+		}
+
+		return err
+	})
+
+	conn.SetPongHandler(func(string) error {
+		debugLogger.Printf("WebSocket received pong")
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	// Set read deadline to handle connection health
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
 	// If there's body data, send it as the first WebSocket message
 	if res.options.Options.Body != "" {
 		err := conn.WriteMessage(websocket.TextMessage, []byte(res.options.Options.Body))
