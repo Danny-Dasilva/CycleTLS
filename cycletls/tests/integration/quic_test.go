@@ -23,7 +23,6 @@ func TestQUICHttp3WithRoundTripper(t *testing.T) {
 		return
 	}
 
-	t.Logf("Testing HTTP/3 with JA4 fingerprint: %s", Chrome138JA4r)
 
 	// Test HTTP/3 using JA4 fingerprint with QUIC transport
 	// This tests that JA4 fingerprints work with HTTP/3 connections

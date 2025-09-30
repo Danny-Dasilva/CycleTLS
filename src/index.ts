@@ -46,7 +46,7 @@ export interface CycleTLSRequestOptions {
   
   // TLS fingerprinting options
   ja3?: string;
-  ja4r?: string;         // JA4 raw format with explicit cipher/extension values
+  ja4r?: string;         // JA4 raw format (JA4R) with explicit cipher/extension values. Pass raw JA4 (JA4R) values. The JA4 hash is not accepted for configuration.
   http2Fingerprint?: string;
   quicFingerprint?: string;
   disableGrease?: boolean; // Disable GREASE for exact JA4 matching
@@ -55,6 +55,7 @@ export interface CycleTLSRequestOptions {
   userAgent?: string;
   
   // Connection options
+  serverName?: string;     // Overrides TLS Server Name Indication (SNI)
   proxy?: string;
   timeout?: number;
   disableRedirect?: boolean;
@@ -283,13 +284,21 @@ class SharedInstance extends EventEmitter {
           const [requestId, error] = errorMessage.split("Request_Id_On_The_Left");
           // Handle request-specific error
         } else {
-          if (this.debug) {
-            this.cleanExit(new Error(errorMessage));
-          } else {
+          // Only restart on truly fatal errors
+          const fatalErrorPattern = /panic|fatal error|runtime error|address already in use/i;
+          
+          if (fatalErrorPattern.test(errorMessage)) {
+            // Critical error - restart the process
             this.cleanExit(
-              `Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
+              `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
             );
             this.handleSpawn(fileName);
+          } else {
+            // Non-fatal error - just log it for debugging
+            if (this.debug) {
+              console.log(`[DEBUG] stderr: ${errorMessage}`);
+            }
+            // Don't restart for non-fatal errors like read timeouts
           }
         }
       });

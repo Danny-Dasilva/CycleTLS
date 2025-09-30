@@ -71,6 +71,7 @@ type Options struct {
 
 	// Connection options
 	Proxy              string   `json:"proxy"`
+	ServerName         string   `json:"serverName"` // Custom TLS SNI override
 	Cookies            []Cookie `json:"cookies"`
 	Timeout            int      `json:"timeout"`
 	DisableRedirect    bool     `json:"disableRedirect"`
@@ -84,7 +85,7 @@ type Options struct {
 	Protocol   string `json:"protocol"` // "http1", "http2", "http3", "websocket", "sse"
 
 	// TLS 1.3 specific options
-	TLS13AutoRetry     bool     `json:"tls13AutoRetry"`     // Automatically retry with TLS 1.3 compatible curves (default: true)
+	TLS13AutoRetry bool `json:"tls13AutoRetry"` // Automatically retry with TLS 1.3 compatible curves (default: true)
 
 	// Connection reuse options
 	EnableConnectionReuse bool `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
@@ -106,8 +107,22 @@ type fullRequest struct {
 
 // CycleTLS creates full request and response
 type CycleTLS struct {
-	ReqChan  chan fullRequest
-	RespChan chan []byte
+	ReqChan    chan fullRequest
+	RespChan   chan Response // V1 default: chan Response for backward compatibility
+	RespChanV2 chan []byte   `json:"-"` // V2 performance: chan []byte for opt-in users
+}
+
+// Option configures a CycleTLS client
+type Option func(*CycleTLS)
+
+// WithRawBytes enables the performance enhancement channel (RespChanV2 chan []byte)
+// Use this option for performance-critical applications that can handle raw byte responses
+func WithRawBytes() Option {
+	return func(client *CycleTLS) {
+		if client.RespChanV2 == nil {
+			client.RespChanV2 = make(chan []byte, 100)
+		}
+	}
 }
 
 var activeRequests = make(map[string]context.CancelFunc)
@@ -130,13 +145,14 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		UserAgent: request.Options.UserAgent,
 
 		// Connection options
+		ServerName:         request.Options.ServerName,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
 
 		// TLS 1.3 specific options
-		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
+		TLS13AutoRetry: request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -262,7 +278,12 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		}
 	}
 
-	req.Header.Set("Host", u.Host)
+	// Respect user-provided Host header for domain fronting; otherwise default to URL host
+	if _, ok := request.Options.Headers["Host"]; !ok {
+		if _, ok := request.Options.Headers["host"]; !ok {
+			req.Header.Set("Host", u.Host)
+		}
+	}
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
 	activeRequestsMutex.Lock()
@@ -271,7 +292,6 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 
 	return fullRequest{req: req, client: client, options: request}
 }
-
 
 // dispatchHTTP3Request handles HTTP/3 specific request processing
 func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
@@ -290,13 +310,14 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		UserAgent: request.Options.UserAgent,
 
 		// Connection options
+		ServerName:         request.Options.ServerName,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         false, // Force HTTP/3
 		ForceHTTP3:         true,  // Force HTTP/3
 
 		// TLS 1.3 specific options (HTTP/3 requires TLS 1.3)
-		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
+		TLS13AutoRetry: request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -345,7 +366,12 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Set("Host", u.Host)
+	// Respect user-provided Host header for domain fronting; otherwise default to URL host
+	if _, ok := request.Options.Headers["Host"]; !ok {
+		if _, ok := request.Options.Headers["host"]; !ok {
+			req.Header.Set("Host", u.Host)
+		}
+	}
 	req.Header.Set("user-agent", request.Options.UserAgent)
 
 	activeRequestsMutex.Lock()
@@ -372,13 +398,14 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		UserAgent: request.Options.UserAgent,
 
 		// Connection options
+		ServerName:         request.Options.ServerName,
 		Cookies:            request.Options.Cookies,
 		InsecureSkipVerify: request.Options.InsecureSkipVerify,
 		ForceHTTP1:         request.Options.ForceHTTP1,
 		ForceHTTP3:         request.Options.ForceHTTP3,
 
 		// TLS 1.3 specific options
-		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
+		TLS13AutoRetry: request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -453,7 +480,7 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		ForceHTTP3:         false, // WebSocket doesn't support HTTP/3
 
 		// TLS 1.3 specific options
-		TLS13AutoRetry:    request.Options.TLS13AutoRetry,
+		TLS13AutoRetry: request.Options.TLS13AutoRetry,
 
 		// Header ordering
 		HeaderOrder: request.Options.HeaderOrder,
@@ -462,6 +489,7 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 	// Get TLS config for WebSocket
 	tlsConfig := &utls.Config{
 		InsecureSkipVerify: browser.InsecureSkipVerify,
+		ServerName:         request.Options.ServerName,
 	}
 
 	// Prepare headers for WebSocket
@@ -713,7 +741,31 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 				}
 
 				if err != nil && err != io.EOF {
-					log.Printf("Read error: %s", err.Error())
+					// Log to stdout instead of stderr to avoid process restart
+					debugLogger.Printf("Read error: %s", err.Error())
+
+					// Send error frame before breaking
+					parsedError := parseError(err)
+					var b bytes.Buffer
+					requestIDLength := len(res.options.RequestID)
+
+					b.WriteByte(byte(requestIDLength >> 8))
+					b.WriteByte(byte(requestIDLength))
+					b.WriteString(res.options.RequestID)
+					b.WriteByte(0)
+					b.WriteByte(5)
+					b.WriteString("error")
+					b.WriteByte(byte(parsedError.StatusCode >> 8))
+					b.WriteByte(byte(parsedError.StatusCode))
+
+					message := parsedError.ErrorMsg
+					messageLength := len(message)
+
+					b.WriteByte(byte(messageLength >> 8))
+					b.WriteByte(byte(messageLength))
+					b.WriteString(message)
+
+					chanWrite <- b.Bytes()
 					break loop
 				}
 
@@ -1282,14 +1334,23 @@ func (r Response) JSONBody() map[string]interface{} {
 	return result
 }
 
-// Init creates a simplified CycleTLS client for integration tests
-func Init(workers ...bool) CycleTLS {
+// Init creates a CycleTLS client with v1 default behavior (chan Response)
+// Use WithRawBytes() option for performance enhancement with chan []byte
+func Init(opts ...Option) CycleTLS {
 	reqChan := make(chan fullRequest, 100)
-	respChan := make(chan []byte, 100)
-	return CycleTLS{
+	respChan := make(chan Response, 100)
+
+	client := CycleTLS{
 		ReqChan:  reqChan,
 		RespChan: respChan,
 	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&client)
+	}
+
+	return client
 }
 
 // Queue queues a request (simplified for integration tests)
@@ -1298,13 +1359,16 @@ func (client CycleTLS) Queue(URL string, options Options, Method string) {
 	// In a real implementation, this would queue the request
 }
 
-// Close closes the channels (simplified for integration tests)
+// Close closes the channels
 func (client CycleTLS) Close() {
 	if client.ReqChan != nil {
 		close(client.ReqChan)
 	}
 	if client.RespChan != nil {
 		close(client.RespChan)
+	}
+	if client.RespChanV2 != nil {
+		close(client.RespChanV2)
 	}
 	// Clear all connections from the global pool
 	clearAllConnections()

@@ -1,6 +1,38 @@
 # CycleTLS Changelog
 
 
+## 2.0.5 - (9-15-2025)
+
+### Enhancements
+- Custom SNI (Server Name Indication) support via `serverName` option to enable domain fronting scenarios. The TLS handshake now uses `serverName` independently of the HTTP `Host` header. [#393](https://github.com/Danny-Dasilva/CycleTLS/issues/393)
+- TypeScript: `serverName?: string` in `CycleTLSRequestOptions`.
+- Go: `Options.ServerName` and `Browser.ServerName` wired through to `roundTripper` and uTLS.
+- When a custom `Host` header is provided, CycleTLS will not overwrite it with the URL host. SNI is derived from `serverName` when set.
+- README: Added a "Custom SNI (domain fronting)" section with JS/TS and Go examples.
+- Documentation: Replaced JA4 (hash) examples with JA4R (raw) format throughout README and docs. [#397](https://github.com/Danny-Dasilva/CycleTLS/issues/397)
+  - All configuration examples now use `ja4r:` with raw cipher/extension values instead of `ja4:` with hashes
+  - Added clarification that JA4 hashes are observation-only values and cannot be used for configuration
+  - Updated TypeScript interface comments to clarify `ja4r` accepts raw values, not hashes
+  - README: Added "Performance Enhancement: Raw Bytes Option" section showing `WithRawBytes()` for opt-in performance benefits
+
+### Bug Fixes
+- **Concurrency Race Condition** - Fixed panic in roundTripper when multiple goroutines create transports for the same address
+  - Added per-address mutex system to serialize transport creation and prevent race conditions
+  - Eliminated panic: "dialTLS returned no error when determining cached transports"  
+  - Improved concurrent performance by preventing redundant transport creation
+  - Preserves HTTP/2 connection pooling and multiplexing functionality
+  - Added regression tests: `TestPanicRegression` and `TestCachedTransportEdgeCase`
+- **Read Timeout Handling** - Fixed hanging promises when read timeouts occur during response body streaming
+  - Go: Added proper error frame propagation when mid-stream read errors occur, ensuring promises resolve with status 408
+  - Go: Changed read error logging from stderr to stdout (via `debugLogger`) to prevent unnecessary process restarts
+  - TypeScript: Updated stderr handler to only restart on fatal errors (panic, runtime error, etc.), not on routine read timeouts
+  - Added comprehensive test coverage for read timeout scenarios in `tests/read-timeout.test.ts`
+- **V1 API Restoration with Options Pattern** - Restored v1 as default behavior to fix breaking changes introduced in v2
+  - `Init()` now creates `RespChan chan Response` (v1 default) - fixes compilation errors for existing users  
+  - New `WithRawBytes()` option provides performance enhancement with `RespChanV2 chan []byte` for opt-in users
+  - Idiomatic Go options pattern: `Init(cycletls.WithRawBytes())` for performance-critical applications
+  - `CycleTLS` struct restored to v1-first design: `RespChan chan Response` + optional `RespChanV2 chan []byte`
+  - Zero breaking changes - all existing v1 code works unchanged with `Init()` and `client.RespChan`
 
 ## 2.0.4 - (8-13-2024)
 
@@ -124,7 +156,7 @@ const fs = require('fs');
   const buffer = Buffer.from(binaryData);
   fs.writeFileSync('downloaded-file.jpg', buffer);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -255,12 +287,12 @@ response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
 
 #### JA4 Fingerprinting (Enhanced)
 
-JA4 is the successor to JA3, providing more detailed TLS fingerprinting:
+JA4R (raw format) allows explicit configuration of TLS fingerprints:
 
 ```javascript
-// JavaScript - Firefox JA4
+// JavaScript - Chrome JA4R (raw format)
 const response = await cycleTLS('https://tls.peet.ws/api/all', {
-  ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+  ja4r: 't13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601',
   userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
 });
 
@@ -934,4 +966,3 @@ New error logging addition
 
 ### Bug Fixes
 - Failed timeout requests will now return a 408 instead of crashing the instance, this will help CycleTLS run through Proxy Lists without crashing
-

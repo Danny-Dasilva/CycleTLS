@@ -1,4 +1,5 @@
 import initCycleTLS from "../dist/index.js";
+import { withCycleTLS } from "./test-utils.js";
 jest.setTimeout(30000);
 let ja3 =
   "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0";
@@ -79,32 +80,31 @@ const myRequests: Request[] = [
 ];
 
 test("Response data contains raw compressed data (Axios-style)", async () => {
-  const cycleTLS = await initCycleTLS({ port: 9115 });
+  await withCycleTLS({ port: 9115 }, async (cycleTLS) => {
+    for (let request of myRequests) {
+      // Test with default responseType (json) - should return raw buffer for compressed data
+      const response = await cycleTLS(request.url, {
+        ja3: ja3,
+        userAgent: userAgent,
+        headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+      });
 
-  for (let request of myRequests) {
-    // Test with default responseType (json) - should return raw buffer for compressed data
-    const response = await cycleTLS(request.url, {
-      ja3: ja3,
-      userAgent: userAgent,
-      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
-    });
+      expect(response.status).toBe(200);
 
-    expect(response.status).toBe(200);
-    
-    // Default (json) should return raw compressed Buffer when JSON parsing fails
-    expect(response.data).toBeInstanceOf(Buffer);
-    expect(response.data.length).toBeGreaterThan(0);
-    
-    // Test with explicit arraybuffer responseType  
-    const arrayBufferResponse = await cycleTLS(request.url, {
-      ja3: ja3,
-      userAgent: userAgent,
-      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
-      responseType: 'arraybuffer'
-    });
-    
-    expect(arrayBufferResponse.data).toBeInstanceOf(ArrayBuffer);
-    expect(arrayBufferResponse.data.byteLength).toBeGreaterThan(0);
-  }
-  await cycleTLS.exit();
+      // Default (json) should return raw compressed Buffer when JSON parsing fails
+      expect(response.data).toBeInstanceOf(Buffer);
+      expect(response.data.length).toBeGreaterThan(0);
+
+      // Test with explicit arraybuffer responseType
+      const arrayBufferResponse = await cycleTLS(request.url, {
+        ja3: ja3,
+        userAgent: userAgent,
+        headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+        responseType: 'arraybuffer'
+      });
+
+      expect(arrayBufferResponse.data).toBeInstanceOf(ArrayBuffer);
+      expect(arrayBufferResponse.data.byteLength).toBeGreaterThan(0);
+    }
+  });
 });

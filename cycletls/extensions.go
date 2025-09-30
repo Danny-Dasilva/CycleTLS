@@ -344,7 +344,7 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 	case 0x0010: // ALPN
 		alpnProtocols := []string{"h2", "http/1.1"}
 		if components != nil {
-			
+
 			switch components.ALPN {
 			case "h2":
 				alpnProtocols = []string{"h2", "http/1.1"}
@@ -354,7 +354,7 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 				alpnProtocols = []string{"h3", "h2", "http/1.1"}
 			}
 		}
-		
+
 		return &utls.ALPNExtension{
 			AlpnProtocols: alpnProtocols,
 		}

@@ -1,4 +1,5 @@
 const initCycleTLS = require("../dist/index.js");
+const { withCycleTLS } = require("./test-utils.js");
 jest.setTimeout(30000);
 
 let ja3 =
@@ -27,9 +28,7 @@ var requestDict = {
 };
 
 test("Multiple concurrent requests should complete successfully", async () => {
-  const cycleTLS = await initCycleTLS({ port: 9150, timeout: 30000 });
-  
-  try {
+  await withCycleTLS({ port: 9150, timeout: 30000 }, async (cycleTLS) => {
     const promises = Object.entries(requestDict).map(([url, params]) => {
       return cycleTLS(
         url,
@@ -52,42 +51,36 @@ test("Multiple concurrent requests should complete successfully", async () => {
     results.forEach((response) => {
       expect(response.status).toBe(200);
     });
-  } finally {
-    await cycleTLS.exit();
-  }
+  });
 });
 
 test("Sequential requests to same host should reuse connection", async () => {
-  const cycleTLS = await initCycleTLS({ port: 9151, timeout: 30000 });
-  
-  try {
+  await withCycleTLS({ port: 9151, timeout: 30000 }, async (cycleTLS) => {
     // Make multiple requests to same domain
     const url = "https://httpbin.org";
-    
+
     // First request
     const response1 = await cycleTLS.get(`${url}/get`, {
       ja3: ja3,
       userAgent: userAgent,
     });
     expect(response1.status).toBe(200);
-    
+
     // Second request - should reuse connection
     const response2 = await cycleTLS.get(`${url}/get?second=true`, {
       ja3: ja3,
       userAgent: userAgent,
     });
     expect(response2.status).toBe(200);
-    
+
     // Third request with different path but same domain - should still reuse connection
     const response3 = await cycleTLS.get(`${url}/headers`, {
       ja3: ja3,
       userAgent: userAgent,
     });
     expect(response3.status).toBe(200);
-    
+
     // The connection reuse is happening at the Go level, and we can't directly test it from JS
     // But we can verify that all requests completed successfully
-  } finally {
-    await cycleTLS.exit();
-  }
+  });
 });
