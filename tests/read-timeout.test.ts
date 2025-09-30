@@ -60,7 +60,7 @@ describe("Read timeout handling", () => {
       // Should receive a 408 timeout status
       expect(response.status).toBe(408);
       const data = await response.text();
-      expect(data).toContain("deadline exceeded");
+      expect(data).toContain("Timeout exceeded");
     });
   });
 
@@ -79,7 +79,7 @@ describe("Read timeout handling", () => {
       // Should receive a 408 timeout status
       expect(response.status).toBe(408);
       const data = await response.text();
-      expect(data).toContain("deadline exceeded");
+      expect(data).toContain("Timeout exceeded");
     });
   });
 
