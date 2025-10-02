@@ -105,15 +105,17 @@ const initCycleTLS = require('cycletls');
   console.log(data);
 
   // Cleanly exit CycleTLS
-  cycleTLS.exit();
+  await cycleTLS.exit();
 
 })();
 
 ```
 
-## JA4 TLS Fingerprinting
+## JA4R (Raw) TLS Fingerprinting
 
-JA4 is an enhanced TLS fingerprinting method that provides more detailed client identification:
+> **Important:** Pass `ja4r` to configure the TLS ClientHello. JA4 (hash) is a report-only value; configuring with a JA4 hash will not change your fingerprint.
+
+JA4R is the raw format of JA4 fingerprinting that allows explicit configuration of cipher suites, extensions, and signature algorithms:
 
 
 ### JavaScript Example
@@ -123,21 +125,21 @@ const initCycleTLS = require('cycletls');
 (async () => {
   const cycleTLS = await initCycleTLS();
 
-  // Firefox JA4 fingerprint
+  // Chrome JA4R fingerprint (raw format)
   const response = await cycleTLS('https://tls.peet.ws/api/all', {
-	ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d'
+	ja4r: 't13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601'
   });
 
   const data = await response.json();
   console.log('JA4:', data.tls.ja4);
   console.log('JA4_r:', data.tls.ja4_r);
   console.log('TLS Version:', data.tls.tls_version_negotiated);
-  
-  cycleTLS.exit();
+
+  await cycleTLS.exit();
 })();
 ```
 
-### Golang JA4 Example
+### Golang JA4R Example
 ```go
 package main
 
@@ -147,19 +149,19 @@ import (
 )
 
 func main() {
-	client := cycletls.Init()
+	client := cycletls.Init(cycletls.WithRawBytes())
 	defer client.Close()
 
-	// Chrome JA4 fingerprint
+	// Chrome JA4R fingerprint (raw format)
 	response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
-		Ja4: "t13d1517h2_8daaf6152771_7e51fdad25f2",
+		Ja4r: "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601",
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
 	}, "GET")
 	
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Response with JA4:", response.Status)
+	log.Println("Response with JA4R:", response.Status)
 }
 ```
 
@@ -184,8 +186,8 @@ const initCycleTLS = require('cycletls');
   const data = await response.json();
   console.log('HTTP/2 Fingerprint:', data.http2.akamai_fingerprint);
   console.log('Settings:', data.http2.sent_frames[0].settings);
-  
-  cycleTLS.exit();
+
+  await cycleTLS.exit();
 })();
 ```
 
@@ -229,9 +231,9 @@ const initCycleTLS = require('cycletls');
 (async () => {
   const cycleTLS = await initCycleTLS();
 
-  // Complete Firefox browser fingerprint
+  // Complete Chrome browser fingerprint with JA4R
   const response = await cycleTLS('https://tls.peet.ws/api/all', {
-	ja4: 't13d1717h2_5b57614c22b0_f2748d6cd58d',
+	ja4r: 't13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601',
 	http2Fingerprint: '1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s',
 	userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
   });
@@ -240,8 +242,8 @@ const initCycleTLS = require('cycletls');
   console.log('Complete fingerprint applied successfully');
   console.log('JA4:', data.tls.ja4);
   console.log('HTTP/2:', data.http2.akamai_fingerprint);
-  
-  cycleTLS.exit();
+
+  await cycleTLS.exit();
 })();
 ```
 
@@ -273,12 +275,12 @@ const initCycleTLS = require('cycletls');
 
   stream.on('end', () => {
 	console.log("stream done");
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 
   stream.on('error', (error) => {
 	console.error('Stream error:', error);
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 })();
 ```
@@ -312,17 +314,17 @@ const initCycleTLS = require('cycletls');
 	  console.log('Stream complete');
 	  const fullData = Buffer.concat(chunks);
 	  console.log('Total received:', fullData.length, 'bytes');
-	  cycleTLS.exit();
+	  await cycleTLS.exit();
 	});
 
 	response.data.on('error', (error) => {
 	  console.error('Stream error:', error);
-	  cycleTLS.exit();
+	  await cycleTLS.exit();
 	});
 
   } catch (error) {
 	console.error('Request failed:', error);
-	cycleTLS.exit();
+	await cycleTLS.exit();
   }
 })();
 ```
@@ -396,6 +398,49 @@ func main() {
 }
 ```
 </details>
+
+#### Performance Enhancement: Raw Bytes Option
+
+The default `Init()` method provides the standard v1 API with `chan Response`. For performance-critical applications that can handle raw bytes, use the `WithRawBytes()` option:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+)
+
+func main() {
+	// Use WithRawBytes() option for performance enhancement
+	client := cycletls.Init(cycletls.WithRawBytes())
+	defer client.Close()
+	
+	// Queue a request
+	go func() {
+		client.Queue("https://ja3er.com/json", cycletls.Options{
+			Ja3: "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0",
+			UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+		}, "GET")
+	}()
+	
+	// Performance pattern: receive raw bytes from RespChanV2
+	select {
+	case responseBytes := <-client.RespChanV2:
+		var response cycletls.Response
+		json.Unmarshal(responseBytes, &response)
+		fmt.Printf("Status: %d\n", response.Status)
+		fmt.Printf("Body: %s\n", response.Body)
+	// Alternative: still supports v1 pattern via RespChan
+	case response := <-client.RespChan:
+		fmt.Printf("Status: %d\n", response.Status)
+		fmt.Printf("Body: %s\n", response.Body)
+	}
+}
+```
+
+**Note:** Use `Init()` for standard compatibility with `chan Response`. Use `Init(cycletls.WithRawBytes())` when you need the performance benefits of handling raw `[]byte` responses directly.
 
 ## Creating an instance
 
@@ -476,8 +521,8 @@ Url is not optional, config is optional
   body: '',
   // JA3 token to send with request
   ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
-  // JA4 token for enhanced fingerprinting
-  ja4: 't13d1516h2_8daaf6152771_02713d6af862',
+  // JA4R token for enhanced fingerprinting (raw format)
+  ja4r: 't13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601',
   // User agent for request
   userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0',
   // Proxy to send request through (supports http, socks4, socks5, socks5h)
@@ -533,7 +578,7 @@ const initCycleTLS = require('cycletls');
   const data = await response.json();
   console.log('Decompressed data:', data);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -626,7 +671,7 @@ const initCycleTLS = require('cycletls');
   } catch (error) {
 	console.error('Request failed:', error);
   } finally {
-	cycleTLS.exit();
+	await cycleTLS.exit();
   }
 })();
 ```
@@ -716,8 +761,8 @@ const initCycleTLS = require('cycletls');
 
   console.log('HTTP Proxy IP:', await httpResponse.json());
   console.log('SOCKS5 IP:', await socksResponse.json());
-  
-  cycleTLS.exit();
+
+  await cycleTLS.exit();
 })();
 ```
 
@@ -891,9 +936,9 @@ const requestDict = {
 
   // Wait for all requests to complete
   await Promise.all(promises);
-  
+
   // Cleanly exit CycleTLS
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -1049,7 +1094,7 @@ const initCycleTLS = require("cycletls");
 	}
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -1112,7 +1157,7 @@ const initCycleTLS = require("cycletls");
 	}
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -1209,7 +1254,7 @@ const Cookie = tough.Cookie;
 	}
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 async function processCookies(response, url, cookieJar) {
@@ -1312,7 +1357,7 @@ const FormData = require('form-data');
   const data = await response.json();
   console.log(data);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 ```
@@ -1339,7 +1384,7 @@ const fs = require('fs');
   const data = await response.json();
   console.log(data);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 ```
@@ -1472,7 +1517,7 @@ const initCycleTLS = require("cycletls");
   const data = await response.json();
   console.log(data);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 ```
@@ -1580,7 +1625,7 @@ var fs = require("fs");
   fs.writeFileSync('./videos/sample_video.mp4', Buffer.from(videoBuffer));
   console.log('Video downloaded');
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 ```
@@ -1617,13 +1662,13 @@ var fs = require("fs");
   stream.on('end', () => {
 	writeStream.end();
 	console.log(`Stream complete. Total size: ${totalSize} bytes`);
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 
   stream.on('error', (error) => {
 	console.error('Stream error:', error);
 	writeStream.end();
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 })();
 ```
@@ -1883,7 +1928,7 @@ const initCycleTLS = require('cycletls');
 	console.log('Response headers:', wsResponse.headers);
   }
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -2021,7 +2066,7 @@ const initCycleTLS = require('cycletls');
   const eventData = await sseResponse.text();
   console.log('SSE events:', eventData);
 
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 ```
 
@@ -2069,12 +2114,12 @@ const initCycleTLS = require('cycletls');
 
   stream.on('end', () => {
 	console.log('SSE stream ended');
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 
   stream.on('error', (error) => {
 	console.error('SSE stream error:', error);
-	cycleTLS.exit();
+	await cycleTLS.exit();
   });
 })();
 ```
@@ -2198,7 +2243,7 @@ The `Browser.SSEConnect` method provides SSE connections with TLS fingerprinting
 type Browser struct {
 	UserAgent          string
 	JA3                string
-	JA4                string
+	JA4r               string
 	HTTP2Fingerprint   string
 	QUICFingerprint    string
 	InsecureSkipVerify bool
@@ -2223,13 +2268,15 @@ type SSEEvent struct {
 
 </details>
 
-### How do I use JA4 fingerprinting?
+### How do I use JA4R fingerprinting?
 
 <details>
 
-JA4 is an enhanced TLS fingerprinting method that provides additional client identification capabilities.
+> **Note:** Pass `ja4r` (raw format) to configure fingerprints. JA4 hashes are for observation only.
 
-### Golang JA4 Fingerprinting
+JA4R is the raw format for configuring TLS fingerprints with explicit cipher suites and extensions.
+
+### Golang JA4R Fingerprinting
 
 ```go
 package main
@@ -2243,10 +2290,10 @@ func main() {
 	client := cycletls.Init()
 	defer client.Close()
 
-	// Use both JA3 and JA4 fingerprints
+	// Use both JA3 and JA4R fingerprints
 	response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
-		Ja4:       "t13d1516h2_8daaf6152771_02713d6af862", // JA4 fingerprint
+		Ja4r:      "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0000,0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601", // JA4R fingerprint (raw format)
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 	}, "GET")
 
@@ -2254,8 +2301,89 @@ func main() {
 		log.Fatal("Request failed: ", err)
 	}
 
-	log.Println("Response with JA4:", response.Status)
+	log.Println("Response with JA4R:", response.Status)
 }
+```
+
+</details>
+
+### How do I set a custom SNI (domain fronting)?
+
+<details>
+
+You can override the TLS Server Name Indication (SNI) independently from the HTTP `Host` header. This enables domain fronting scenarios where the handshake SNI differs from the request host.
+
+JavaScript/TypeScript:
+
+```js
+const initCycleTLS = require('cycletls');
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+  const resp = await cycleTLS('https://127.0.0.1:8443', {
+    serverName: 'front.example',            // TLS SNI used in handshake
+    headers: { Host: 'real.example' },      // HTTP Host header inside the request
+    insecureSkipVerify: true,               // for local/self-signed testing
+    ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0',
+    userAgent: 'Mozilla/5.0 ... Chrome/101.0.4951.54 Safari/537.36'
+  }, 'GET');
+  console.log(await resp.text());
+  await cycleTLS.exit();
+})();
+```
+
+Golang:
+
+```go
+client := cycletls.Init()
+response, err := client.Do("https://127.0.0.1:8443", cycletls.Options{
+    ServerName: "front.example",                  // TLS SNI
+    Headers:    map[string]string{"Host": "real.example"}, // HTTP Host
+    InsecureSkipVerify: true,
+    Ja3: "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+    UserAgent: "Mozilla/5.0 ... Chrome/101.0.4951.54 Safari/537.36",
+}, "GET")
+```
+
+Notes:
+- When `serverName` is provided, it is used for the TLS handshake; the library will not overwrite your `Host` header.
+- JA4R fingerprints that include SNI (extension 0x0000) will be constructed using the provided `serverName`.
+ - Protocol support: `serverName` works with HTTP/1.1, HTTP/2, HTTP/3, WebSocket (`wss://`), and SSE (`https://`).
+
+WebSocket (wss) with custom SNI:
+
+```ts
+import initCycleTLS from 'cycletls';
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+  const ws = await cycleTLS.ws('wss://127.0.0.1:8443/socket', {
+    serverName: 'front.example',
+    headers: { Host: 'real.example' },
+    insecureSkipVerify: true,
+  });
+  ws.onMessage(msg => console.log('message:', msg));
+  await ws.close();
+  await cycleTLS.exit();
+})();
+```
+
+SSE with custom SNI:
+
+```ts
+import initCycleTLS from 'cycletls';
+
+(async () => {
+  const cycleTLS = await initCycleTLS();
+  const sse = await cycleTLS.sse('https://127.0.0.1:8443/events', {
+    serverName: 'front.example',
+    headers: { Host: 'real.example' },
+    insecureSkipVerify: true,
+  });
+  sse.onEvent(ev => console.log('event:', ev));
+  await sse.close();
+  await cycleTLS.exit();
+})();
 ```
 
 </details>
@@ -2309,7 +2437,7 @@ const initCycleTLS = require('cycletls');
   const data = await response.json();
   console.log(data);
   // You can verify the HTTP_Version in the response
-  cycleTLS.exit();
+  await cycleTLS.exit();
 
 })();
 
@@ -2341,7 +2469,7 @@ const initCycleTLS = require('cycletls');
   const data = await response.json();
   console.log(data);
   // HTTP/3 requests use QUIC protocol
-  cycleTLS.exit();
+  await cycleTLS.exit();
 
 })();
 ```

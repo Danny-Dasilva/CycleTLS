@@ -29,7 +29,16 @@ func createErrorString(err error) (msg, debugger string) {
 }
 
 func createErrorMessage(StatusCode int, err error, op string) errorMessage {
-	msg := fmt.Sprintf("Request returned a Syscall Error: %s", err)
+	var msg string
+
+	// For timeout errors, provide a clean, user-friendly message
+	if op == "timeout" {
+		msg = "Request timeout: deadline exceeded"
+	} else {
+		// For other errors, provide detailed debugging information
+		msg = fmt.Sprintf("Request returned a Syscall Error: %s", err)
+	}
+
 	debugger := fmt.Sprintf("%#v\n", err)
 	return errorMessage{StatusCode: StatusCode, debugger: debugger, ErrorMsg: msg, Op: op}
 }
@@ -64,7 +73,9 @@ func parseError(err error) (errormessage errorMessage) {
 
 	// Check for common timeout error messages
 	if strings.Contains(httpError, "context deadline exceeded") ||
-		strings.Contains(httpError, "Client.Timeout exceeded") ||
+		strings.Contains(httpError, "Client.Timeout") ||
+		strings.Contains(httpError, "context cancellation while reading body") ||
+		strings.Contains(httpError, "i/o timeout") ||
 		strings.Contains(httpError, "timeout") {
 		return createErrorMessage(408, err, "timeout")
 	}

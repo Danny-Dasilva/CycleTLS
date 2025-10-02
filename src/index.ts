@@ -46,7 +46,7 @@ export interface CycleTLSRequestOptions {
   
   // TLS fingerprinting options
   ja3?: string;
-  ja4r?: string;         // JA4 raw format with explicit cipher/extension values
+  ja4r?: string;         // JA4 raw format (JA4R) with explicit cipher/extension values. Pass raw JA4 (JA4R) values. The JA4 hash is not accepted for configuration.
   http2Fingerprint?: string;
   quicFingerprint?: string;
   disableGrease?: boolean; // Disable GREASE for exact JA4 matching
@@ -55,6 +55,7 @@ export interface CycleTLSRequestOptions {
   userAgent?: string;
   
   // Connection options
+  serverName?: string;     // Overrides TLS Server Name Indication (SNI)
   proxy?: string;
   timeout?: number;
   disableRedirect?: boolean;
@@ -283,13 +284,21 @@ class SharedInstance extends EventEmitter {
           const [requestId, error] = errorMessage.split("Request_Id_On_The_Left");
           // Handle request-specific error
         } else {
-          if (this.debug) {
-            this.cleanExit(new Error(errorMessage));
-          } else {
+          // Only restart on truly fatal errors
+          const fatalErrorPattern = /panic|fatal error|runtime error|address already in use/i;
+          
+          if (fatalErrorPattern.test(errorMessage)) {
+            // Critical error - restart the process
             this.cleanExit(
-              `Error Processing Request (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
+              `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
             );
             this.handleSpawn(fileName);
+          } else {
+            // Non-fatal error - just log it for debugging
+            if (this.debug) {
+              console.log(`[DEBUG] stderr: ${errorMessage}`);
+            }
+            // Don't restart for non-fatal errors like read timeouts
           }
         }
       });
@@ -648,30 +657,55 @@ class CycleTLSClientImpl extends EventEmitter {
     });
 
     return new Promise((resolveRequest, rejectRequest) => {
-      this.once(requestId, async (response) => {
+      let responseMetadata: any = null;
+
+      const handleMessage = async (response: any) => {
         if (response.method === "error") {
-          // Handle error as a response with proper status code
+          // Handle error before or during body read
+          // If we already have response metadata (headers sent successfully but body read failed),
+          // return the error with empty headers
           const errorResponse = {
             status: response.data.statusCode,
-            headers: {},
-            finalUrl: url,
+            headers: responseMetadata ? responseMetadata.headers : {},
+            finalUrl: responseMetadata ? responseMetadata.finalUrl : url,
             data: response.data.message,
             json: async () => Promise.resolve({}),
             text: async () => Promise.resolve(response.data.message),
             arrayBuffer: async () => Promise.resolve(new ArrayBuffer(0)),
             blob: async () => Promise.resolve(new Blob([response.data.message], { type: 'text/plain' }))
           };
+          this.off(requestId, handleMessage);
           resolveRequest(errorResponse);
-        } else {
+        } else if (response.method === "response") {
+          // Store response metadata but don't resolve yet
+          responseMetadata = response.data;
+        } else if (response.method === "data" || response.method === "end") {
+          // Now we have response metadata, set up stream handling
+          if (!responseMetadata) return;
+
+          // Remove the message handler and set up stream handling
+          this.off(requestId, handleMessage);
+
           const stream = new Readable({ read() { } });
 
           const handleClose = () => {
             this.sharedInstance.cancelRequest(requestId);
           };
 
+          let bodyReadError: any = null;
+
           const handleData = (response: any) => {
             if (response.method === "data") {
               stream.push(Buffer.from(response.data));
+            } else if (response.method === "error") {
+              // Handle error that occurred during body read - store it and close the stream
+              bodyReadError = {
+                statusCode: response.data.statusCode,
+                message: response.data.message
+              };
+              stream.push(null); // Close stream gracefully
+              stream.off("close", handleClose);
+              this.off(requestId, handleData);
             } else if (response.method === "end") {
               stream.push(null);
               stream.off("close", handleClose);
@@ -681,6 +715,9 @@ class CycleTLSClientImpl extends EventEmitter {
 
           stream.on("close", handleClose);
           this.on(requestId, handleData);
+
+          // Push the current data/end message to the stream
+          handleData(response);
           
           try {
             // For stream responses, return live stream immediately without buffering
@@ -701,25 +738,42 @@ class CycleTLSClientImpl extends EventEmitter {
                 },
                 blob: async (): Promise<Blob> => {
                   const buffer = await streamToBuffer(liveStream);
-                  const contentType = response.data.headers['content-type'] || response.data.headers['Content-Type'] || 'application/octet-stream';
+                  const contentType = responseMetadata.headers['content-type'] || responseMetadata.headers['Content-Type'] || 'application/octet-stream';
                   return new Blob([buffer], { type: Array.isArray(contentType) ? contentType[0] : contentType });
                 }
               });
-              
+
                             // Return response immediately with live stream
               const streamMethods = createStreamResponseMethods(stream);
-              
+
               resolveRequest({
-                status: response.data.statusCode,
-                headers: response.data.headers,
-                finalUrl: response.data.finalUrl,
+                status: responseMetadata.statusCode,
+                headers: responseMetadata.headers,
+                finalUrl: responseMetadata.finalUrl,
                 data: stream, // Return live stream directly
                 ...streamMethods
               });
             } else {
               // Get raw buffer first for response methods (existing behavior)
               const rawBuffer = await streamToBuffer(stream);
-              
+
+              // Check if there was an error during body read
+              if (bodyReadError) {
+                // Return error response instead of successful response
+                const errorResponse = {
+                  status: bodyReadError.statusCode,
+                  headers: {},
+                  finalUrl: url,
+                  data: bodyReadError.message,
+                  json: async () => Promise.resolve({}),
+                  text: async () => Promise.resolve(bodyReadError.message),
+                  arrayBuffer: async () => Promise.resolve(new ArrayBuffer(0)),
+                  blob: async () => Promise.resolve(new Blob([bodyReadError.message], { type: 'text/plain' }))
+                };
+                resolveRequest(errorResponse);
+                return;
+              }
+
               // Parse data based on responseType for backward compatibility
               const parsedData = await parseResponseData(
                 new Readable({
@@ -727,18 +781,18 @@ class CycleTLSClientImpl extends EventEmitter {
                     this.push(rawBuffer);
                     this.push(null);
                   }
-                }), 
-                options.responseType, 
-                response.data.headers
+                }),
+                options.responseType,
+                responseMetadata.headers
               );
-              
+
                             // Create response methods
-              const responseMethods = createResponseMethods(rawBuffer, response.data.headers);
-              
+              const responseMethods = createResponseMethods(rawBuffer, responseMetadata.headers);
+
               resolveRequest({
-                status: response.data.statusCode,
-                headers: response.data.headers,
-                finalUrl: response.data.finalUrl,
+                status: responseMetadata.statusCode,
+                headers: responseMetadata.headers,
+                finalUrl: responseMetadata.finalUrl,
                 data: parsedData,
                 ...responseMethods
               });
@@ -747,7 +801,9 @@ class CycleTLSClientImpl extends EventEmitter {
             rejectRequest(error);
           }
         }
-      });
+      };
+
+      this.on(requestId, handleMessage);
     });
   }
 

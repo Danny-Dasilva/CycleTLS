@@ -52,9 +52,9 @@ func NewHTTP3Transport(tlsConfig *tls.Config) *HTTP3Transport {
 	return &HTTP3Transport{
 		TLSClientConfig: tlsConfig,
 		QuicConfig: &quic.Config{
-			HandshakeIdleTimeout:           30 * time.Second,
-			MaxIdleTimeout:                 90 * time.Second,
-			KeepAlivePeriod:                15 * time.Second,
+			HandshakeIdleTimeout: 30 * time.Second,
+			MaxIdleTimeout:       90 * time.Second,
+			KeepAlivePeriod:      15 * time.Second,
 		},
 		UQuicConfig:           nil, // Will be set when QUIC fingerprint is provided
 		QUICSpec:              nil, // Will be set when QUIC fingerprint is provided
@@ -114,9 +114,9 @@ func (t *UQuicHTTP3Transport) RoundTrip(req *http.Request) (*http.Response, erro
 		Transport: &http3.Transport{
 			TLSClientConfig: t.TLSClientConfig,
 			QUICConfig: &quic.Config{
-				HandshakeIdleTimeout:           30 * time.Second,
-				MaxIdleTimeout:                 90 * time.Second,
-				KeepAlivePeriod:                15 * time.Second,
+				HandshakeIdleTimeout: 30 * time.Second,
+				MaxIdleTimeout:       90 * time.Second,
+				KeepAlivePeriod:      15 * time.Second,
 			},
 		},
 	}
@@ -262,9 +262,9 @@ func ConfigureHTTP3Client(client *stdhttp.Client, tlsConfig *tls.Config) {
 	client.Transport = &http3.Transport{
 		TLSClientConfig: tlsConfig,
 		QUICConfig: &quic.Config{
-			HandshakeIdleTimeout:           30 * time.Second,
-			MaxIdleTimeout:                 90 * time.Second,
-			KeepAlivePeriod:                15 * time.Second,
+			HandshakeIdleTimeout: 30 * time.Second,
+			MaxIdleTimeout:       90 * time.Second,
+			KeepAlivePeriod:      15 * time.Second,
 		},
 	}
 }
@@ -408,13 +408,13 @@ func (rt *roundTripper) http3Dial(ctx context.Context, remoteAddr, port string, 
 		// TODO: Implement proper CONNECT-UDP proxy support for HTTP/3
 		return nil, fmt.Errorf("HTTP/3 proxy support not yet implemented")
 	}
-	
+
 	// Direct UDP connection
 	conn, err := net.ListenPacket("udp", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create UDP packet connection: %w", err)
 	}
-	
+
 	return conn, nil
 }
 
@@ -425,7 +425,7 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Configure TLS - use crypto/tls.Config for standard QUIC (matches reference implementation)
 	var tlsConfig *tls.Config
 	if rt.TLSConfig != nil {
@@ -439,8 +439,12 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 		tlsConfig = &tls.Config{}
 	}
 	tlsConfig.NextProtos = []string{http3.NextProtoH3}
-	tlsConfig.ServerName = remoteAddr
-	
+	if rt.ServerName != "" {
+		tlsConfig.ServerName = rt.ServerName
+	} else {
+		tlsConfig.ServerName = remoteAddr
+	}
+
 	// Resolve remote address
 	remoteHost := remoteAddr
 	if net.ParseIP(remoteAddr) == nil {
@@ -457,7 +461,7 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 		// Use the first IP address
 		remoteHost = ips[0].String()
 	}
-	
+
 	// Convert port to integer
 	portInt := 443
 	if port != "" {
@@ -465,7 +469,7 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 			portInt = p
 		}
 	}
-	
+
 	// Configure QUIC - conditional setup like reference implementation
 	var quicConfig *quic.Config
 	// TODO: Add support for rt.UquicConfig when it's available
@@ -486,19 +490,19 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 			Allow0RTT:                      false, // Security consideration
 		}
 	}
-	
+
 	// Establish QUIC connection
 	remoteUDPAddr := &net.UDPAddr{
 		IP:   net.ParseIP(remoteHost),
 		Port: portInt,
 	}
-	
+
 	quicConn, err := quic.DialEarly(ctx, udpConn, remoteUDPAddr, tlsConfig, quicConfig)
 	if err != nil {
 		udpConn.Close()
 		return nil, fmt.Errorf("failed to establish QUIC connection: %w", err)
 	}
-	
+
 	return &HTTP3Connection{
 		QuicConn: quicConn,
 		RawConn:  udpConn,
@@ -514,15 +518,19 @@ func (rt *roundTripper) uhttp3Dial(ctx context.Context, spec *uquic.QUICSpec, re
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Configure TLS with uTLS config - use utls.Config directly (matches reference implementation)
 	if rt.TLSConfig == nil {
 		return nil, fmt.Errorf("TLS config is required for UQuic HTTP/3")
 	}
 	tlsConfig := rt.TLSConfig.Clone()
 	tlsConfig.NextProtos = []string{http3.NextProtoH3}
-	tlsConfig.ServerName = remoteAddr
-	
+	if rt.ServerName != "" {
+		tlsConfig.ServerName = rt.ServerName
+	} else {
+		tlsConfig.ServerName = remoteAddr
+	}
+
 	// Resolve remote address
 	remoteHost := remoteAddr
 	if net.ParseIP(remoteAddr) == nil {
@@ -539,7 +547,7 @@ func (rt *roundTripper) uhttp3Dial(ctx context.Context, spec *uquic.QUICSpec, re
 		// Use the first IP address
 		remoteHost = ips[0].String()
 	}
-	
+
 	// Convert port to integer
 	portInt := 443
 	if port != "" {
@@ -547,15 +555,15 @@ func (rt *roundTripper) uhttp3Dial(ctx context.Context, spec *uquic.QUICSpec, re
 			portInt = p
 		}
 	}
-	
-	// Configure UQuic - conditional setup like reference implementation  
+
+	// Configure UQuic - conditional setup like reference implementation
 	var uquicConfig *uquic.Config
 	// TODO: Add support for rt.UquicConfig when it's available
 	// For now, use default UQuic config similar to reference behavior
 	if uquicConfig == nil {
 		uquicConfig = &uquic.Config{}
 	}
-	
+
 	// Create UQuic transport
 	uTransport := &uquic.UTransport{
 		Transport: &uquic.Transport{
@@ -563,19 +571,19 @@ func (rt *roundTripper) uhttp3Dial(ctx context.Context, spec *uquic.QUICSpec, re
 		},
 		QUICSpec: spec,
 	}
-	
+
 	// Establish QUIC connection with UQuic
 	remoteUDPAddr := &net.UDPAddr{
 		IP:   net.ParseIP(remoteHost),
 		Port: portInt,
 	}
-	
+
 	quicConn, err := uTransport.DialEarly(ctx, remoteUDPAddr, tlsConfig, uquicConfig)
 	if err != nil {
 		udpConn.Close()
 		return nil, fmt.Errorf("failed to establish UQuic connection: %w", err)
 	}
-	
+
 	return &HTTP3Connection{
 		QuicConn: quicConn,
 		RawConn:  udpConn,

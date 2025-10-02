@@ -9,8 +9,8 @@ import (
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	utls "github.com/refraction-networking/utls"
 	uquic "github.com/refraction-networking/uquic"
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
 	"net"
 	stdhttp "net/http"
@@ -23,6 +23,10 @@ var errProtocolNegotiated = errors.New("protocol negotiated")
 
 type roundTripper struct {
 	sync.Mutex
+
+	// Per-address mutexes for preventing concurrent transport creation
+	addressMutexes    map[string]*sync.Mutex
+	addressMutexLock  sync.Mutex
 
 	// TLS fingerprinting options
 	JA3              string
@@ -39,12 +43,13 @@ type roundTripper struct {
 	// Connection options
 	TLSConfig          *utls.Config
 	InsecureSkipVerify bool
+	ServerName         string
 	Cookies            []Cookie
 	ForceHTTP1         bool
 	ForceHTTP3         bool
 
 	// TLS 1.3 specific options
-	TLS13AutoRetry     bool
+	TLS13AutoRetry bool
 
 	// Caching
 	cachedConnections map[string]net.Conn
@@ -176,14 +181,27 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
 	}
 
+	// Use per-address mutex to serialize transport creation and avoid races
+	addressMutex := rt.getAddressMutex(addr)
+	addressMutex.Lock()
+	defer addressMutex.Unlock()
+
+	// Double-check if transport was created while we were waiting for the lock
+	if _, exists := rt.cachedTransports[addr]; exists {
+		// Another goroutine already created the transport
+		return nil
+	}
+
 	// Establish TLS connection
 	_, err := rt.dialTLS(req.Context(), "tcp", addr)
 	switch err {
 	case errProtocolNegotiated:
-		// Expected behavior - transport has been cached
+		// Transport and connection have been negotiated and cached by dialTLS
+		// Nothing else to do here.
 	case nil:
-		// Should never happen
-		panic("dialTLS returned no error when determining cached transports")
+		// A cached connection/transport already exists (e.g., created by another goroutine).
+		// Treat as success instead of panicking.
+		// No action needed; RoundTrip will use the cached transport.
 	default:
 		return err
 	}
@@ -211,6 +229,11 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	if host, _, err = net.SplitHostPort(addr); err != nil {
 		host = addr
 	}
+	// Determine SNI to use (custom serverName takes precedence)
+	serverName := host
+	if rt.ServerName != "" {
+		serverName = rt.ServerName
+	}
 
 	var spec *utls.ClientHelloSpec
 	var proactivelyUpgraded bool // Track if we proactively upgraded TLS 1.2 to 1.3
@@ -237,7 +260,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		}
 	} else if rt.JA4r != "" {
 		// Use JA4r (raw) fingerprint
-		spec, err = JA4RStringToSpec(rt.JA4r, rt.UserAgent, rt.ForceHTTP1, rt.DisableGrease, host)
+		spec, err = JA4RStringToSpec(rt.JA4r, rt.UserAgent, rt.ForceHTTP1, rt.DisableGrease, serverName)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +274,7 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 
 	// Create TLS client
 	conn := utls.UClient(rawConn, &utls.Config{
-		ServerName:         host,
+		ServerName:         serverName,
 		OmitEmptyPsk:       true,
 		InsecureSkipVerify: rt.InsecureSkipVerify,
 	}, utls.HelloCustom)
@@ -273,12 +296,12 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 			}
 			return nil, fmt.Errorf("conn.Handshake() error for TLS 1.3 (retry disabled): %+v", err)
 		}
-		
+
 		// If we proactively upgraded to TLS 1.3 and it failed, try falling back to original TLS 1.2 JA3
 		if proactivelyUpgraded && rt.JA3 != "" {
 			return rt.retryWithOriginalTLS12JA3(ctx, network, addr, host)
 		}
-		
+
 		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
 	}
 
@@ -518,6 +541,24 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 	return net.JoinHostPort(req.URL.Host, "443") // Default HTTPS port
 }
 
+// getAddressMutex returns a mutex for the specific address to serialize transport creation
+func (rt *roundTripper) getAddressMutex(addr string) *sync.Mutex {
+	rt.addressMutexLock.Lock()
+	defer rt.addressMutexLock.Unlock()
+	
+	if rt.addressMutexes == nil {
+		rt.addressMutexes = make(map[string]*sync.Mutex)
+	}
+	
+	if mu, exists := rt.addressMutexes[addr]; exists {
+		return mu
+	}
+	
+	mu := &sync.Mutex{}
+	rt.addressMutexes[addr] = mu
+	return mu
+}
+
 // CloseIdleConnections closes connections that have been idle for too long
 // If selectedAddr is provided, only close connections not matching this address
 func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
@@ -562,6 +603,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		UserAgent:          browser.UserAgent,
 		HeaderOrder:        browser.HeaderOrder,
 		TLSConfig:          browser.TLSConfig,
+		ServerName:         browser.ServerName,
 		Cookies:            browser.Cookies,
 		cachedTransports:   make(map[string]http.RoundTripper),
 		cachedConnections:  make(map[string]net.Conn),
@@ -570,7 +612,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		ForceHTTP3:         browser.ForceHTTP3,
 
 		// TLS 1.3 specific options
-		TLS13AutoRetry:     browser.TLS13AutoRetry,
+		TLS13AutoRetry: browser.TLS13AutoRetry,
 	}
 }
 
@@ -581,7 +623,11 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{}
 	}
-	
+	// Apply custom SNI if provided
+	if rt.ServerName != "" {
+		tlsConfig.ServerName = rt.ServerName
+	}
+
 	// Create HTTP/3 Transport - let it establish its own connections for now
 	roundTripper := &http3.Transport{
 		TLSClientConfig: tlsConfig,
@@ -600,7 +646,7 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 			Allow0RTT:                      false,
 		},
 	}
-	
+
 	// Convert fhttp.Request to net/http.Request
 	stdReq := &stdhttp.Request{
 		Method:           req.Method,
@@ -625,13 +671,13 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 		Cancel:           req.Cancel,
 		Response:         nil,
 	}
-	
+
 	// Use the RoundTripper to make the request
 	stdResp, err := roundTripper.RoundTrip(stdReq)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert back to fhttp.Response
 	return &http.Response{
 		Status:           stdResp.Status,
@@ -653,4 +699,3 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 
 // Default JA3 fingerprint for Chrome
 const DefaultChrome_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
-

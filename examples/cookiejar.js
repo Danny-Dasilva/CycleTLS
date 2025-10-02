@@ -39,7 +39,7 @@ const Cookie = tough.Cookie;
     }
   }
   */
-  cycleTLS.exit();
+  await cycleTLS.exit();
 })();
 
 async function processCookies(response, url, cookieJar) {

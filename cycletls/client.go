@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	utls "github.com/refraction-networking/utls"
 	uquic "github.com/refraction-networking/uquic"
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
 )
 
@@ -46,13 +46,14 @@ type Browser struct {
 	UserAgent string
 
 	// Connection options
+	ServerName         string
 	Cookies            []Cookie
 	InsecureSkipVerify bool
 	ForceHTTP1         bool
 	ForceHTTP3         bool
 
 	// TLS 1.3 specific options
-	TLS13AutoRetry     bool
+	TLS13AutoRetry bool
 
 	// Ordered HTTP header fields
 	HeaderOrder []string
@@ -164,12 +165,13 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 	}
 
 	// Create a hash of the configuration that affects connection behavior
-	configStr := fmt.Sprintf("ja3:%s|ja4r:%s|http2:%s|quic:%s|ua:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
+	configStr := fmt.Sprintf("ja3:%s|ja4r:%s|http2:%s|quic:%s|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
 		browser.JA3,
 		browser.JA4r,
 		browser.HTTP2Fingerprint,
 		browser.QUICFingerprint,
 		browser.UserAgent,
+		browser.ServerName,
 		proxyURL,
 		timeout,
 		disableRedirect,
@@ -300,6 +302,7 @@ func (browser Browser) WebSocketConnect(ctx context.Context, urlStr string) (*we
 	// Create TLS config from browser settings
 	tlsConfig := &utls.Config{
 		InsecureSkipVerify: browser.InsecureSkipVerify,
+		ServerName:         browser.ServerName,
 	}
 
 	// Create http headers directly

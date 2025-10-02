@@ -1,4 +1,5 @@
 import initCycleTLS from "../dist/index.js";
+import { withCycleTLS } from "./test-utils.js";
 jest.setTimeout(30000);
 
 let ja3 =
@@ -8,56 +9,53 @@ let userAgent =
 var fs = require("fs");
 
 test("Should Write all Image types to file", async () => {
-  const cycleTLS = await initCycleTLS({ port: 1111 });
+  await withCycleTLS({ port: 1111 }, async (cycleTLS) => {
+    const jpegImage = await cycleTLS(
+      "http://httpbin.org/image/jpeg",
+      {
+        ja3: ja3,
+        userAgent: userAgent,
+      },
+      "get"
+    );
 
-  const jpegImage = await cycleTLS(
-    "http://httpbin.org/image/jpeg",
-    {
-      ja3: ja3,
-      userAgent: userAgent,
-    },
-    "get"
-  );
+    const jpegBuffer = await jpegImage.arrayBuffer();
+    fs.writeFileSync('./tests/images/output.jpeg', Buffer.from(jpegBuffer));
 
-  const jpegBuffer = await jpegImage.arrayBuffer();
-  fs.writeFileSync('./tests/images/output.jpeg', Buffer.from(jpegBuffer));
+    const pngImage = await cycleTLS(
+      "http://httpbin.org/image/png",
+      {
+        ja3: ja3,
+        userAgent: userAgent,
+      },
+      "get"
+    );
 
-  const pngImage = await cycleTLS(
-    "http://httpbin.org/image/png",
-    {
-      ja3: ja3,
-      userAgent: userAgent,
-    },
-    "get"
-  );
+    const pngBuffer = await pngImage.arrayBuffer();
+    fs.writeFileSync('./tests/images/output.png', Buffer.from(pngBuffer));
 
-  const pngBuffer = await pngImage.arrayBuffer();
-  fs.writeFileSync('./tests/images/output.png', Buffer.from(pngBuffer));
+    const svgImage = await cycleTLS(
+      "http://httpbin.org/image/svg",
+      {
+        ja3: ja3,
+        userAgent: userAgent,
+      },
+      "get"
+    );
+    const svgBuffer = await svgImage.arrayBuffer();
+    fs.writeFileSync('./tests/images/output.svg', Buffer.from(svgBuffer));
 
-  const svgImage = await cycleTLS(
-    "http://httpbin.org/image/svg",
-    {
-      ja3: ja3,
-      userAgent: userAgent,
-    },
-    "get"
-  );
-  const svgBuffer = await svgImage.arrayBuffer();
-  fs.writeFileSync('./tests/images/output.svg', Buffer.from(svgBuffer));
-
-  
-  const webpImage = await cycleTLS(
-    "http://httpbin.org/image/webp",
-    {
-      ja3: ja3,
-      userAgent: userAgent,
-    },
-    "get"
-  );
-  const webpBuffer = await webpImage.arrayBuffer();
-  fs.writeFileSync('./tests/images/output.webp', Buffer.from(webpBuffer));
-
-  await cycleTLS.exit();
+    const webpImage = await cycleTLS(
+      "http://httpbin.org/image/webp",
+      {
+        ja3: ja3,
+        userAgent: userAgent,
+      },
+      "get"
+    );
+    const webpBuffer = await webpImage.arrayBuffer();
+    fs.writeFileSync('./tests/images/output.webp', Buffer.from(webpBuffer));
+  });
 });
 
 test("Files should be the same", async () => {
