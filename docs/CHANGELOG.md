@@ -1,6 +1,27 @@
 # CycleTLS Changelog
 
 
+## 2.0.6 - (11-3-2025)
+
+### Bug Fixes
+- **Connection Reuse Race Condition** - Fixed critical panic when using `enableConnectionReuse: true` with concurrent requests across multiple instances [#407](https://github.com/Danny-Dasilva/CycleTLS/issues/407)
+  - Eliminated panic: "send on closed channel" when WebSocket disconnects during concurrent request processing
+  - Fixed port binding errors: "listen tcp :9119: bind: address already in use" after process crashes
+  - Go: Added `safeChannelWriter` struct with mutex protection and closed-state tracking in `cycletls/index.go`
+  - Go: Updated all channel write operations (23 sites) to use safe writes with graceful failure handling
+  - Go: Added panic recovery in `dispatcherAsync`, `dispatchSSEAsync`, and `dispatchWebSocketAsync` functions
+  - Go: Enhanced `CloseIdleConnections` method with nil checks and synchronized cleanup of connection and transport caches
+  - Performance: Connection reuse now provides 2-3x improvement for repeated requests (first: ~800ms, subsequent: ~350ms)
+  - Added comprehensive test coverage: `test_issue_407.js` (Node.js) and `issue_407_connection_reuse_test.go` (Go integration tests with 50 concurrent request stress test)
+  - Zero breaking changes - all existing code works without modification
+
+### Enhancements
+- Improved error handling and logging for WebSocket channel operations
+- Enhanced concurrency safety with proper mutex usage throughout request dispatchers
+- Request-level failure isolation - single request failures no longer crash entire process
+
+---
+
 ## 2.0.5 - (9-15-2025)
 
 ### Enhancements
