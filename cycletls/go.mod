@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.4
 
 require (
-	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1
+	github.com/Danny-Dasilva/fhttp v0.0.0-20260106165651-41258808b131
 	github.com/andybalholm/brotli v1.2.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/quic-go/quic-go v0.53.0
