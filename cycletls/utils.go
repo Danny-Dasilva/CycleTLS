@@ -132,6 +132,100 @@ func unBrotliData(data []byte) (resData []byte, err error) {
 	return respBody, err
 }
 
+func ModernChromeSpec(forceHTTP1 bool) *utls.ClientHelloSpec {
+	alpnProtocols := []string{"h2", "http/1.1"}
+	extensions := []utls.TLSExtension{
+		&utls.UtlsGREASEExtension{},
+		&utls.StatusRequestExtension{},
+		&utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
+			utls.CertCompressionBrotli,
+		}},
+		&utls.SupportedVersionsExtension{Versions: []uint16{
+			utls.GREASE_PLACEHOLDER,
+			utls.VersionTLS13,
+			utls.VersionTLS12,
+		}},
+		&utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
+		&utls.SessionTicketExtension{},
+		&utls.ExtendedMasterSecretExtension{},
+		&utls.SCTExtension{},
+		&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
+			utls.GREASE_PLACEHOLDER,
+			utls.X25519MLKEM768,
+			utls.X25519,
+			utls.CurveP256,
+			utls.CurveP384,
+		}},
+		utls.BoringGREASEECH(),
+		&utls.ALPNExtension{AlpnProtocols: alpnProtocols},
+		&utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+			{Group: utls.X25519MLKEM768},
+			{Group: utls.X25519},
+		}},
+		&utls.PSKKeyExchangeModesExtension{Modes: []uint8{utls.PskModeDHE}},
+		&utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+			utls.ECDSAWithP256AndSHA256,
+			utls.PSSWithSHA256,
+			utls.PKCS1WithSHA256,
+			utls.ECDSAWithP384AndSHA384,
+			utls.PSSWithSHA384,
+			utls.PKCS1WithSHA384,
+			utls.PSSWithSHA512,
+			utls.PKCS1WithSHA512,
+		}},
+		&utls.SupportedPointsExtension{SupportedPoints: []byte{0x00}},
+		&utls.ApplicationSettingsExtensionNew{SupportedProtocols: []string{"h2"}},
+		&utls.SNIExtension{},
+		&utls.UtlsGREASEExtension{},
+	}
+
+	if forceHTTP1 {
+		// Find ALPN by type-assertion and downgrade to http/1.1 only.
+		// Drop ALPS (ApplicationSettingsExtensionNew) since it is HTTP/2 only.
+		// Iterating-by-type avoids index drift if the extension list changes
+		// (e.g. ECH at slot 9 was previously corrupted by hard-coded indices).
+		filtered := extensions[:0]
+		for _, ext := range extensions {
+			switch ext.(type) {
+			case *utls.ALPNExtension:
+				filtered = append(filtered, &utls.ALPNExtension{AlpnProtocols: []string{"http/1.1"}})
+			case *utls.ApplicationSettingsExtensionNew, *utls.ApplicationSettingsExtension:
+				// ALPS is HTTP/2-only; drop it for HTTP/1.1
+			default:
+				filtered = append(filtered, ext)
+			}
+		}
+		extensions = filtered
+	}
+
+	return &utls.ClientHelloSpec{
+		TLSVersMin:   utls.VersionTLS12,
+		TLSVersMax:   utls.VersionTLS13,
+		CipherSuites: []uint16{
+			utls.GREASE_PLACEHOLDER,
+			utls.TLS_AES_128_GCM_SHA256,
+			utls.TLS_AES_256_GCM_SHA384,
+			utls.TLS_CHACHA20_POLY1305_SHA256,
+			utls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			utls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			utls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			utls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			utls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			utls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			utls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			utls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+		CompressionMethods: []byte{0x00},
+		Extensions:         extensions,
+		GetSessionID:       sha256.Sum256,
+	}
+}
+
 // StringToSpec creates a ClientHelloSpec based on a JA3 string
 func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHelloSpec, error) {
 	parsedUserAgent := parseUserAgent(userAgent)
@@ -839,17 +933,22 @@ func ConvertUtlsConfig(utlsConfig *utls.Config) *tls.Config {
 // MarshalHeader preserves header order while converting to http.Header
 func MarshalHeader(h fhttp.Header, order []string) http.Header {
 	result := make(http.Header)
+	seen := make(map[string]bool)
 
 	// Add ordered headers first
 	for _, key := range order {
-		if values, ok := h[key]; ok {
-			result[key] = values
+		for existingKey, values := range h {
+			if strings.EqualFold(existingKey, key) {
+				result[existingKey] = values
+				seen[existingKey] = true
+				break
+			}
 		}
 	}
 
 	// Add remaining headers
 	for key, values := range h {
-		if _, exists := result[key]; !exists {
+		if !seen[key] {
 			result[key] = values
 		}
 	}
