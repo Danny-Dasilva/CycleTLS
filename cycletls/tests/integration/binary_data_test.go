@@ -125,8 +125,8 @@ func TestMixedMultipartWithBinary(t *testing.T) {
 	// Write closing boundary
 	writer.Write([]byte("------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n"))
 
-	// Send using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	// Send using BodyBytes (with httpbin upstream-flake retry)
+	response := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/post", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		BodyBytes:          body.Bytes(),
@@ -134,17 +134,17 @@ func TestMixedMultipartWithBinary(t *testing.T) {
 			"Content-Type": "multipart/form-data; boundary=" + boundary,
 		},
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
 
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake after retries: status %d", response.Status)
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
 	// Parse response
 	var respData map[string]interface{}
-	err = json.Unmarshal([]byte(response.Body), &respData)
+	err := json.Unmarshal([]byte(response.Body), &respData)
 	if err != nil {
 		t.Fatal("Failed to parse response: ", err)
 	}
@@ -179,8 +179,8 @@ func TestBinaryDataPreservation(t *testing.T) {
 		testData[i] = byte(i)
 	}
 
-	// Upload the binary data
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	// Upload the binary data (with httpbin upstream-flake retry)
+	response := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/post", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		BodyBytes:          testData,
@@ -188,17 +188,17 @@ func TestBinaryDataPreservation(t *testing.T) {
 			"Content-Type": "application/octet-stream",
 		},
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
 
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake after retries: status %d", response.Status)
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
 	// httpbin.org should echo back our data
 	var respData map[string]interface{}
-	err = json.Unmarshal([]byte(response.Body), &respData)
+	err := json.Unmarshal([]byte(response.Body), &respData)
 	if err != nil {
 		t.Fatal("Failed to parse response: ", err)
 	}
@@ -226,8 +226,8 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 		0xF0, 0x90, 0x8D, // Incomplete 4-byte UTF-8 sequence
 	}
 
-	// Upload using BodyBytes field (the fix for issue #297)
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	// Upload using BodyBytes field (the fix for issue #297, with httpbin upstream-flake retry)
+	response := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/post", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		BodyBytes:          problematicData,
@@ -236,17 +236,16 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 		},
 	}, "POST")
 
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
-
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake after retries: status %d", response.Status)
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
 	// Parse response and verify the data was received without corruption
 	var respData map[string]interface{}
-	err = json.Unmarshal([]byte(response.Body), &respData)
+	err := json.Unmarshal([]byte(response.Body), &respData)
 	if err != nil {
 		t.Fatal("Failed to parse response: ", err)
 	}
@@ -285,8 +284,8 @@ func TestAllPossibleByteValues(t *testing.T) {
 		allBytesData[i] = byte(i)
 	}
 
-	// Upload using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	// Upload using BodyBytes (with httpbin upstream-flake retry)
+	response := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/post", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		BodyBytes:          allBytesData,
@@ -295,17 +294,16 @@ func TestAllPossibleByteValues(t *testing.T) {
 		},
 	}, "POST")
 
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
-
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake after retries: status %d", response.Status)
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
 	// Parse and verify all byte values are preserved
 	var respData map[string]interface{}
-	err = json.Unmarshal([]byte(response.Body), &respData)
+	err := json.Unmarshal([]byte(response.Body), &respData)
 	if err != nil {
 		t.Fatal("Failed to parse response: ", err)
 	}
