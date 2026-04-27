@@ -178,8 +178,11 @@ export const UPSTREAM_FLAKE_STATUSES: ReadonlySet<number> = new Set([408, 502, 5
  */
 export async function withUpstreamRetry<T extends { status: number }>(
   fn: () => Promise<T>,
-  attempts = 4
+  attempts = 3
 ): Promise<T> {
+  // Short backoff (500ms, 1s, 2s) — keeps total retry budget under ~3.5s so we
+  // don't blow the Jest test timeout in CI when an upstream is flaking hard.
+  const backoffsMs = [500, 1000, 2000];
   let last!: T;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -191,8 +194,9 @@ export async function withUpstreamRetry<T extends { status: number }>(
       // Network error counts as flake; retry
       if (i === attempts - 1) throw e;
     }
-    // Exponential backoff: 1s, 2s, 4s, 8s
-    await new Promise<void>((res) => setTimeout(res, (1 << i) * 1000));
+    if (i < backoffsMs.length) {
+      await new Promise<void>((res) => setTimeout(res, backoffsMs[i]));
+    }
   }
   return last;
 }

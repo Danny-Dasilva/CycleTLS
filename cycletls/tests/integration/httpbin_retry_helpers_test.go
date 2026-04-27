@@ -13,11 +13,16 @@ import (
 // caller can still see the final status (and can choose to t.Skipf when the
 // flake persists across all retries).
 //
+// Backoff is intentionally short (500ms, 1s, 2s) so the total retry budget
+// stays under ~5s even when all attempts are needed; httpbin's 408s clear
+// quickly on retry and we don't want to exhaust the test deadline in CI.
+//
 // Mirrors doProxyRequestWithRetry from proxy_test.go but accepts an explicit
 // URL/method so it can be reused across the binary, image, and form tests.
 func doHTTPBinRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url string, opts cycletls.Options, method string) cycletls.Response {
 	t.Helper()
-	const attempts = 4
+	const attempts = 3
+	backoffs := []time.Duration{500 * time.Millisecond, 1 * time.Second, 2 * time.Second}
 	var resp cycletls.Response
 	var err error
 	for i := 0; i < attempts; i++ {
@@ -32,8 +37,9 @@ func doHTTPBinRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url strin
 			// Non-flake error (e.g. 4xx other than 408) — return immediately
 			return resp
 		}
-		// Exponential backoff: 1s, 2s, 4s, 8s
-		time.Sleep(time.Duration(1<<i) * time.Second)
+		if i < len(backoffs) {
+			time.Sleep(backoffs[i])
+		}
 	}
 	return resp
 }

@@ -119,10 +119,12 @@ func assertStatusCode(t *testing.T, expected, actual int) {
 
 // doRequestWithRetry retries 408/502/503/504 — these are upstream-flake codes
 // from the live tlsfingerprint.com fixture under CI rate limits, not failures
-// in cycletls. Returns the last response.
+// in cycletls. Returns the last response. Backoff is intentionally short so we
+// don't exhaust the test deadline in CI.
 func doRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url string, opts cycletls.Options, method string) (cycletls.Response, error) {
 	t.Helper()
-	const attempts = 4
+	const attempts = 3
+	backoffs := []time.Duration{500 * time.Millisecond, 1 * time.Second, 2 * time.Second}
 	var resp cycletls.Response
 	var err error
 	for i := 0; i < attempts; i++ {
@@ -136,7 +138,9 @@ func doRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url string, opts
 		} else {
 			return resp, nil
 		}
-		time.Sleep(time.Duration(1<<i) * time.Second)
+		if i < len(backoffs) {
+			time.Sleep(backoffs[i])
+		}
 	}
 	return resp, err
 }
