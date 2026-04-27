@@ -163,6 +163,41 @@ export function getActiveInstanceCount(): number {
 }
 
 /**
+ * Status codes treated as transient upstream flake (rate limit, gateway timeout, etc.)
+ */
+export const UPSTREAM_FLAKE_STATUSES: ReadonlySet<number> = new Set([408, 502, 503, 504]);
+
+/**
+ * Retry a request-producing function on upstream-flake statuses (408/502/503/504).
+ * The fn is expected to return an object that has a `.status` (number) field — both
+ * the legacy `.do()` shape and the modern `.get/.request()` Response work, since
+ * `Response.status` is a getter.
+ *
+ * Returns the *last* response so the caller can still inspect the final status (and
+ * choose to skip the test if all retries flake out).
+ */
+export async function withUpstreamRetry<T extends { status: number }>(
+  fn: () => Promise<T>,
+  attempts = 4
+): Promise<T> {
+  let last!: T;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      last = await fn();
+      if (last.status >= 200 && last.status < 400) return last;
+      if (!UPSTREAM_FLAKE_STATUSES.has(last.status)) return last;
+      // Flake — retry after backoff
+    } catch (e) {
+      // Network error counts as flake; retry
+      if (i === attempts - 1) throw e;
+    }
+    // Exponential backoff: 1s, 2s, 4s, 8s
+    await new Promise<void>((res) => setTimeout(res, (1 << i) * 1000));
+  }
+  return last;
+}
+
+/**
  * Emergency cleanup of all active instances
  * This is called automatically on process exit
  */

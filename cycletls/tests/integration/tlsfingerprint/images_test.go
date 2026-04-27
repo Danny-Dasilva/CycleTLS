@@ -16,7 +16,7 @@ func TestImageJPEG(t *testing.T) {
 	defer client.Close()
 
 	opts := getDefaultOptions()
-	resp, err := client.Do(TestServerURL+"/image/jpeg", opts, "GET")
+	resp, err := doRequestWithRetry(t, client, TestServerURL+"/image/jpeg", opts, "GET")
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestImageGIF(t *testing.T) {
 	defer client.Close()
 
 	opts := getDefaultOptions()
-	resp, err := client.Do(TestServerURL+"/image/gif", opts, "GET")
+	resp, err := doRequestWithRetry(t, client, TestServerURL+"/image/gif", opts, "GET")
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}

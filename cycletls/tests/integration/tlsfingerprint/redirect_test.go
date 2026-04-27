@@ -44,6 +44,7 @@ func TestRedirectTo(t *testing.T) {
 		UserAgent:             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		Timeout:               30,    // Increased timeout for CI environments
 		EnableConnectionReuse: false, // Disable connection reuse for test isolation
+		InsecureSkipVerify:    true,  // Test server uses self-signed cert
 	}
 
 	// URL-encode the redirect target to ensure proper handling
