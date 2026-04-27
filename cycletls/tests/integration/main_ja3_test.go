@@ -87,8 +87,9 @@ func TestHTTP2(t *testing.T) {
 	for _, options := range CycleTLSResults {
 
 		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
-			Ja3:       options.Ja3,
-			UserAgent: options.UserAgent,
+			Ja3:                options.Ja3,
+			UserAgent:          options.UserAgent,
+			InsecureSkipVerify: true, // tls.peet.ws cert is fixture-rot-prone; we test the fingerprint we send.
 		}, "GET")
 		if err != nil {
 			t.Fatal("Request Error")

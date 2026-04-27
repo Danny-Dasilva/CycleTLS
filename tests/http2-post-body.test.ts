@@ -2,7 +2,12 @@ import initCycleTLS from "../dist/index.js";
 import { withCycleTLS } from "./test-utils.js";
 import * as http2 from "node:http2";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { execSync } from "node:child_process";
+
+const TMP_KEY = path.join(os.tmpdir(), "h2-test-key.pem");
+const TMP_CERT = path.join(os.tmpdir(), "h2-test-cert.pem");
 
 /**
  * Tests for HTTP/2 POST body transmission on servers with strict flow control.
@@ -20,10 +25,15 @@ import { execSync } from "node:child_process";
 
 jest.setTimeout(30000);
 
-// Generate self-signed cert for local HTTP/2 server
+// Generate self-signed cert for local HTTP/2 server. Use os.tmpdir() so this
+// works on Windows runners (where /tmp/ doesn't exist).
 beforeAll(() => {
+  // 2>/dev/null is a POSIX shellism; on Windows openssl prints to stderr
+  // regardless and the redirect breaks the command. Drop it cross-platform —
+  // execSync still throws on non-zero exit, which is what we care about.
   execSync(
-    'openssl req -x509 -newkey rsa:2048 -keyout /tmp/h2-test-key.pem -out /tmp/h2-test-cert.pem -days 1 -nodes -subj "/CN=localhost" 2>/dev/null'
+    `openssl req -x509 -newkey rsa:2048 -keyout "${TMP_KEY}" -out "${TMP_CERT}" -days 1 -nodes -subj "/CN=localhost"`,
+    { stdio: "ignore" }
   );
 });
 
@@ -34,8 +44,8 @@ function startStrictH2Server(): Promise<{
 }> {
   return new Promise((resolve) => {
     const server = http2.createSecureServer({
-      key: fs.readFileSync("/tmp/h2-test-key.pem"),
-      cert: fs.readFileSync("/tmp/h2-test-cert.pem"),
+      key: fs.readFileSync(TMP_KEY),
+      cert: fs.readFileSync(TMP_CERT),
       settings: {
         initialWindowSize: 16384,
         maxFrameSize: 16384,

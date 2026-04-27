@@ -25,6 +25,9 @@ test("Test latest Chrome frame headers", async () => {
       url: 'https://tls.peet.ws/api/all',
       ja3: ja3,
       userAgent: UA,
+      // tls.peet.ws cert validity is fixture-dependent; we test the outgoing
+      // TLS fingerprint, not the test fixture's certificate chain.
+      insecureSkipVerify: true,
     });
     const expectedSentFrames0 = {
       frame_type: 'SETTINGS',
@@ -61,6 +64,7 @@ test("Test latest Firefox frame headers", async () => {
     const response = await cycleTLS.get("https://tls.peet.ws/api/all", {
       ja3: ja3,
       userAgent: UA,
+      insecureSkipVerify: true,
     });
     const expectedSentFrames0 = {
       frame_type: "SETTINGS",
