@@ -32,8 +32,10 @@ func TestDelayResponseOrder(t *testing.T) {
 			URL:    "http://httpbin.org/delay/1", // Reduced delay for faster testing
 			Method: "GET",
 			Options: cycletls.Options{
-				Ja3:       ja3,
-				UserAgent: userAgent,
+				// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+				InsecureSkipVerify: true,
+				Ja3:                ja3,
+				UserAgent:          userAgent,
 			},
 			Name: "JA3 Delayed Request",
 		},
@@ -41,8 +43,10 @@ func TestDelayResponseOrder(t *testing.T) {
 			URL:    "http://httpbin.org/get",
 			Method: "GET",
 			Options: cycletls.Options{
-				Ja4r:      ja4r,
-				UserAgent: userAgent,
+				// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+				InsecureSkipVerify: true,
+				Ja4r:               ja4r,
+				UserAgent:          userAgent,
 			},
 			Name: "JA4R Quick Request",
 		},
@@ -50,9 +54,11 @@ func TestDelayResponseOrder(t *testing.T) {
 			URL:    "http://httpbin.org/post",
 			Method: "POST",
 			Options: cycletls.Options{
-				Ja3:       ja3,
-				UserAgent: userAgent,
-				Body:      `{"test": "data"}`,
+				// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+				InsecureSkipVerify: true,
+				Ja3:                ja3,
+				UserAgent:          userAgent,
+				Body:               `{"test": "data"}`,
 				Headers: map[string]string{
 					"Content-Type": "application/json",
 				},

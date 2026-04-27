@@ -26,7 +26,9 @@ func TestBinaryImageUpload(t *testing.T) {
 
 	// Upload using BodyBytes
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: imageData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          imageData,
 		Headers: map[string]string{
 			"Content-Type": "image/jpeg",
 		},
@@ -59,6 +61,8 @@ func TestBinaryImageDownload(t *testing.T) {
 
 	// Download an image
 	response, err := client.Do("https://httpbin.org/image/jpeg", cycletls.Options{
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
 		Headers: map[string]string{
 			"Accept": "image/jpeg",
 		},
@@ -123,7 +127,9 @@ func TestMixedMultipartWithBinary(t *testing.T) {
 
 	// Send using BodyBytes
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: body.Bytes(),
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          body.Bytes(),
 		Headers: map[string]string{
 			"Content-Type": "multipart/form-data; boundary=" + boundary,
 		},
@@ -175,7 +181,9 @@ func TestBinaryDataPreservation(t *testing.T) {
 
 	// Upload the binary data
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: testData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          testData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
 		},
@@ -220,7 +228,9 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 
 	// Upload using BodyBytes field (the fix for issue #297)
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: problematicData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          problematicData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
 		},
@@ -277,7 +287,9 @@ func TestAllPossibleByteValues(t *testing.T) {
 
 	// Upload using BodyBytes
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: allBytesData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          allBytesData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
 		},
@@ -374,7 +386,9 @@ func TestLargeBinaryDataHandling(t *testing.T) {
 
 	// Upload using BodyBytes
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: largeData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          largeData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
 		},
@@ -426,7 +440,9 @@ func TestDebugBinaryResponse(t *testing.T) {
 
 	// Upload using BodyBytes field
 	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
-		BodyBytes: testData,
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		BodyBytes:          testData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
 		},

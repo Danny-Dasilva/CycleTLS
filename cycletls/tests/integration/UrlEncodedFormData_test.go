@@ -31,7 +31,9 @@ func TestUrlEncodedFormDataUpload(t *testing.T) {
 	form.Add("key2", "value2")
 
 	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
-		Body: form.Encode(),
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		Body:               form.Encode(),
 		Headers: map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
 		},

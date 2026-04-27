@@ -42,7 +42,9 @@ func TestHTTP1ConnectionCleanup(t *testing.T) {
 	// Make several requests to a real HTTPS endpoint
 	for i := 0; i < 10; i++ {
 		resp, err := client.Do("https://httpbin.org/get", cycletls.Options{
-			Method: "GET",
+			// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+			InsecureSkipVerify: true,
+			Method:             "GET",
 		}, "GET")
 		if err != nil {
 			t.Logf("Request %d error: %v", i, err)

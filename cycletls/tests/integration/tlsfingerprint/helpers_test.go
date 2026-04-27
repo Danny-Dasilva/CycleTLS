@@ -79,8 +79,10 @@ type DelayResponse struct {
 // getDefaultOptions returns standard test options
 func getDefaultOptions() cycletls.Options {
 	return cycletls.Options{
-		Ja3:       defaultJA3,
-		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		Ja3:                defaultJA3,
+		UserAgent:          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 	}
 }
 
