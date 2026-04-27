@@ -242,8 +242,15 @@ func TestSafeChannelWriterConcurrentWriteAndClose(t *testing.T) {
 		}(i)
 	}
 
-	// Close while writers are running
+	// Close while writers are running. Track this goroutine so the post-
+	// condition assertion below cannot race with setClosed itself: previously
+	// setClosed was fire-and-forget, so wg.Wait returning didn't imply
+	// setClosed had observed scw.closed = true yet, which made the
+	// "Write after setClosed should return false" assertion intermittently
+	// fail when the runtime hadn't scheduled the close goroutine yet.
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		scw.setClosed()
 	}()
 
