@@ -48,14 +48,19 @@ jobs:
           fi
 
   node-tls-fingerprint:
-    name: Node.js TLS Fingerprint
+    name: Node.js TLS Fingerprint (soft-fail)
     strategy:
+      fail-fast: false
       matrix:
         node-version: [20.x]
         go-version: ['1.25']
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
-    # Blocking: failures fail the workflow
+    # Soft-fail: tests hit external fixtures (tls.peet.ws, tlsfingerprint.com)
+    # that intermittently rate-limit or 408. Matches the Go Integration
+    # (soft-fail) treatment for the same root cause. Failures still surface
+    # in the UI but don't gate merges.
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
