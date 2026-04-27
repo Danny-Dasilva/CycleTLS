@@ -73,7 +73,7 @@ func safeWriteUint16(b *bytes.Buffer, v int) error {
 // safeWriteUint32 writes a 32-bit value with bounds checking.
 // Returns an error if v is negative or exceeds math.MaxUint32 (4294967295).
 func safeWriteUint32(b *bytes.Buffer, v int) error {
-	if v < 0 || v > math.MaxUint32 {
+	if v < 0 || int64(v) > int64(math.MaxUint32) {
 		return fmt.Errorf("protocol: value %d overflows uint32 (range 0-%d)", v, uint64(math.MaxUint32))
 	}
 	writeUint32(b, v)

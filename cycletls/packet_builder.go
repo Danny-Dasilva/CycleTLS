@@ -65,7 +65,7 @@ func buildEndFrame(requestID string) []byte {
 // writeU32 writes a 32-bit unsigned integer in big-endian format.
 // Returns an error if v is outside the uint32 range [0, 4294967295].
 func writeU32(b *bytes.Buffer, v int) error {
-	if v < 0 || v > math.MaxUint32 {
+	if v < 0 || int64(v) > int64(math.MaxUint32) {
 		return ErrU32Overflow
 	}
 	b.WriteByte(byte(v >> 24))
