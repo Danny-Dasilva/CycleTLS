@@ -87,6 +87,8 @@ describe("CycleTLS InsecureSkipVerify Test", () => {
     // Connection refused should return 502
     expect(response.status).toBe(502);
     const errorText = await response.text();
-    expect(errorText).toContain("Request returned a Syscall Error");
+    // Error wording differs per platform: Linux/macOS surface "Syscall Error",
+    // Windows wraps the same error as "connectex: No connection could be made".
+    expect(errorText).toMatch(/Syscall Error|connectex|connection|refused/i);
   });
 });

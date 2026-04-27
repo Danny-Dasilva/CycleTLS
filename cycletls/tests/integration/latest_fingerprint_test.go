@@ -53,6 +53,9 @@ func TestLatestVersions(t *testing.T) {
 		response, err := client.Do("https://tls.peet.ws/api/clean", cycletls.Options{
 			Ja3:       options.Ja3,
 			UserAgent: options.UserAgent,
+			// tls.peet.ws cert validity is fixture-dependent; the test verifies the
+			// outgoing TLS fingerprint, not the test fixture's certificate chain.
+			InsecureSkipVerify: true,
 		}, "GET")
 		if err != nil {
 			t.Fatal("Unmarshal Error")

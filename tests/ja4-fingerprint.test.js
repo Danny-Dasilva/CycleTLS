@@ -10,6 +10,7 @@ describe("JA4 Fingerprinting Tests", () => {
       const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
         ja4r: firefoxJA4r,
         disableGrease: false,
+        insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
         userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
       });
       
@@ -41,6 +42,7 @@ describe("JA4 Fingerprinting Tests", () => {
       const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
         ja4r: chromeJA4r,
         disableGrease: false,
+        insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
         userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
       });
 
@@ -69,6 +71,7 @@ describe("JA4 Fingerprinting Tests", () => {
       const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
         ja4r: chrome138JA4r,
         disableGrease: false,
+        insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
         userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
       });
 
@@ -96,6 +99,7 @@ describe("JA4 Fingerprinting Tests", () => {
       const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
         ja4r: chrome139JA4r,
         disableGrease: false,
+        insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
         userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'
       });
 
@@ -124,6 +128,7 @@ describe("JA4 Fingerprinting Tests", () => {
       const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
         ja4r: tls12JA4r,
         disableGrease: false,
+        insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       });
 

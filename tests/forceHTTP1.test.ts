@@ -19,6 +19,9 @@ describe("CycleTLS HTTP Version Tests", () => {
       ja3: ja3,
       userAgent: userAgent,
       forceHTTP1: false,
+      // tls.peet.ws cert validity is fixture-dependent; we test the outgoing
+      // TLS fingerprint, not the test fixture's certificate chain.
+      insecureSkipVerify: true,
     });
 
     expect(response.status).toBe(200);
@@ -32,6 +35,7 @@ describe("CycleTLS HTTP Version Tests", () => {
       ja3: ja3,
       userAgent: userAgent,
       forceHTTP1: true,
+      insecureSkipVerify: true,
     });
 
     expect(response.status).toBe(200);

@@ -16,7 +16,8 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     
     const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
       http2Fingerprint: firefoxHTTP2,
-      userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0'
+      userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0',
+      insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
     });
 
     expect(response.status).toBe(200);
@@ -34,7 +35,8 @@ describe("HTTP/2 Fingerprinting Tests", () => {
     
     const response = await cycleTLS.get('https://tls.peet.ws/api/all', {
       http2Fingerprint: chromeHTTP2,
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+      insecureSkipVerify: true, // tls.peet.ws fixture cert is rotation-prone
     });
 
     expect(response.status).toBe(200);

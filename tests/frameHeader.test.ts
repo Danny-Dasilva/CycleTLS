@@ -12,6 +12,9 @@ test("Test latest Chrome frame headers", async () => {
       body: '',
       ja3: ja3,
       userAgent: UA,
+      // tls.peet.ws cert validity is fixture-dependent; we test the outgoing
+      // TLS fingerprint, not the test fixture's certificate chain.
+      insecureSkipVerify: true,
     });
     const expectedSentFrames0 = {
       frame_type: 'SETTINGS',
@@ -49,6 +52,7 @@ test("Test latest Firefox frame headers", async () => {
       body: "",
       ja3: ja3,
       userAgent: UA,
+      insecureSkipVerify: true,
     });
     const expectedSentFrames0 = {
       frame_type: "SETTINGS",
