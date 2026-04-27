@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         node-version: [20.x]
-        go-version: ['1.24']
+        go-version: ['1.25']
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     # Non-blocking: failures don't fail the workflow
@@ -52,7 +52,7 @@ jobs:
     strategy:
       matrix:
         node-version: [20.x]
-        go-version: ['1.24']
+        go-version: ['1.25']
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     # Blocking: failures fail the workflow
