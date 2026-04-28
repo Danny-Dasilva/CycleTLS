@@ -1,3 +1,4 @@
+// @ts-nocheck
 import CycleTLS from "../dist/index.js";
 import { withCycleTLS, withUpstreamRetry, UPSTREAM_FLAKE_STATUSES } from "./test-utils.js";
 jest.setTimeout(60000);

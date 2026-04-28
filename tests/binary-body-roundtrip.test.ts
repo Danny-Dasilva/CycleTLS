@@ -1,3 +1,4 @@
+// @ts-nocheck
 import initCycleTLS from "../dist/index.js";
 import http from "http";
 import crypto from "crypto";

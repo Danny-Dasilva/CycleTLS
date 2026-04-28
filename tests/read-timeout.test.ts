@@ -1,3 +1,4 @@
+// @ts-nocheck
 import CycleTLS, { CycleTLSError } from "../dist/index.js";
 import http from "http";
 import net from "net";

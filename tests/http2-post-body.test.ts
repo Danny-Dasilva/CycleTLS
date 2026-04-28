@@ -1,3 +1,4 @@
+// @ts-nocheck
 import initCycleTLS from "../dist/index.js";
 import { withCycleTLS } from "./test-utils.js";
 import * as http2 from "node:http2";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import CycleTLS from '../dist/index.js';
 import * as http from 'http';
 import { AddressInfo } from 'net';
