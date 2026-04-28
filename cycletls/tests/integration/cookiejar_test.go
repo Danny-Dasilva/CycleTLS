@@ -21,8 +21,9 @@ func TestCookieJar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// First request to set cookies
-	firstResponse, err := client.Do("https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
+	// First request to set cookies — wrap with retry so transient httpbin
+	// 4xx/5xx (rate-limit) doesn't fail this test on the first hop.
+	firstResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -30,8 +31,11 @@ func TestCookieJar(t *testing.T) {
 		UserAgent:          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		DisableRedirect:    true,
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if firstResponse.Status >= 400 {
+		if isUpstreamFlake(firstResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies/set: status %d", firstResponse.Status)
+		}
+		t.Fatalf("Unexpected status from /cookies/set: %d body=%s", firstResponse.Status, firstResponse.Body)
 	}
 
 	// Parse the URL and set cookies in the jar
@@ -39,7 +43,7 @@ func TestCookieJar(t *testing.T) {
 	jar.SetCookies(firstURL, firstResponse.Cookies)
 
 	// Second request to verify cookies
-	secondResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	secondResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -49,8 +53,11 @@ func TestCookieJar(t *testing.T) {
 			"Cookie": getHeadersFromJar(jar, firstURL),
 		},
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if secondResponse.Status != 200 {
+		if isUpstreamFlake(secondResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies: status %d", secondResponse.Status)
+		}
+		t.Fatalf("Expected status 200, got %d body=%s", secondResponse.Status, secondResponse.Body)
 	}
 
 	// Check if the response contains the expected cookies
@@ -90,7 +97,7 @@ func TestCookieJarMultipleDomains(t *testing.T) {
 	}
 
 	// Set cookies for httpbin.org
-	httpbinResponse, err := client.Do("https://httpbin.org/cookies/set?httpbin=test", cycletls.Options{
+	httpbinResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies/set?httpbin=test", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -98,15 +105,18 @@ func TestCookieJarMultipleDomains(t *testing.T) {
 		UserAgent:          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		DisableRedirect:    true,
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if httpbinResponse.Status >= 400 {
+		if isUpstreamFlake(httpbinResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies/set: status %d", httpbinResponse.Status)
+		}
+		t.Fatalf("Unexpected status from /cookies/set: %d body=%s", httpbinResponse.Status, httpbinResponse.Body)
 	}
 
 	httpbinURL, _ := url.Parse(httpbinResponse.FinalUrl)
 	jar.SetCookies(httpbinURL, httpbinResponse.Cookies)
 
 	// Verify cookies are sent to the correct domain
-	verifyResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	verifyResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -116,8 +126,11 @@ func TestCookieJarMultipleDomains(t *testing.T) {
 			"Cookie": getHeadersFromJar(jar, httpbinURL),
 		},
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if verifyResponse.Status != 200 {
+		if isUpstreamFlake(verifyResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies: status %d", verifyResponse.Status)
+		}
+		t.Fatalf("Expected status 200, got %d body=%s", verifyResponse.Status, verifyResponse.Body)
 	}
 
 	// Check if httpbin cookie is present
@@ -136,7 +149,7 @@ func TestCookieJarPersistence(t *testing.T) {
 	}
 
 	// First request - set initial cookies
-	firstResponse, err := client.Do("https://httpbin.org/cookies/set?session=12345", cycletls.Options{
+	firstResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies/set?session=12345", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -144,15 +157,18 @@ func TestCookieJarPersistence(t *testing.T) {
 		UserAgent:          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
 		DisableRedirect:    true,
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if firstResponse.Status >= 400 {
+		if isUpstreamFlake(firstResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies/set: status %d", firstResponse.Status)
+		}
+		t.Fatalf("Unexpected status from /cookies/set: %d body=%s", firstResponse.Status, firstResponse.Body)
 	}
 
 	firstURL, _ := url.Parse(firstResponse.FinalUrl)
 	jar.SetCookies(firstURL, firstResponse.Cookies)
 
 	// Second request - add more cookies
-	secondResponse, err := client.Do("https://httpbin.org/cookies/set?user=alice", cycletls.Options{
+	secondResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies/set?user=alice", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -163,15 +179,18 @@ func TestCookieJarPersistence(t *testing.T) {
 			"Cookie": getHeadersFromJar(jar, firstURL),
 		},
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if secondResponse.Status >= 400 {
+		if isUpstreamFlake(secondResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies/set: status %d", secondResponse.Status)
+		}
+		t.Fatalf("Unexpected status from /cookies/set: %d body=%s", secondResponse.Status, secondResponse.Body)
 	}
 
 	secondURL, _ := url.Parse(secondResponse.FinalUrl)
 	jar.SetCookies(secondURL, secondResponse.Cookies)
 
 	// Third request - verify all cookies are maintained
-	finalResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	finalResponse := doHTTPBinRequestWithRetry(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
 		InsecureSkipVerify: true,
 		Body:               "",
@@ -181,8 +200,11 @@ func TestCookieJarPersistence(t *testing.T) {
 			"Cookie": getHeadersFromJar(jar, secondURL),
 		},
 	}, "GET")
-	if err != nil {
-		t.Fatal(err)
+	if finalResponse.Status != 200 {
+		if isUpstreamFlake(finalResponse.Status) {
+			t.Skipf("httpbin upstream flake after retries on /cookies: status %d", finalResponse.Status)
+		}
+		t.Fatalf("Expected status 200, got %d body=%s", finalResponse.Status, finalResponse.Body)
 	}
 
 	// Verify both cookies are present
