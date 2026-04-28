@@ -34,7 +34,7 @@ func doHTTPBinRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url strin
 			t.Logf("attempt %d/%d: request error: %v", i+1, attempts, err)
 		} else if resp.Status >= 200 && resp.Status < 400 {
 			return resp
-		} else if resp.Status == 408 || resp.Status == 502 || resp.Status == 503 || resp.Status == 504 {
+		} else if isUpstreamFlake(resp.Status) {
 			t.Logf("attempt %d/%d: upstream flake status %d, retrying", i+1, attempts, resp.Status)
 		} else {
 			// Non-flake error (e.g. 4xx other than 408) — return immediately
@@ -48,7 +48,15 @@ func doHTTPBinRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url strin
 }
 
 // isUpstreamFlake returns true if the status code is one we treat as an
-// httpbin upstream flake (rate limit, gateway timeout, etc.).
+// httpbin/tls.peet.ws/etc upstream flake (rate limit, gateway timeout,
+// TLS handshake failure, Cloudflare 5xx).
+//
+// 421 = Misdirected Request (HTTP/2 connection reuse race on upstream)
+// 429 = Too Many Requests (rate limit)
+// 495 = TLS handshake failure (cycletls-internal mapping for syscall TLS errors)
+// 521-525 = Cloudflare upstream / handshake failures
 func isUpstreamFlake(status int) bool {
-	return status == 408 || status == 502 || status == 503 || status == 504
+	return status == 408 || status == 421 || status == 429 || status == 495 ||
+		status == 502 || status == 503 || status == 504 ||
+		status == 521 || status == 522 || status == 523 || status == 524 || status == 525
 }
