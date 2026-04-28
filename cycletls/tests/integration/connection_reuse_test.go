@@ -19,6 +19,14 @@ import (
 )
 
 func TestConnectionReuse(t *testing.T) {
+	// FIXME(windows): cycletls subprocess intermittently times out
+	// (deadline exceeded) when calling httptest.NewUnstartedServer's local
+	// HTTPS endpoint on Windows runners. Same root cause as
+	// TestConnectionReuseDisabled below — networking stack difference
+	// between Windows and Linux/macOS in cycletls's connection-reuse path.
+	if runtime.GOOS == "windows" {
+		t.Skip("TestConnectionReuse flakes on Windows — local httptest server times out")
+	}
 	// Track both server-side connections and request tracking
 	connectionTracker := make(map[string]int) // Track requests by RemoteAddr
 	connectionMutex := sync.Mutex{}
