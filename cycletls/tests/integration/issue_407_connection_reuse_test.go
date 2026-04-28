@@ -35,8 +35,12 @@ func isUpstreamFlakeErr(err error) bool {
 		return false
 	}
 	s := err.Error()
-	for _, code := range []string{"status: 408", "status: 421", "status: 502", "status: 503", "status: 504"} {
-		if strings.Contains(s, code) {
+	// Two error-string flavours appear:
+	//   "request N: unexpected status 408"  (this test's fmt.Errorf format)
+	//   "status: 408"                       (older callers / library messages)
+	// Match both.
+	for _, code := range []string{"408", "421", "502", "503", "504"} {
+		if strings.Contains(s, "status "+code) || strings.Contains(s, "status: "+code) {
 			return true
 		}
 	}
