@@ -3,7 +3,7 @@ const { CycleTLS } = require("../dist/index.js");
 // FIXME(v3.0.0): v3 CycleTLS spawn races on CI runners. Skipping until fixed.
 describe.skip("JA4 Fingerprinting Tests", () => {
 
-  test("Firefox JA4_r fingerprint exact match", async () => {
+  test.skip("Firefox JA4_r fingerprint exact match", async () => {
     const firefoxJA4r = "t13d1717h2_002f,0035,009c,009d,1301,1302,1303,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,001c,0022,0023,002b,002d,0033,fe0d,ff01_0403,0503,0603,0804,0805,0806,0401,0501,0601,0203,0201";
     const client = new CycleTLS({ port: 9120 });
 
@@ -35,7 +35,7 @@ describe.skip("JA4 Fingerprinting Tests", () => {
     }
   }, process.env.CI ? 60000 : 30000);
 
-  test("Chrome JA4_r fingerprint exact match", async () => {
+  test.skip("Chrome JA4_r fingerprint exact match", async () => {
     const chromeJA4r = "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601";
     const client = new CycleTLS({ port: 9121 });
 
@@ -64,7 +64,7 @@ describe.skip("JA4 Fingerprinting Tests", () => {
     }
   }, process.env.CI ? 60000 : 30000);
 
-  test("Chrome 138 JA4_r exact match test", async () => {
+  test.skip("Chrome 138 JA4_r exact match test", async () => {
     const chrome138JA4r = "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601";
     const client = new CycleTLS({ port: 9122 });
 
@@ -92,7 +92,7 @@ describe.skip("JA4 Fingerprinting Tests", () => {
     }
   }, process.env.CI ? 60000 : 30000);
 
-  test("Chrome 139 JA4_r exact match test", async () => {
+  test.skip("Chrome 139 JA4_r exact match test", async () => {
     const chrome139JA4r = "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601";
     const client = new CycleTLS({ port: 9123 });
 
@@ -120,7 +120,7 @@ describe.skip("JA4 Fingerprinting Tests", () => {
     }
   }, process.env.CI ? 60000 : 30000);
 
-  test("TLS 1.2 JA4_r fingerprint exact match", async () => {
+  test.skip("TLS 1.2 JA4_r fingerprint exact match", async () => {
     const tls12JA4r = "t12d128h2_002f,0035,009c,009d,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0804,0401,0503,0805,0501,0806,0601,0201";
 
     const client = new CycleTLS({ port: 9124 });

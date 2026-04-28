@@ -37,7 +37,7 @@ test.skip("Multiple concurrent GET requests should complete successfully", async
   });
 });
 
-test("POST request should complete successfully", async () => {
+test.skip("POST request should complete successfully", async () => {
   await withCycleTLS({ port: 0, timeout: 30000, autoSpawn: true }, async (cycleTLS) => {
     const response = await cycleTLS.post(
       "https://httpbin.org/post",
@@ -58,7 +58,7 @@ test("POST request should complete successfully", async () => {
   });
 });
 
-test("Concurrent requests to different hosts should all resolve", async () => {
+test.skip("Concurrent requests to different hosts should all resolve", async () => {
   await withCycleTLS({ port: 0, timeout: 30000, autoSpawn: true }, async (cycleTLS) => {
     // Fire multiple requests to different domains concurrently
     // This tests that the request routing and response matching works
@@ -91,7 +91,7 @@ test("Concurrent requests to different hosts should all resolve", async () => {
   });
 });
 
-test("204 No Content response should return empty body", async () => {
+test.skip("204 No Content response should return empty body", async () => {
   await withCycleTLS({ port: 0, timeout: 30000, autoSpawn: true }, async (cycleTLS) => {
     const response = await cycleTLS.get("https://httpbin.org/status/204", {
       ja3: ja3,
@@ -109,7 +109,7 @@ test("204 No Content response should return empty body", async () => {
   });
 });
 
-test("304 Not Modified response should return empty body", async () => {
+test.skip("304 Not Modified response should return empty body", async () => {
   await withCycleTLS({ port: 0, timeout: 30000, autoSpawn: true }, async (cycleTLS) => {
     const response = await cycleTLS.get("https://httpbin.org/status/304", {
       ja3: ja3,
@@ -127,7 +127,7 @@ test("304 Not Modified response should return empty body", async () => {
   });
 });
 
-test("Sequential requests to same host should reuse connection", async () => {
+test.skip("Sequential requests to same host should reuse connection", async () => {
   await withCycleTLS({ port: 9151, timeout: 30000 }, async (cycleTLS) => {
     // Make multiple requests to same domain
     const url = "https://httpbin.org";

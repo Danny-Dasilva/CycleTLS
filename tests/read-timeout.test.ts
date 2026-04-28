@@ -71,7 +71,7 @@ describe.skip("Read timeout handling", () => {
     server.close(done);
   });
 
-  test("Should timeout when headers are delayed (connection timeout)", async () => {
+  test.skip("Should timeout when headers are delayed (connection timeout)", async () => {
     // V2 API: timeout applies until response headers are received
     await withCycleTLS({ port: 9117, timeout: 1000 }, async (client) => {
       // This endpoint delays headers for 5 seconds - should timeout at 1 second
@@ -83,7 +83,7 @@ describe.skip("Read timeout handling", () => {
     });
   });
 
-  test("Without readTimeout: response resolves once headers arrive, body can hang", async () => {
+  test.skip("Without readTimeout: response resolves once headers arrive, body can hang", async () => {
     // Without readTimeout option, the connection timeout clears when headers arrive
     // The body stream could hang forever if the server stalls
     await withCycleTLS({ port: 9118, timeout: 1000 }, async (client) => {
@@ -103,7 +103,7 @@ describe.skip("Read timeout handling", () => {
     });
   });
 
-  test("With readTimeout: should timeout when body streaming stalls", async () => {
+  test.skip("With readTimeout: should timeout when body streaming stalls", async () => {
     // With readTimeout option, the stream will timeout if no data arrives
     await withCycleTLS({ port: 9120, timeout: 5000 }, async (client) => {
       const response = await client.request({
@@ -137,7 +137,7 @@ describe.skip("Read timeout handling", () => {
     });
   });
 
-  test("Normal requests should work within timeout", async () => {
+  test.skip("Normal requests should work within timeout", async () => {
     await withCycleTLS({ port: 9119, timeout: 5000 }, async (client) => {
       const response = await client.request({
         url: `http://localhost:${serverPort}/quick-response`,
@@ -149,7 +149,7 @@ describe.skip("Read timeout handling", () => {
     });
   });
 
-  test("Per-request timeout should override client-level timeout", async () => {
+  test.skip("Per-request timeout should override client-level timeout", async () => {
     // Client has 10 second timeout, but per-request timeout of 500ms should apply
     await withCycleTLS({ port: 9121, timeout: 10000 }, async (client) => {
       const startTime = Date.now();
@@ -169,7 +169,7 @@ describe.skip("Read timeout handling", () => {
     });
   });
 
-  test("Per-request timeout can be longer than client timeout", async () => {
+  test.skip("Per-request timeout can be longer than client timeout", async () => {
     // Client has 500ms timeout, but per-request can override to be longer
     await withCycleTLS({ port: 9122, timeout: 500 }, async (client) => {
       // /quick-response should complete in <500ms, so this should work

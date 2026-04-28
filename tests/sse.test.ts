@@ -74,7 +74,7 @@ describe.skip('Server-Sent Events Tests', () => {
     });
   });
 
-  test('should connect to an SSE endpoint using regular GET request', async () => {
+  test.skip('should connect to an SSE endpoint using regular GET request', async () => {
     // First test with regular GET request to see if the protocol works at all
     const response = await cycleTLS.get(`${serverUrl}/events`, {
       ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',
@@ -128,7 +128,7 @@ describe.skip('Server-Sent Events Tests', () => {
     }
   });
 
-  test('should handle SSE stream response with streaming', async () => {
+  test.skip('should handle SSE stream response with streaming', async () => {
     // Test streaming response type
     const response = await cycleTLS.get(`${serverUrl}/events`, {
       ja3: '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0',

@@ -38,7 +38,7 @@ describe.skip("Binary request body round-trip", () => {
     server.close(done);
   });
 
-  test("Buffer body with high bytes is delivered byte-for-byte", async () => {
+  test.skip("Buffer body with high bytes is delivered byte-for-byte", async () => {
     await withCycleTLS({ port: 9311 }, async (cycleTLS) => {
       const original = Buffer.from("deadbeefabcdef123456", "hex");
       const response = await cycleTLS(
@@ -51,7 +51,7 @@ describe.skip("Binary request body round-trip", () => {
     });
   });
 
-  test("All 256 byte values survive round-trip", async () => {
+  test.skip("All 256 byte values survive round-trip", async () => {
     await withCycleTLS({ port: 9312 }, async (cycleTLS) => {
       const original = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
       const response = await cycleTLS(
@@ -67,7 +67,7 @@ describe.skip("Binary request body round-trip", () => {
     });
   });
 
-  test("Uint8Array body is routed through bodyBytes", async () => {
+  test.skip("Uint8Array body is routed through bodyBytes", async () => {
     await withCycleTLS({ port: 9313 }, async (cycleTLS) => {
       const original = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x80, 0x81, 0x00, 0x7f, 0xfe]);
       const response = await cycleTLS(
@@ -80,7 +80,7 @@ describe.skip("Binary request body round-trip", () => {
     });
   });
 
-  test("Explicit bodyBytes option preserves exact bytes", async () => {
+  test.skip("Explicit bodyBytes option preserves exact bytes", async () => {
     await withCycleTLS({ port: 9314 }, async (cycleTLS) => {
       const original = Buffer.from([0xde, 0xad, 0xbe, 0xef, 0xab, 0xcd, 0xef]);
       const response = await cycleTLS(
@@ -93,7 +93,7 @@ describe.skip("Binary request body round-trip", () => {
     });
   });
 
-  test("String body still flows through the `body` field unchanged", async () => {
+  test.skip("String body still flows through the `body` field unchanged", async () => {
     await withCycleTLS({ port: 9315 }, async (cycleTLS) => {
       const original = "hello world — plain ASCII text";
       const response = await cycleTLS(

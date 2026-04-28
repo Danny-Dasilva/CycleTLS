@@ -20,7 +20,7 @@ describe.skip("HTTP/2 Fingerprinting Tests", () => {
     }
   });
 
-  test("Firefox HTTP/2 fingerprint with peet.ws", async () => {
+  test.skip("Firefox HTTP/2 fingerprint with peet.ws", async () => {
     const firefoxHTTP2 = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s";
     
     const response = await client.get('https://tls.peet.ws/api/all', {
@@ -39,7 +39,7 @@ describe.skip("HTTP/2 Fingerprinting Tests", () => {
     
   });
 
-  test("Chrome HTTP/2 fingerprint with peet.ws", async () => {
+  test.skip("Chrome HTTP/2 fingerprint with peet.ws", async () => {
     const chromeHTTP2 = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p";
 
     const response = await client.get('https://tls.peet.ws/api/all', {
