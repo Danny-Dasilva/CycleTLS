@@ -6,6 +6,7 @@ jobs:
   node-integration:
     name: Node.js Integration (soft-fail)
     strategy:
+      fail-fast: false
       matrix:
         node-version: [20.x]
         go-version: ['1.25']
@@ -13,6 +14,9 @@ jobs:
     runs-on: ${{ matrix.platform }}
     # Non-blocking: failures don't fail the workflow
     continue-on-error: true
+    # Hard ceiling so a hung cycletls subprocess (held alive by --detectOpenHandles)
+    # can't drag a job out to the GitHub default 6h limit.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +41,9 @@ jobs:
 
       - name: Run Integration Tests
         id: integration-tests
-        run: npm test -- --testPathIgnorePatterns=tlsfingerprint
+        # --forceExit overrides package.json's --detectOpenHandles so a leaked
+        # cycletls subprocess doesn't keep Jest alive after assertions complete.
+        run: npm test -- --testPathIgnorePatterns=tlsfingerprint --forceExit
         working-directory: ./
 
       - name: Report integration test results
@@ -61,6 +67,7 @@ jobs:
     # (soft-fail) treatment for the same root cause. Failures still surface
     # in the UI but don't gate merges.
     continue-on-error: true
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -84,5 +91,5 @@ jobs:
         working-directory: ./
 
       - name: Run TLS Fingerprint Tests
-        run: npm test -- --testPathPattern=tlsfingerprint
+        run: npm test -- --testPathPattern=tlsfingerprint --forceExit
         working-directory: ./
