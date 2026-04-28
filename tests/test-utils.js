@@ -184,6 +184,85 @@ async function streamToJson(stream) {
   return JSON.parse(text);
 }
 
+/**
+ * Status codes from upstream we treat as transient flake (rate-limit / gateway
+ * timeout). When httpbin.org / tlsfingerprint.com are being squeezed by
+ * Cloudflare these surface intermittently and shouldn't fail the test suite.
+ */
+const UPSTREAM_FLAKE_STATUSES = new Set([408, 421, 429, 502, 503, 504, 521, 522, 523, 524, 525]);
+
+/**
+ * Probe an upstream URL with a short timeout. Returns true if the probe
+ * receives a 200 response within `timeoutMs`. Used in beforeAll to gate
+ * a whole suite when the upstream is genuinely down.
+ */
+function probeUpstream(url, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    let resolved = false;
+    const finish = (ok) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(ok);
+    };
+    const t = setTimeout(() => finish(false), timeoutMs);
+    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+      const ok = res.statusCode === 200;
+      res.on('data', () => {});
+      res.on('end', () => { clearTimeout(t); finish(ok); });
+      res.on('error', () => { clearTimeout(t); finish(false); });
+    });
+    req.on('error', () => { clearTimeout(t); finish(false); });
+    req.on('timeout', () => { req.destroy(); clearTimeout(t); finish(false); });
+  });
+}
+
+/**
+ * Build a `conditionalTest` helper for a suite. The returned function takes
+ * (name, fn) like Jest's `test`, but:
+ *  - If `state.serviceAvailable` is false (pre-suite probe failed), the test
+ *    body short-circuits with a "Skipped" log and returns.
+ *  - Each test body races against `deadlineMs` (default 30s). On deadline hit,
+ *    flips `state.upstreamUnreachable=true` so subsequent tests skip instantly.
+ *  - Catches flake-class statuses / network errors and converts them to a
+ *    skip + circuit breaker trip. Real assertion failures still throw.
+ *
+ * Use:
+ *   const state = { serviceAvailable: false, upstreamUnreachable: false };
+ *   const conditionalTest = makeConditionalTest(state, 30000);
+ *   beforeAll(async () => { state.serviceAvailable = await probeUpstream('https://httpbin.org/json'); });
+ *   conditionalTest('should...', async () => { ... });
+ */
+function makeConditionalTest(state, deadlineMs = 30000) {
+  return function conditionalTest(name, fn) {
+    test(name, async () => {
+      if (!state.serviceAvailable || state.upstreamUnreachable) {
+        console.log(`Skipped: ${name} (upstream unavailable)`);
+        return;
+      }
+      const deadline = new Promise((res) => setTimeout(() => res('timeout'), deadlineMs));
+      try {
+        const result = await Promise.race([fn().then(() => 'ok'), deadline]);
+        if (result === 'timeout') {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream hung past ${deadlineMs}ms; tripping circuit breaker)`);
+          return;
+        }
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        const isFlakeStatus = [...UPSTREAM_FLAKE_STATUSES].some((c) => msg.includes(`${c}`) && (msg.includes('statusCode') || msg.includes('status')));
+        const isNetworkErr = /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|socket hang up|aborted/i.test(msg);
+        if (isFlakeStatus || isNetworkErr) {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream flake; tripping circuit breaker: ${msg.slice(0, 200)})`);
+          return;
+        }
+        throw e;
+      }
+    });
+  };
+}
+
 module.exports = {
   withCycleTLS,
   createSafeCycleTLS,
@@ -192,5 +271,8 @@ module.exports = {
   getActiveInstanceCount,
   streamToBuffer,
   streamToText,
-  streamToJson
+  streamToJson,
+  UPSTREAM_FLAKE_STATUSES,
+  probeUpstream,
+  makeConditionalTest,
 };

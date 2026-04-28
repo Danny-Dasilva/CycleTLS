@@ -1,9 +1,24 @@
 const { CycleTLS } = require("../dist/index.js");
+const { probeUpstream, makeConditionalTest } = require("./test-utils.js");
+
+// Longer Jest timeout — individual tests have their own 30s upstream deadline
+jest.setTimeout(90000);
+
+// Circuit-breaker state shared across all tests in this file. Once any test
+// hits the upstream deadline or surfaces a flake-class error, all subsequent
+// tests skip instantly so a hung httpbin doesn't blow the 20-min CI ceiling.
+const upstreamState = { serviceAvailable: false, upstreamUnreachable: false };
+const conditionalTest = makeConditionalTest(upstreamState, 30000);
 
 describe("Streaming Response Tests", () => {
   let client;
 
   beforeAll(async () => {
+    upstreamState.serviceAvailable = await probeUpstream('https://httpbin.org/json');
+    if (!upstreamState.serviceAvailable) {
+      console.warn('SKIPPING streaming tests: httpbin.org unavailable');
+      return;
+    }
     client = new CycleTLS({ port: 9118 });
   }, 20000);
 
