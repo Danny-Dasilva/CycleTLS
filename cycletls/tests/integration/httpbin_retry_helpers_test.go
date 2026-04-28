@@ -49,14 +49,18 @@ func doHTTPBinRequestWithRetry(t *testing.T, client cycletls.CycleTLS, url strin
 
 // isUpstreamFlake returns true if the status code is one we treat as an
 // httpbin/tls.peet.ws/etc upstream flake (rate limit, gateway timeout,
-// TLS handshake failure, Cloudflare 5xx).
+// TLS handshake failure, Cloudflare 5xx, network-level connection drop).
 //
-// 421 = Misdirected Request (HTTP/2 connection reuse race on upstream)
-// 429 = Too Many Requests (rate limit)
-// 495 = TLS handshake failure (cycletls-internal mapping for syscall TLS errors)
-// 521-525 = Cloudflare upstream / handshake failures
+//   0     = no response received (connection refused / TCP reset / DNS fail)
+//   408   = Request Timeout (upstream slow)
+//   421   = Misdirected Request (HTTP/2 connection reuse race)
+//   429   = Too Many Requests (rate limit)
+//   495   = TLS handshake failure (cycletls-internal syscall mapping)
+//   502/503/504 = bad gateway / upstream timeout
+//   521-525 = Cloudflare upstream / handshake failures
 func isUpstreamFlake(status int) bool {
-	return status == 408 || status == 421 || status == 429 || status == 495 ||
+	return status == 0 ||
+		status == 408 || status == 421 || status == 429 || status == 495 ||
 		status == 502 || status == 503 || status == 504 ||
 		status == 521 || status == 522 || status == 523 || status == 524 || status == 525
 }
