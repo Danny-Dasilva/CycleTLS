@@ -107,6 +107,7 @@ jobs:
 
       - name: Report integration test results
         if: always()
+        shell: bash
         run: |
           if [ "${{ steps.integration-tests.outcome }}" == "failure" ]; then
             echo "::warning::Integration tests failed - see logs for details"
