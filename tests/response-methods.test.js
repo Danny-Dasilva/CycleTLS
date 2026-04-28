@@ -11,6 +11,9 @@ jest.setTimeout(90000);
 let serviceAvailable = false;
 
 function probeHttpbin() {
+  // Probe /json (a real-data endpoint we actually use in tests) rather than
+  // /status/200, because httpbin.org sometimes 200-responds the cheap
+  // status endpoint while genuinely hanging on data endpoints.
   return new Promise((resolve) => {
     let resolved = false;
     const finish = (ok) => {
@@ -18,13 +21,14 @@ function probeHttpbin() {
       resolved = true;
       resolve(ok);
     };
-    const t = setTimeout(() => finish(false), 5000);
-    const req = https.get('https://httpbin.org/status/200', { timeout: 5000 }, (res) => {
-      clearTimeout(t);
+    const t = setTimeout(() => finish(false), 8000);
+    const req = https.get('https://httpbin.org/json', { timeout: 8000 }, (res) => {
       const ok = res.statusCode === 200;
+      // Drain body so connection releases; if the body itself stalls the
+      // outer 8s timeout still fires.
       res.on('data', () => {});
-      res.on('end', () => finish(ok));
-      res.on('error', () => finish(false));
+      res.on('end', () => { clearTimeout(t); finish(ok); });
+      res.on('error', () => { clearTimeout(t); finish(false); });
     });
     req.on('error', () => { clearTimeout(t); finish(false); });
     req.on('timeout', () => { req.destroy(); clearTimeout(t); finish(false); });
@@ -34,20 +38,31 @@ function probeHttpbin() {
 // Status codes treated as transient upstream flake (rate-limit, gateway timeout)
 const FLAKE_STATUSES = new Set([408, 421, 429, 502, 503, 504, 521, 522, 523, 524, 525]);
 
-// Wraps a test body with: (a) early skip if upstream probe failed, (b) a 60s
-// soft deadline so a hung httpbin doesn't blow the Jest timeout, (c) flake
-// status / network-error catch that converts to a skip console.log.
+// Circuit breaker: once any test hits the upstream deadline or surfaces a
+// flake-class error, flip this flag so all subsequent tests skip *instantly*
+// rather than each eating its own 60s budget. Otherwise a hung httpbin makes
+// us spend 16 * 60s = 16min in this single suite, blowing the 20-min CI ceiling.
+let upstreamUnreachable = false;
+
+// Wraps a test body with: (a) early skip if upstream probe failed or circuit
+// breaker tripped, (b) a 30s soft deadline so a hung httpbin doesn't blow the
+// Jest timeout, (c) flake status / network-error catch that converts to a skip
+// console.log AND trips the circuit breaker.
 function conditionalTest(name, fn) {
   test(name, async () => {
-    if (!serviceAvailable) {
+    if (!serviceAvailable || upstreamUnreachable) {
       console.log(`Skipped: ${name} (httpbin.org unavailable)`);
       return;
     }
-    const deadline = new Promise((res) => setTimeout(() => res('timeout'), 60000));
+    // 30s soft deadline (Jest setTimeout is 90s). Tighter than the previous
+    // 60s — when we hit the deadline once we trip the circuit breaker so the
+    // remaining 15 tests skip in <1s total.
+    const deadline = new Promise((res) => setTimeout(() => res('timeout'), 30000));
     try {
       const result = await Promise.race([fn().then(() => 'ok'), deadline]);
       if (result === 'timeout') {
-        console.log(`Skipped: ${name} (upstream hung past 60s deadline)`);
+        upstreamUnreachable = true;
+        console.log(`Skipped: ${name} (upstream hung past 30s deadline; tripping circuit breaker)`);
         return;
       }
     } catch (e) {
@@ -55,7 +70,8 @@ function conditionalTest(name, fn) {
       const isFlakeStatus = [...FLAKE_STATUSES].some((c) => msg.includes(`${c}`) && (msg.includes('statusCode') || msg.includes('status')));
       const isNetworkErr = /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|socket hang up|aborted/i.test(msg);
       if (isFlakeStatus || isNetworkErr) {
-        console.log(`Skipped: ${name} (upstream flake: ${msg.slice(0, 200)})`);
+        upstreamUnreachable = true;
+        console.log(`Skipped: ${name} (upstream flake; tripping circuit breaker: ${msg.slice(0, 200)})`);
         return;
       }
       throw e;
