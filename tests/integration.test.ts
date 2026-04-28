@@ -1,7 +1,7 @@
 import CycleTLS from '../dist/index.js'
-import { withCycleTLS } from "./test-utils.js";
+import { withCycleTLS, withUpstreamRetry, UPSTREAM_FLAKE_STATUSES } from "./test-utils.js";
 import http from 'http';
-jest.setTimeout(30000);
+jest.setTimeout(60000);
 
 // Check if httpbin.org is reachable before running tests that depend on it
 let httpbinAvailable = true;
@@ -105,9 +105,8 @@ test('Should Return 200 for all responses', async () => {
         console.warn('Skipping: httpbin.org is not reachable');
         return;
     }
-    await withCycleTLS({ port: 9123 }, async (client) => {
+    await withCycleTLS({ port: 9123, timeout: 10000 }, async (client) => {
         for (let request of myRequests) {
-            let response;
             const options = {
                 body: request.body,
                 ja3: request.ja3,
@@ -116,22 +115,26 @@ test('Should Return 200 for all responses', async () => {
                 cookies: request.cookies,
             };
 
-            // Use appropriate method based on request
-            switch (request.method) {
-                case 'post':
-                    response = await client.post(request.url, request.body || '', options);
-                    break;
-                case 'put':
-                    response = await client.put(request.url, request.body || '', options);
-                    break;
-                case 'patch':
-                    response = await client.patch(request.url, request.body || '', options);
-                    break;
-                case 'delete':
-                    response = await client.delete(request.url, options);
-                    break;
-                default:
-                    response = await client.get(request.url, options);
+            // Wrap in upstream-flake retry — skip-on-flake per request rather
+            // than fail the whole iteration when httpbin returns 408/502/etc.
+            const response = await withUpstreamRetry(async () => {
+                switch (request.method) {
+                    case 'post':
+                        return await client.post(request.url, request.body || '', options);
+                    case 'put':
+                        return await client.put(request.url, request.body || '', options);
+                    case 'patch':
+                        return await client.patch(request.url, request.body || '', options);
+                    case 'delete':
+                        return await client.delete(request.url, options);
+                    default:
+                        return await client.get(request.url, options);
+                }
+            });
+
+            if (UPSTREAM_FLAKE_STATUSES.has(response.status)) {
+                console.log(`Skipped ${request.url}: httpbin upstream flake (status ${response.status})`);
+                continue;
             }
 
             // Handle different response types based on URL
