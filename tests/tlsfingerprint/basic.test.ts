@@ -23,6 +23,10 @@ jest.setTimeout(90000);
 
 // Check service availability and conditionally run tests
 let serviceAvailable = false;
+// Circuit breaker — once any test trips the deadline or a flake error,
+// every subsequent test in this file skips immediately. Without this, a
+// hung upstream costs 60s × N tests in this file.
+let upstreamUnreachable = false;
 
 beforeAll(async () => {
   serviceAvailable = await isServiceAvailable();
@@ -45,8 +49,8 @@ const FLAKE_STATUSES = new Set<number>([408, 421, 502, 503, 504, 521, 522, 523, 
 // rather than fail — these are upstream issues, not cycletls bugs.
 const conditionalTest = (name: string, fn: () => Promise<void>) => {
   it(name, async () => {
-    if (!serviceAvailable) {
-      console.log(`Skipped: ${name} (service unavailable)`);
+    if (!serviceAvailable || upstreamUnreachable) {
+      console.log(`Skipped: ${name} (upstream unavailable)`);
       return;
     }
     // 60s soft deadline — under Jest's 90s setTimeout. If the upstream
@@ -56,7 +60,8 @@ const conditionalTest = (name: string, fn: () => Promise<void>) => {
     try {
       const result = await Promise.race([fn().then(() => "ok" as const), deadline]);
       if (result === "timeout") {
-        console.log(`Skipped: ${name} (upstream hung past 60s deadline)`);
+        upstreamUnreachable = true;
+        console.log(`Skipped: ${name} (upstream hung past 60s; tripping circuit breaker)`);
         return;
       }
     } catch (e) {
@@ -64,7 +69,8 @@ const conditionalTest = (name: string, fn: () => Promise<void>) => {
       const isFlakeStatus = [...FLAKE_STATUSES].some((c) => msg.includes(`${c}`) && msg.includes("statusCode"));
       const isNetworkErr = /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|socket hang up/i.test(msg);
       if (isFlakeStatus || isNetworkErr) {
-        console.log(`Skipped: ${name} (upstream flake: ${msg.slice(0, 200)})`);
+        upstreamUnreachable = true;
+        console.log(`Skipped: ${name} (upstream flake; tripping circuit breaker: ${msg.slice(0, 200)})`);
         return;
       }
       throw e;
