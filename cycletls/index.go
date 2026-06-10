@@ -217,8 +217,9 @@ func buildHTTPRequest(request cycleTLSRequest, ctx context.Context) (*http.Reque
 
 	// Build header order key
 	headerorderkey := []string{}
+	requestHeaders := request.Options.requestHeaders()
 	for _, key := range headerorder {
-		for k := range request.Options.Headers {
+		for k := range requestHeaders {
 			if key == strings.ToLower(k) {
 				headerorderkey = append(headerorderkey, strings.ToLower(k))
 			}
@@ -243,20 +244,14 @@ func buildHTTPRequest(request cycleTLSRequest, ctx context.Context) (*http.Reque
 		return nil, err
 	}
 
-	// Append headers
-	for k, v := range request.Options.Headers {
-		if k != "Content-Length" {
-			req.Header.Set(k, v)
-		}
-	}
+	// Append headers (preserving exact key casing and multi-value entries)
+	setRequestHeaders(req.Header, request.Options, true)
 
 	// Set Host header (respect user-provided for domain fronting)
-	if _, ok := request.Options.Headers["Host"]; !ok {
-		if _, ok := request.Options.Headers["host"]; !ok {
-			req.Header.Set("Host", u.Host)
-		}
+	if !hasRequestHeader(request.Options, "Host") {
+		req.Header["Host"] = []string{u.Host}
 	}
-	req.Header.Set("user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
 
 	return req, nil
 }
@@ -340,14 +335,13 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		)
 	}
 
-	headermap := make(map[string]string)
 	//TODO: Shorten this
 	headerorderkey := []string{}
+	requestHeaders := request.Options.requestHeaders()
 	for _, key := range headerorder {
-		for k, v := range request.Options.Headers {
+		for k := range requestHeaders {
 			lowercasekey := strings.ToLower(k)
 			if key == lowercasekey {
-				headermap[k] = v
 				headerorderkey = append(headerorderkey, lowercasekey)
 			}
 		}
@@ -372,20 +366,14 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		return result
 	}
 
-	//append our normal headers
-	for k, v := range request.Options.Headers {
-		if k != "Content-Length" {
-			req.Header.Set(k, v)
-		}
-	}
+	//append our normal headers (preserving exact key casing and multi-value entries)
+	setRequestHeaders(req.Header, request.Options, true)
 
 	// Respect user-provided Host header for domain fronting; otherwise default to URL host
-	if _, ok := request.Options.Headers["Host"]; !ok {
-		if _, ok := request.Options.Headers["host"]; !ok {
-			req.Header.Set("Host", u.Host)
-		}
+	if !hasRequestHeader(request.Options, "Host") {
+		req.Header["Host"] = []string{u.Host}
 	}
-	req.Header.Set("user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -432,12 +420,8 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		log.Fatal(err)
 	}
 
-	// Set headers for HTTP/3 request
-	for k, v := range request.Options.Headers {
-		if k != "Content-Length" {
-			req.Header.Set(k, v)
-		}
-	}
+	// Set headers for HTTP/3 request (preserving exact key casing and multi-value entries)
+	setRequestHeaders(req.Header, request.Options, true)
 
 	// Parse URL for Host header
 	u, err := url.Parse(request.Options.URL)
@@ -447,12 +431,10 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		return result
 	}
 	// Respect user-provided Host header for domain fronting; otherwise default to URL host
-	if _, ok := request.Options.Headers["Host"]; !ok {
-		if _, ok := request.Options.Headers["host"]; !ok {
-			req.Header.Set("Host", u.Host)
-		}
+	if !hasRequestHeader(request.Options, "Host") {
+		req.Header["Host"] = []string{u.Host}
 	}
-	req.Header.Set("user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -483,11 +465,9 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		log.Fatal(err)
 	}
 
-	// Prepare headers for SSE
+	// Prepare headers for SSE (preserving exact key casing and multi-value entries)
 	headers := make(http.Header)
-	for k, v := range request.Options.Headers {
-		headers.Set(k, v)
-	}
+	setRequestHeaders(headers, request.Options, false)
 
 	// Create SSE client
 	sseClient := NewSSEClient(&client, headers)
@@ -524,11 +504,9 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		ServerName:         browser.ServerName,
 	}
 
-	// Prepare headers for WebSocket
+	// Prepare headers for WebSocket (preserving exact key casing and multi-value entries)
 	headers := make(http.Header)
-	for k, v := range request.Options.Headers {
-		headers.Set(k, v)
-	}
+	setRequestHeaders(headers, request.Options, false)
 
 	// Create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(headers)
@@ -1903,10 +1881,8 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		req.Header[http.PHeaderOrderKey] = headerOrder
 	}
 
-	// Set headers
-	for k, v := range options.Headers {
-		req.Header.Set(k, v)
-	}
+	// Set headers (preserving exact key casing and multi-value entries)
+	setRequestHeaders(req.Header, options, false)
 
 	// Make request
 	headerTimeout := totalTimeout

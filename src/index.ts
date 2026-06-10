@@ -345,7 +345,19 @@ export interface TimeoutOptions {
  * ```
  */
 export interface CycleTLSRequestOptions {
-  /** HTTP headers to send with the request */
+  /**
+   * HTTP headers to send with the request.
+   *
+   * Values may be a single string or an array of strings. Array values are sent
+   * as repeated headers (multiple entries for the same field), and the exact
+   * key casing you provide is preserved on the wire instead of being canonicalized.
+   *
+   * @example
+   * headers: {
+   *   "x-CUSTOM-case": ["one", "two"], // sent twice, casing preserved
+   *   "Accept": "text/plain",
+   * }
+   */
   headers?: HttpHeaders;
   /**
    * Cookies to send with the request.

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	nhttp "net/http"
+	"strings"
 	"time"
 
 	http "github.com/Danny-Dasilva/fhttp"
@@ -44,11 +45,14 @@ type Cookie struct {
 
 // Options sets CycleTLS client options.
 type Options struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Headers   map[string]string `json:"headers"`
-	Body      string            `json:"body"`
-	BodyBytes []byte            `json:"bodyBytes"` // New field for binary request data
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	// HeaderValues supports request headers with multiple values and exact key casing.
+	// It is populated automatically when JSON headers contain array values.
+	HeaderValues map[string][]string `json:"-"`
+	Body         string              `json:"body"`
+	BodyBytes    []byte              `json:"bodyBytes"` // New field for binary request data
 
 	// TLS fingerprinting options
 	Ja3              string `json:"ja3"`
@@ -84,6 +88,110 @@ type Options struct {
 
 	// Certificate pinning (optional)
 	CertPins []string `json:"certPins,omitempty"` // SHA256 certificate fingerprints for pinning (hex-encoded)
+}
+
+// UnmarshalJSON accepts both legacy string header values and multi-value arrays.
+func (options *Options) UnmarshalJSON(data []byte) error {
+	type optionsAlias Options
+	var raw struct {
+		optionsAlias
+		Headers map[string]json.RawMessage `json:"headers"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*options = Options(raw.optionsAlias)
+	options.Headers = make(map[string]string, len(raw.Headers))
+	options.HeaderValues = make(map[string][]string, len(raw.Headers))
+
+	for k, rawValue := range raw.Headers {
+		var single string
+		if err := json.Unmarshal(rawValue, &single); err == nil {
+			options.Headers[k] = single
+			options.HeaderValues[k] = []string{single}
+			continue
+		}
+
+		var values []string
+		if err := json.Unmarshal(rawValue, &values); err != nil {
+			return err
+		}
+		options.HeaderValues[k] = append([]string(nil), values...)
+		if len(values) > 0 {
+			options.Headers[k] = values[0]
+		} else {
+			options.Headers[k] = ""
+		}
+	}
+
+	if len(options.Headers) == 0 {
+		options.Headers = nil
+	}
+	if len(options.HeaderValues) == 0 {
+		options.HeaderValues = nil
+	}
+
+	return nil
+}
+
+// requestHeaders merges Headers and HeaderValues into a single multi-value map.
+// HeaderValues wins when a key is present in both; keys keep their exact casing.
+func (options Options) requestHeaders() map[string][]string {
+	if len(options.HeaderValues) > 0 {
+		headers := make(map[string][]string, len(options.HeaderValues)+len(options.Headers))
+		for k, values := range options.HeaderValues {
+			headers[k] = append([]string(nil), values...)
+		}
+		for k, v := range options.Headers {
+			if _, ok := headers[k]; !ok {
+				headers[k] = []string{v}
+			}
+		}
+		return headers
+	}
+
+	headers := make(map[string][]string, len(options.Headers))
+	for k, v := range options.Headers {
+		headers[k] = []string{v}
+	}
+	return headers
+}
+
+// setRequestHeaders writes the request headers onto an http.Header using direct
+// map assignment so the exact key casing is preserved (http.Header.Set would
+// canonicalize the key) and multiple values are sent as repeated headers.
+func setRequestHeaders(headers http.Header, options Options, skipContentLength bool) {
+	for k, values := range options.requestHeaders() {
+		if skipContentLength && strings.EqualFold(k, "Content-Length") {
+			continue
+		}
+		headers[k] = append([]string(nil), values...)
+	}
+}
+
+// hasRequestHeader reports whether a header is present under any key casing.
+func hasRequestHeader(options Options, name string) bool {
+	for k := range options.requestHeaders() {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// setHeaderExact sets a header under the exact key given, removing any existing
+// entries for the same header under different casings first. This keeps the
+// "options override headers" semantics that http.Header.Set provided while
+// avoiding key canonicalization.
+func setHeaderExact(headers http.Header, name, value string) {
+	for k := range headers {
+		if strings.EqualFold(k, name) {
+			delete(headers, k)
+		}
+	}
+	headers[name] = []string{value}
 }
 
 // cycleTLSRequest represents an internal request with ID and options.
