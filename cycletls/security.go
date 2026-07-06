@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,9 @@ func (w *Writer) WriteU16Safe(v int) error {
 func (w *Writer) WriteU32Safe(v int) error {
 	if v < 0 {
 		return ErrNegativeValue
+	}
+	if int64(v) > int64(math.MaxUint32) {
+		return ErrU32Overflow
 	}
 	w.buf = append(w.buf, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	return nil

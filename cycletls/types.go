@@ -65,15 +65,15 @@ type Options struct {
 	UserAgent string `json:"userAgent"`
 
 	// Connection options
-	Proxy              string   `json:"proxy"`
-	ServerName         string   `json:"serverName"` // Custom TLS SNI override
-	Cookies            []Cookie `json:"cookies"`
-	Timeout            int      `json:"timeout"`
-	DisableRedirect    bool     `json:"disableRedirect"`
-	HeaderOrder        []string `json:"headerOrder"`
-	OrderAsProvided    bool     `json:"orderAsProvided"` //TODO
-	InsecureSkipVerify      bool  `json:"insecureSkipVerify"`
-	ProxyInsecureSkipVerify *bool `json:"proxyInsecureSkipVerify,omitempty"` // TLS verification for proxy connections. Defaults to true for backward compat. Set to false to verify proxy certificates.
+	Proxy                   string   `json:"proxy"`
+	ServerName              string   `json:"serverName"` // Custom TLS SNI override
+	Cookies                 []Cookie `json:"cookies"`
+	Timeout                 int      `json:"timeout"`
+	DisableRedirect         bool     `json:"disableRedirect"`
+	HeaderOrder             []string `json:"headerOrder"`
+	OrderAsProvided         bool     `json:"orderAsProvided"` //TODO
+	InsecureSkipVerify      bool     `json:"insecureSkipVerify"`
+	ProxyInsecureSkipVerify *bool    `json:"proxyInsecureSkipVerify,omitempty"` // TLS verification for proxy connections. Defaults to true for backward compat. Set to false to verify proxy certificates.
 
 	// Protocol options
 	ForceHTTP1 bool   `json:"forceHTTP1"`
@@ -250,6 +250,9 @@ type Response struct {
 // JSONBody parses the response body as JSON and returns a map.
 func (r Response) JSONBody() map[string]interface{} {
 	var result map[string]interface{}
-	json.Unmarshal([]byte(r.Body), &result)
+	if err := json.Unmarshal([]byte(r.Body), &result); err != nil {
+		debugLogger.Printf("JSONBody: failed to parse response body as JSON: %v", err)
+		return nil
+	}
 	return result
 }

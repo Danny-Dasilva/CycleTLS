@@ -12,13 +12,13 @@ func TestCreditWindowBasicAcquire(t *testing.T) {
 	cw := newCreditWindow(100)
 
 	// Should be able to acquire within window
-	err := cw.Acquire(50, context.Background())
+	err := cw.Acquire(context.Background(), 50)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	// Should be able to acquire rest of window
-	err = cw.Acquire(50, context.Background())
+	err = cw.Acquire(context.Background(), 50)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -64,16 +64,49 @@ func TestCreditWindowBlocksWhenExhausted(t *testing.T) {
 	cw := newCreditWindow(50)
 
 	// Exhaust credits
-	cw.Acquire(50, context.Background())
+	cw.Acquire(context.Background(), 50)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	// This should block and then timeout
-	err := cw.Acquire(10, ctx)
+	err := cw.Acquire(ctx, 10)
 	if err != context.DeadlineExceeded {
 		t.Fatalf("Expected DeadlineExceeded, got %v", err)
+	}
+}
+
+func TestCreditWindowAcquireAccountingAndCancel(t *testing.T) {
+	cw := newCreditWindow(100)
+
+	// A successful acquire consumes exactly n credits.
+	if err := cw.Acquire(context.Background(), 30); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cw.mu.Lock()
+	if cw.window != 70 {
+		cw.mu.Unlock()
+		t.Fatalf("expected window 70 after acquiring 30, got %d", cw.window)
+	}
+	cw.mu.Unlock()
+
+	// A cancelled context aborts a blocking acquire without consuming credits.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := cw.Acquire(ctx, 200); err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	cw.mu.Lock()
+	if cw.window != 70 {
+		cw.mu.Unlock()
+		t.Fatalf("expected window unchanged at 70 after cancelled acquire, got %d", cw.window)
+	}
+	cw.mu.Unlock()
+
+	// The remaining credits are still acquirable.
+	if err := cw.Acquire(context.Background(), 70); err != nil {
+		t.Fatalf("expected to acquire remaining 70, got %v", err)
 	}
 }
 
@@ -86,7 +119,7 @@ func TestCreditWindowUnblocksOnAdd(t *testing.T) {
 
 	go func() {
 		close(started) // Signal that goroutine has launched
-		acquireErr = cw.Acquire(50, context.Background())
+		acquireErr = cw.Acquire(context.Background(), 50)
 		close(done)
 	}()
 
@@ -126,7 +159,7 @@ func TestCreditWindowClose(t *testing.T) {
 
 	go func() {
 		close(started) // Signal that goroutine has launched
-		acquireErr = cw.Acquire(50, context.Background())
+		acquireErr = cw.Acquire(context.Background(), 50)
 		close(done)
 	}()
 
@@ -157,7 +190,7 @@ func TestCreditWindowNilGuard(t *testing.T) {
 	var cw *creditWindow // nil
 
 	// nil window should allow any acquire
-	err := cw.Acquire(1000000, context.Background())
+	err := cw.Acquire(context.Background(), 1000000)
 	if err != nil {
 		t.Fatalf("nil creditWindow should allow any acquire, got %v", err)
 	}
@@ -178,13 +211,13 @@ func TestCreditWindowZeroAcquire(t *testing.T) {
 	cw := newCreditWindow(100)
 
 	// Zero acquire should always succeed without consuming credits
-	err := cw.Acquire(0, context.Background())
+	err := cw.Acquire(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Zero acquire should succeed, got %v", err)
 	}
 
 	// Negative acquire should always succeed
-	err = cw.Acquire(-5, context.Background())
+	err = cw.Acquire(context.Background(), -5)
 	if err != nil {
 		t.Fatalf("Negative acquire should succeed, got %v", err)
 	}
@@ -314,7 +347,7 @@ func TestCreditWindowAcquireNoGoroutineLeak(t *testing.T) {
 
 	// Perform many Acquire calls - should not leak goroutines
 	for i := 0; i < 1000; i++ {
-		err := cw.Acquire(1, context.Background())
+		err := cw.Acquire(context.Background(), 1)
 		if err != nil {
 			t.Fatalf("Acquire failed: %v", err)
 		}
@@ -323,7 +356,7 @@ func TestCreditWindowAcquireNoGoroutineLeak(t *testing.T) {
 	// Also test with cancelled contexts
 	for i := 0; i < 100; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-		_ = cw.Acquire(1, ctx) // may timeout, that's fine
+		_ = cw.Acquire(ctx, 1) // may timeout, that's fine
 		cancel()
 	}
 

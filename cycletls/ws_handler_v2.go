@@ -36,76 +36,70 @@ func validateCredits(credits uint32) error {
 	return nil
 }
 
+// ErrCommandSenderClosed is returned by safeCommandSender.Send when the sender
+// has been closed.
+var ErrCommandSenderClosed = fmt.Errorf("command sender closed")
+
 // safeCommandSender wraps a WebSocket command channel with a mutex to
 // prevent data races between concurrent sends and close operations.
 type safeCommandSender struct {
 	mu     sync.Mutex
 	ch     chan WebSocketCommandV2
 	closed bool
+	// done is closed by Close to unblock any in-flight Send calls.
+	done chan struct{}
+	// wg tracks in-flight Send calls so Close can wait for them to leave the
+	// channel send before closing ch (preventing a send-on-closed panic).
+	wg sync.WaitGroup
 }
 
 // newSafeCommandSender creates a new safe command sender wrapping the given channel.
 func newSafeCommandSender(ch chan WebSocketCommandV2) *safeCommandSender {
-	return &safeCommandSender{ch: ch}
+	return &safeCommandSender{ch: ch, done: make(chan struct{})}
 }
 
-// safeSendCommand sends a command to the channel. Returns true if the send
-// succeeded, false if the channel is closed or full.
-func safeSendCommand(ch chan WebSocketCommandV2, cmd WebSocketCommandV2) bool {
-	// For standalone channel use (no safeCommandSender), use recover pattern
-	return safeSendCommandDirect(ch, cmd)
-}
-
-// safeSendCommandDirect sends without mutex protection, using recover for
-// backward compatibility with code that doesn't use safeCommandSender.
-func safeSendCommandDirect(ch chan WebSocketCommandV2, cmd WebSocketCommandV2) (sent bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			sent = false
-		}
-	}()
-	select {
-	case ch <- cmd:
-		return true
-	default:
-		return false
-	}
-}
-
-// Send sends a command through the protected channel. Thread-safe.
-func (s *safeCommandSender) Send(cmd WebSocketCommandV2) bool {
+// Send delivers a command through the protected channel, blocking until the
+// command is queued, the context is cancelled, or the sender is closed.
+// It never silently drops: a full channel causes it to wait rather than
+// discard the command. Returns nil on success, ctx.Err() on cancellation, or
+// ErrCommandSenderClosed if the sender has been closed. Thread-safe.
+func (s *safeCommandSender) Send(ctx context.Context, cmd WebSocketCommandV2) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
-		return false
+		s.mu.Unlock()
+		return ErrCommandSenderClosed
 	}
+	s.wg.Add(1)
+	s.mu.Unlock()
+	defer s.wg.Done()
+
 	select {
 	case s.ch <- cmd:
-		return true
-	default:
-		return false
+		return nil
+	case <-s.done:
+		return ErrCommandSenderClosed
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
-// Close closes the channel. Safe to call multiple times.
+// Close closes the channel. Safe to call multiple times and concurrently with
+// Send. It signals in-flight senders to abort, waits for them to leave the
+// channel send, then closes the channel so no send-on-closed panic is possible.
 func (s *safeCommandSender) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.closed {
-		s.closed = true
-		close(s.ch)
+	if s.closed {
+		s.mu.Unlock()
+		return
 	}
-}
+	s.closed = true
+	close(s.done)
+	s.mu.Unlock()
 
-// safeCloseCommandCh closes a WebSocket command channel without panicking
-// if it was already closed.
-func safeCloseCommandCh(ch chan WebSocketCommandV2) {
-	defer func() {
-		if r := recover(); r != nil {
-			// channel was already closed - safe to ignore
-		}
-	}()
-	close(ch)
+	// Wait for in-flight Send calls to observe done and return before closing
+	// the underlying channel.
+	s.wg.Wait()
+	close(s.ch)
 }
 
 // -----------------------------------------------------------------------------
@@ -343,9 +337,11 @@ func handleWSRequestV2(ws *websocket.Conn) {
 
 	// Create command channel for WebSocket connections
 	var wsCommandCh chan WebSocketCommandV2
+	var cmdSender *safeCommandSender
 	isWebSocket := req.Options.Protocol == "websocket"
 	if isWebSocket {
 		wsCommandCh = make(chan WebSocketCommandV2, 32)
+		cmdSender = newSafeCommandSender(wsCommandCh)
 		res.wsCommandCh = wsCommandCh
 	}
 
@@ -355,9 +351,11 @@ func handleWSRequestV2(ws *websocket.Conn) {
 
 	g.Go(func() error {
 		defer cancel()
-		if wsCommandCh != nil {
-			// Use safe close to prevent panic if channel is already closed
-			defer safeCloseCommandCh(wsCommandCh)
+		if cmdSender != nil {
+			// The reader is the sole owner of the command channel. Close waits
+			// for any in-flight send and closes the channel exactly once, so no
+			// send-on-closed or double-close is possible.
+			defer cmdSender.Close()
 		}
 
 		debugLogger.Printf("[V2 Reader] Starting, isWebSocket=%v, protocol=%s", isWebSocket, req.Options.Protocol)
@@ -383,32 +381,32 @@ func handleWSRequestV2(ws *websocket.Conn) {
 					limiter.Add(int64(msg.Credits))
 				case "ws_send":
 					debugLogger.Printf("[V2 Reader] Forwarding ws_send: type=%d, len=%d", msg.MessageType, len(msg.Data))
-					// Issue #6: Use safe send to prevent panic on closed channel
-					if !safeSendCommand(wsCommandCh, WebSocketCommandV2{
+					// Block until the command is queued or the request is torn
+					// down; never silently drop on a full channel.
+					if err := cmdSender.Send(ctx, WebSocketCommandV2{
 						Type:        "send",
 						MessageType: msg.MessageType,
 						Data:        msg.Data,
-					}) {
-						// Channel closed or full, check context
+					}); err != nil {
 						if ctx.Err() != nil {
 							return ctx.Err()
 						}
-						debugLogger.Printf("[V2 Reader] ws_send could not be forwarded, channel closed")
-						return nil
+						debugLogger.Printf("[V2 Reader] ws_send could not be forwarded: %v", err)
+						return err
 					}
 					debugLogger.Printf("[V2 Reader] ws_send forwarded successfully")
 				case "ws_close":
 					debugLogger.Printf("[V2 Reader] Forwarding ws_close")
-					// Issue #6: Use safe send to prevent panic on closed channel
-					if !safeSendCommand(wsCommandCh, WebSocketCommandV2{
+					if err := cmdSender.Send(ctx, WebSocketCommandV2{
 						Type:        "close",
 						CloseCode:   msg.CloseCode,
 						CloseReason: msg.CloseReason,
-					}) {
+					}); err != nil {
 						if ctx.Err() != nil {
 							return ctx.Err()
 						}
-						return nil
+						debugLogger.Printf("[V2 Reader] ws_close could not be forwarded: %v", err)
+						return err
 					}
 				}
 			} else {
@@ -597,7 +595,7 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 		// Send any data we got before handling errors
 		if n > 0 {
 			if limiter != nil {
-				if err := limiter.Acquire(int64(n), ctx); err != nil {
+				if err := limiter.Acquire(ctx, int64(n)); err != nil {
 					return
 				}
 			}
@@ -668,7 +666,7 @@ func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 		// Send any data we got before handling errors
 		if n > 0 {
 			if limiter != nil {
-				if err := limiter.Acquire(int64(n), ctx); err != nil {
+				if err := limiter.Acquire(ctx, int64(n)); err != nil {
 					return
 				}
 			}

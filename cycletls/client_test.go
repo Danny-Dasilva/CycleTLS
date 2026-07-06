@@ -7,21 +7,29 @@ import (
 	"testing"
 )
 
-// TestGenerateClientKey_ReturnsConfigString verifies that generateClientKey returns the full config string
-func TestGenerateClientKey_ReturnsConfigString(t *testing.T) {
+// TestGenerateClientKey_IsStableHash verifies generateClientKey returns a stable,
+// fixed-width FNV-1a hex digest of the config (not the raw config string).
+func TestGenerateClientKey_IsStableHash(t *testing.T) {
 	browser := Browser{
 		JA3:       "771,52244-52243-52245,0-23-35-13,23-24,0",
 		UserAgent: "Mozilla/5.0 Test",
 	}
 
 	key := generateClientKey(browser, 30, false, "")
-
-	// Verify it contains expected config fields
-	if !strings.Contains(key, "ja3:771,52244-52243-52245,0-23-35-13,23-24,0") {
-		t.Errorf("Key should contain JA3 value, got: %s", key)
+	if key != generateClientKey(browser, 30, false, "") {
+		t.Error("generateClientKey() should be deterministic for identical config")
 	}
-	if !strings.Contains(key, "ua:Mozilla/5.0 Test") {
-		t.Errorf("Key should contain UserAgent value, got: %s", key)
+	if len(key) != 16 {
+		t.Errorf("expected 16-char FNV-1a hex key, got %d chars: %q", len(key), key)
+	}
+	for _, c := range key {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("key should be lowercase hex, got %q", key)
+			break
+		}
+	}
+	if strings.Contains(key, "ja3:") {
+		t.Errorf("key should be a hash, not the raw config string, got: %s", key)
 	}
 }
 
@@ -85,7 +93,8 @@ func TestGenerateClientKey_DifferentOptionsDifferentKeys(t *testing.T) {
 	}
 }
 
-// TestGenerateClientKey_KeyFormatValid verifies key format contains expected fields
+// TestGenerateClientKey_KeyFormatValid verifies the key is a hashed hex digest and
+// does not leak the raw config field markers.
 func TestGenerateClientKey_KeyFormatValid(t *testing.T) {
 	browser := Browser{
 		JA3:       "test",
@@ -94,17 +103,20 @@ func TestGenerateClientKey_KeyFormatValid(t *testing.T) {
 
 	key := generateClientKey(browser, 30, false, "")
 
-	// Key should contain pipe-separated config fields
-	requiredFields := []string{"ja3:", "ja4r:", "http2:", "ua:", "sni:", "proxy:", "redirect:", "skipverify:", "forcehttp1:", "forcehttp3:"}
-	for _, field := range requiredFields {
-		if !strings.Contains(key, field) {
-			t.Errorf("Key missing field %q, got: %s", field, key)
+	if len(key) != 16 {
+		t.Errorf("expected 16-char FNV-1a hex key, got %d chars: %q", len(key), key)
+	}
+	for _, field := range []string{"ja3:", "ua:", "sni:", "proxy:"} {
+		if strings.Contains(key, field) {
+			t.Errorf("key should be hashed, but leaks raw field %q: %s", field, key)
 		}
 	}
 }
 
-// TestGenerateClientKey_KeyLengthGrowsWithConfig verifies that longer configs produce longer keys
-func TestGenerateClientKey_KeyLengthGrowsWithConfig(t *testing.T) {
+// TestGenerateClientKey_DistinctConfigsDistinctKeys verifies distinct configs hash
+// to distinct keys and an identical config hashes to the same key. (The key is a
+// fixed-width hash, so its length no longer grows with the config.)
+func TestGenerateClientKey_DistinctConfigsDistinctKeys(t *testing.T) {
 	emptyBrowser := Browser{}
 	minimalBrowser := Browser{JA3: "test"}
 	fullBrowser := Browser{
@@ -118,14 +130,16 @@ func TestGenerateClientKey_KeyLengthGrowsWithConfig(t *testing.T) {
 	minimalKey := generateClientKey(minimalBrowser, 30, false, "")
 	fullKey := generateClientKey(fullBrowser, 120, false, "http://proxy:8080")
 
-	if len(emptyKey) == 0 {
-		t.Error("Empty browser key should not be empty")
+	seen := map[string]string{}
+	for name, k := range map[string]string{"empty": emptyKey, "minimal": minimalKey, "full": fullKey} {
+		if other, dup := seen[k]; dup {
+			t.Errorf("distinct configs %q and %q produced the same key %s", other, name, k)
+		}
+		seen[k] = name
 	}
-	if len(minimalKey) <= len(emptyKey) {
-		t.Error("Minimal browser key should be longer than empty browser key")
-	}
-	if len(fullKey) <= len(minimalKey) {
-		t.Error("Full browser key should be longer than minimal browser key")
+
+	if minimalKey != generateClientKey(minimalBrowser, 30, false, "") {
+		t.Error("identical config should produce the same key")
 	}
 }
 
@@ -137,13 +151,11 @@ func TestGenerateClientKey_EmptyBrowser(t *testing.T) {
 	if key == "" {
 		t.Error("generateClientKey() should not return empty string for empty browser")
 	}
-
-	// Should contain the field markers even with empty values
-	if !strings.Contains(key, "ja3:") {
-		t.Errorf("Empty browser key should still contain field markers, got: %s", key)
+	if len(key) != 16 {
+		t.Errorf("expected 16-char FNV-1a hex key, got %d chars: %q", len(key), key)
 	}
-	if !strings.Contains(key, "redirect:false") {
-		t.Errorf("Empty browser key should contain redirect:false, got: %s", key)
+	if key != generateClientKey(browser, 0, false, "") {
+		t.Error("empty-browser key should be deterministic")
 	}
 }
 

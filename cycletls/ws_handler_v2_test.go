@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Danny-Dasilva/CycleTLS/cycletls/server/protocol"
 	"github.com/Danny-Dasilva/CycleTLS/cycletls/state"
 )
 
@@ -69,56 +68,95 @@ func TestDispatchWebSocketAsyncV2_RegistersWebSocket(t *testing.T) {
 // =============================================================================
 
 func TestSafeSendOnClosedChannel(t *testing.T) {
-	// Verify the safe send pattern doesn't panic on closed channel
+	// Sending after Close returns a definite error and never panics.
 	ch := make(chan WebSocketCommandV2, 1)
-	close(ch)
+	sender := newSafeCommandSender(ch)
+	sender.Close()
 
-	// safeSendCommand should not panic even if channel is closed
-	sent := safeSendCommand(ch, WebSocketCommandV2{Type: "send"})
-	if sent {
-		t.Fatal("expected safeSendCommand to return false on closed channel")
+	if err := sender.Send(context.Background(), WebSocketCommandV2{Type: "send"}); err != ErrCommandSenderClosed {
+		t.Fatalf("expected ErrCommandSenderClosed on closed sender, got %v", err)
 	}
 }
 
 func TestSafeSendOnOpenChannel(t *testing.T) {
 	ch := make(chan WebSocketCommandV2, 1)
+	sender := newSafeCommandSender(ch)
 
-	sent := safeSendCommand(ch, WebSocketCommandV2{Type: "send"})
-	if !sent {
-		t.Fatal("expected safeSendCommand to return true on open channel")
+	if err := sender.Send(context.Background(), WebSocketCommandV2{Type: "send"}); err != nil {
+		t.Fatalf("expected successful send on open sender, got %v", err)
 	}
 }
 
 func TestSafeSendConcurrent(t *testing.T) {
-	// Test concurrent sends and close don't race using safeCommandSender
+	// Many goroutines Send concurrently with a concurrent Close. Assert: no
+	// panic, no send-on-closed, and every Send either succeeds or returns a
+	// definite error (never a silent drop). Delivered messages must all be
+	// received.
+	const goroutines = 10
+	const perGoroutine = 100
+
 	ch := make(chan WebSocketCommandV2, 32)
 	sender := newSafeCommandSender(ch)
-	var wg sync.WaitGroup
 
-	// Start consumer
-	wg.Add(1)
+	// Single consumer: only this goroutine writes received, read after it exits.
+	received := 0
+	var consumerWg sync.WaitGroup
+	consumerWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer consumerWg.Done()
 		for range ch {
-			// drain
+			received++
 		}
 	}()
 
-	// Start concurrent senders
-	for i := 0; i < 10; i++ {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Per-goroutine counters avoid data races without atomics.
+	sentCounts := make([]int, goroutines)
+	failedCounts := make([]int, goroutines)
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
-		go func(n int) {
+		go func(idx int) {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				sender.Send(WebSocketCommandV2{Type: "send"})
-			}
-			if n == 0 {
-				sender.Close()
+			for j := 0; j < perGoroutine; j++ {
+				switch err := sender.Send(ctx, WebSocketCommandV2{Type: "send"}); err {
+				case nil:
+					sentCounts[idx]++
+				case ErrCommandSenderClosed, context.Canceled, context.DeadlineExceeded:
+					failedCounts[idx]++
+				default:
+					t.Errorf("unexpected Send error: %v", err)
+				}
 			}
 		}(i)
 	}
 
+	// Close while sends are in flight to exercise the race.
+	go func() {
+		time.Sleep(time.Millisecond)
+		sender.Close()
+	}()
+
 	wg.Wait()
+	// Close (above) closes the channel after in-flight sends drain, which ends
+	// the consumer loop.
+	consumerWg.Wait()
+
+	sent, failed := 0, 0
+	for i := 0; i < goroutines; i++ {
+		sent += sentCounts[i]
+		failed += failedCounts[i]
+	}
+
+	if sent+failed != goroutines*perGoroutine {
+		t.Fatalf("accounting mismatch: sent=%d failed=%d want total %d", sent, failed, goroutines*perGoroutine)
+	}
+	if received != sent {
+		t.Fatalf("received=%d != sent=%d (delivered messages lost)", received, sent)
+	}
 }
 
 func TestSafeCommandSender_SendAfterClose(t *testing.T) {
@@ -126,10 +164,8 @@ func TestSafeCommandSender_SendAfterClose(t *testing.T) {
 	sender := newSafeCommandSender(ch)
 	sender.Close()
 
-	// Send after close should return false without panic
-	sent := sender.Send(WebSocketCommandV2{Type: "send"})
-	if sent {
-		t.Fatal("expected Send to return false after Close")
+	if err := sender.Send(context.Background(), WebSocketCommandV2{Type: "send"}); err != ErrCommandSenderClosed {
+		t.Fatalf("expected ErrCommandSenderClosed after Close, got %v", err)
 	}
 }
 
@@ -138,6 +174,32 @@ func TestSafeCommandSender_DoubleClose(t *testing.T) {
 	sender := newSafeCommandSender(ch)
 	sender.Close()
 	sender.Close() // should not panic
+}
+
+func TestSafeCommandSender_BlocksInsteadOfDropping(t *testing.T) {
+	// A full channel must not silently drop: Send blocks until space frees up or
+	// the context is cancelled.
+	ch := make(chan WebSocketCommandV2, 1)
+	sender := newSafeCommandSender(ch)
+
+	// Fill the only buffer slot.
+	if err := sender.Send(context.Background(), WebSocketCommandV2{Type: "send"}); err != nil {
+		t.Fatalf("first send should succeed: %v", err)
+	}
+
+	// The next send has nowhere to go; with a short deadline it must return a
+	// timeout (proving it blocked) rather than dropping the command.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := sender.Send(ctx, WebSocketCommandV2{Type: "send"}); err != context.DeadlineExceeded {
+		t.Fatalf("expected DeadlineExceeded on full channel, got %v", err)
+	}
+
+	// After draining, a subsequent send is delivered (not lost).
+	<-ch
+	if err := sender.Send(context.Background(), WebSocketCommandV2{Type: "send"}); err != nil {
+		t.Fatalf("send after drain should succeed: %v", err)
+	}
 }
 
 // =============================================================================
@@ -204,13 +266,14 @@ func TestValidateCredits_Invalid(t *testing.T) {
 // =============================================================================
 
 func TestSafeCloseCommandCh(t *testing.T) {
+	// Close closes the underlying channel so the consumer observes termination.
 	ch := make(chan WebSocketCommandV2, 1)
+	sender := newSafeCommandSender(ch)
+	sender.Close()
 
-	// First close should work
-	safeCloseCommandCh(ch)
-
-	// Second close should not panic
-	safeCloseCommandCh(ch)
+	if _, ok := <-ch; ok {
+		t.Fatal("expected channel to be closed after Close")
+	}
 }
 
 // =============================================================================
@@ -218,14 +281,14 @@ func TestSafeCloseCommandCh(t *testing.T) {
 // =============================================================================
 
 func TestProtocolEncoderBoundsChecking(t *testing.T) {
-	// Ensure EncodeError works with valid status codes
-	data := protocol.EncodeError("req-1", 500, "test error")
+	// Ensure buildErrorFrame works with valid status codes
+	data := buildErrorFrame("req-1", 500, "test error")
 	if len(data) == 0 {
 		t.Fatal("expected non-empty error frame")
 	}
 
-	// EncodeData with empty data should still work
-	data = protocol.EncodeData("req-1", []byte{})
+	// buildDataFrame with empty data should still work
+	data = buildDataFrame("req-1", []byte{})
 	if len(data) == 0 {
 		t.Fatal("expected non-empty data frame for empty body")
 	}

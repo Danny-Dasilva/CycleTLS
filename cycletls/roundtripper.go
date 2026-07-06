@@ -86,6 +86,7 @@ type roundTripper struct {
 	cachedHTTP3Transports map[string]*cachedHTTP3Transport
 	cacheMu               sync.RWMutex
 	cleanupOnce           sync.Once
+	stopOnce              sync.Once
 	cleanupStop           chan struct{}
 
 	dialer proxy.ContextDialer
@@ -113,11 +114,11 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Apply header order if specified (for regular headers, not pseudo-headers).
 	//
 	// When HeaderOrder is non-empty we:
-	//   1. Place the user-agent under the lowercase key so fhttp's header-order
-	//      logic can position it deterministically.
-	//   2. Run the request headers through MarshalHeader for case-insensitive
-	//      ordering, then convert back via ConvertHttpHeader.
-	//   3. Pin the order via the http.HeaderOrderKey sentinel.
+	//  1. Place the user-agent under the lowercase key so fhttp's header-order
+	//     logic can position it deterministically.
+	//  2. Run the request headers through MarshalHeader for case-insensitive
+	//     ordering, then convert back via ConvertHttpHeader.
+	//  3. Pin the order via the http.HeaderOrderKey sentinel.
 	//
 	// When HeaderOrder is empty we preserve the legacy behaviour of setting
 	// the canonical "User-Agent" key and leaving the rest of the headers
@@ -140,9 +141,9 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Get address for dialing
 	addr := rt.getDialTLSAddr(req)
 
-	// Start cleanup goroutine on first use (needed for both HTTP/2 and HTTP/3)
+	// Start cleanup goroutine on first use (needed for both HTTP/2 and HTTP/3).
+	// cleanupStop is initialized in newRoundTripper, so no assignment here.
 	rt.cleanupOnce.Do(func() {
-		rt.cleanupStop = make(chan struct{})
 		go rt.startCacheCleanup()
 	})
 
@@ -263,8 +264,11 @@ func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 }
 
 func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
-	rt.Lock()
-	defer rt.Unlock()
+	// NOTE: the coarse rt.Lock is intentionally NOT held here. Holding it across
+	// DialContext + Handshake (network round trips) serialized ALL connection
+	// establishment across every address, defeating the per-address mutex
+	// parallelism (Issue #407). Cache access is guarded by cacheMu; creation for a
+	// given address is serialized by the per-address mutex held by getTransport.
 
 	// Return cached connection if available
 	// Use a single Lock() for check-and-update to avoid TOCTOU race
@@ -501,6 +505,14 @@ func (rt *roundTripper) cacheTransportAndConnection(addr string, conn *utls.UCon
 		}
 
 		rt.cacheMu.Lock()
+		// Enforce the transport cache bound at insert time (not only on the
+		// 5-minute cleanup ticker), so the cache can never grow unbounded
+		// between ticks.
+		if _, exists := rt.cachedTransports[addr]; !exists {
+			for len(rt.cachedTransports) >= maxCachedTransports {
+				rt.evictOldestTransportLocked()
+			}
+		}
 		rt.cachedTransports[addr] = &cachedTransport{
 			transport: &http2Transport,
 			lastUsed:  now,
@@ -509,6 +521,11 @@ func (rt *roundTripper) cacheTransportAndConnection(addr string, conn *utls.UCon
 	default:
 		// HTTP/1.x transport with keep-alives
 		rt.cacheMu.Lock()
+		if _, exists := rt.cachedTransports[addr]; !exists {
+			for len(rt.cachedTransports) >= maxCachedTransports {
+				rt.evictOldestTransportLocked()
+			}
+		}
 		rt.cachedTransports[addr] = &cachedTransport{
 			transport: &http.Transport{
 				DialTLSContext:      rt.dialTLS,
@@ -522,8 +539,13 @@ func (rt *roundTripper) cacheTransportAndConnection(addr string, conn *utls.UCon
 		rt.cacheMu.Unlock()
 	}
 
-	// Cache the connection
+	// Cache the connection, enforcing the bound at insert time.
 	rt.cacheMu.Lock()
+	if _, exists := rt.cachedConnections[addr]; !exists {
+		for len(rt.cachedConnections) >= maxCachedConnections {
+			rt.evictOldestConnectionLocked()
+		}
+	}
 	rt.cachedConnections[addr] = &cachedConn{
 		conn:     conn,
 		lastUsed: now,
@@ -531,6 +553,67 @@ func (rt *roundTripper) cacheTransportAndConnection(addr string, conn *utls.UCon
 	rt.cacheMu.Unlock()
 
 	return nil
+}
+
+// evictOldestConnectionLocked closes and removes the least-recently-used cached
+// connection. Caller MUST hold rt.cacheMu.
+func (rt *roundTripper) evictOldestConnectionLocked() {
+	var oldestKey string
+	var oldestTime time.Time
+	found := false
+	for k, v := range rt.cachedConnections {
+		if !found || v.lastUsed.Before(oldestTime) {
+			oldestKey, oldestTime, found = k, v.lastUsed, true
+		}
+	}
+	if !found {
+		return
+	}
+	if cc := rt.cachedConnections[oldestKey]; cc != nil && cc.conn != nil {
+		_ = cc.conn.Close()
+	}
+	delete(rt.cachedConnections, oldestKey)
+}
+
+// evictOldestTransportLocked removes the least-recently-used cached transport.
+// Caller MUST hold rt.cacheMu.
+func (rt *roundTripper) evictOldestTransportLocked() {
+	var oldestKey string
+	var oldestTime time.Time
+	found := false
+	for k, v := range rt.cachedTransports {
+		if !found || v.lastUsed.Before(oldestTime) {
+			oldestKey, oldestTime, found = k, v.lastUsed, true
+		}
+	}
+	if found {
+		delete(rt.cachedTransports, oldestKey)
+	}
+}
+
+// evictOldestHTTP3TransportLocked closes and removes the least-recently-used
+// cached HTTP/3 transport. Caller MUST hold rt.cacheMu.
+func (rt *roundTripper) evictOldestHTTP3TransportLocked() {
+	var oldestKey string
+	var oldestTime time.Time
+	found := false
+	for k, v := range rt.cachedHTTP3Transports {
+		if !found || v.lastUsed.Before(oldestTime) {
+			oldestKey, oldestTime, found = k, v.lastUsed, true
+		}
+	}
+	if !found {
+		return
+	}
+	if h3t := rt.cachedHTTP3Transports[oldestKey]; h3t != nil {
+		if h3t.transport != nil {
+			_ = h3t.transport.Close()
+		}
+		if h3t.conn != nil {
+			rt.closeHTTP3Connection(h3t.conn)
+		}
+	}
+	delete(rt.cachedHTTP3Transports, oldestKey)
 }
 
 func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
@@ -557,6 +640,31 @@ func (rt *roundTripper) getAddressMutex(addr string) *sync.Mutex {
 	mu := &sync.Mutex{}
 	rt.addressMutexes[addr] = mu
 	return mu
+}
+
+// pruneAddressMutexesLocked removes per-address mutexes whose address no longer
+// has a cached connection or transport, bounding addressMutexes growth (the map
+// previously grew one permanent entry per distinct host for the process
+// lifetime). The caller MUST hold rt.cacheMu so the cache map reads are
+// race-free; this method additionally takes addressMutexLock.
+//
+// If an address is mid-creation (its mutex is held but no transport is cached
+// yet) at prune time, its mutex may be removed; a concurrent creator still holds
+// its original *sync.Mutex pointer and completes safely, and getTransport's
+// post-lock existence re-check prevents duplicate caching. This is a rare,
+// non-fatal window traded for guaranteed bounded growth.
+func (rt *roundTripper) pruneAddressMutexesLocked() {
+	rt.addressMutexLock.Lock()
+	defer rt.addressMutexLock.Unlock()
+	for addr := range rt.addressMutexes {
+		if _, hasConn := rt.cachedConnections[addr]; hasConn {
+			continue
+		}
+		if _, hasTransport := rt.cachedTransports[addr]; hasTransport {
+			continue
+		}
+		delete(rt.addressMutexes, addr)
+	}
 }
 
 // CloseIdleConnections closes connections that have been idle for too long
@@ -621,6 +729,10 @@ func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
 		// and there is nothing left to manage.
 		rt.StopCacheCleanup()
 	}
+
+	// Prune per-address mutexes for addresses that no longer have a cached
+	// connection or transport, preventing unbounded growth of addressMutexes.
+	rt.pruneAddressMutexesLocked()
 }
 
 // startCacheCleanup runs the periodic cache cleanup goroutine
@@ -743,6 +855,10 @@ func (rt *roundTripper) cleanupCache() {
 			delete(rt.cachedHTTP3Transports, key)
 		}
 	}
+
+	// Drop per-address mutexes for addresses whose connection/transport was just
+	// evicted, keeping addressMutexes bounded to live addresses.
+	rt.pruneAddressMutexesLocked()
 }
 
 // closeHTTP3Connection closes an HTTP/3 connection properly
@@ -766,16 +882,14 @@ func (rt *roundTripper) closeHTTP3Connection(conn *HTTP3Connection) {
 // StopCacheCleanup stops the cache cleanup goroutine.
 // Safe to call multiple times or when cleanup was never started.
 func (rt *roundTripper) StopCacheCleanup() {
-	if rt.cleanupStop == nil {
-		return
-	}
-	// Use select to avoid panic on double-close
-	select {
-	case <-rt.cleanupStop:
-		// Already closed, nothing to do
-	default:
-		close(rt.cleanupStop)
-	}
+	// stopOnce guarantees the channel is closed exactly once, even under
+	// concurrent callers (e.g. CloseIdleConnections racing a direct call),
+	// avoiding both a double-close panic and a data race on cleanupStop.
+	rt.stopOnce.Do(func() {
+		if rt.cleanupStop != nil {
+			close(rt.cleanupStop)
+		}
+	})
 }
 
 func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundTripper {
@@ -802,9 +916,12 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		cachedTransports:      make(map[string]*cachedTransport),
 		cachedConnections:     make(map[string]*cachedConn),
 		cachedHTTP3Transports: make(map[string]*cachedHTTP3Transport),
-		InsecureSkipVerify:    browser.InsecureSkipVerify,
-		ForceHTTP1:            browser.ForceHTTP1,
-		ForceHTTP3:            browser.ForceHTTP3,
+		// Initialize cleanupStop eagerly (not lazily in RoundTrip) so its
+		// read (startCacheCleanup) and close (StopCacheCleanup) never race.
+		cleanupStop:        make(chan struct{}),
+		InsecureSkipVerify: browser.InsecureSkipVerify,
+		ForceHTTP1:         browser.ForceHTTP1,
+		ForceHTTP3:         browser.ForceHTTP3,
 
 		// TLS 1.3 specific options
 		TLS13AutoRetry: browser.TLS13AutoRetry,
@@ -892,7 +1009,14 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 	}
 
 	// Cache the HTTP/3 transport for future requests
+	// Cache the HTTP/3 transport for future requests, enforcing the cache bound
+	// at insert time (not only on the cleanup ticker) so it can't grow unbounded.
 	rt.cacheMu.Lock()
+	if _, exists := rt.cachedHTTP3Transports[cacheKey]; !exists {
+		for len(rt.cachedHTTP3Transports) >= maxCachedTransports {
+			rt.evictOldestHTTP3TransportLocked()
+		}
+	}
 	rt.cachedHTTP3Transports[cacheKey] = &cachedHTTP3Transport{
 		transport: h3Transport,
 		conn:      conn, // nil for UQuic, actual conn for standard QUIC

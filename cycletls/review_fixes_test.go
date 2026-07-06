@@ -15,11 +15,10 @@ import (
 	"testing"
 	"time"
 
-	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/Danny-Dasilva/CycleTLS/cycletls/state"
+	http "github.com/Danny-Dasilva/fhttp"
 	"github.com/quic-go/quic-go/http3"
 )
-
 
 // ============================================================================
 // Issue #1: SSE Event Loop Break Statement Bug
@@ -833,6 +832,7 @@ func TestUnit_DispatcherAsyncPreservesSSEContext(t *testing.T) {
 		// Good - context still active for SSE handler
 	}
 }
+
 // =============================================================================
 
 func TestGenerateClientKey_IncludesTimeout(t *testing.T) {
@@ -845,6 +845,8 @@ func TestGenerateClientKey_IncludesTimeout(t *testing.T) {
 	key60 := generateClientKey(browser, 60, false, "")
 	key0 := generateClientKey(browser, 0, false, "")
 
+	// The key is a hash, so assert timeout is incorporated by yielding distinct
+	// keys rather than by searching for a raw "timeout:NN" substring.
 	if key30 == key60 {
 		t.Error("Different timeouts (30 vs 60) should produce different keys")
 	}
@@ -853,14 +855,6 @@ func TestGenerateClientKey_IncludesTimeout(t *testing.T) {
 	}
 	if key60 == key0 {
 		t.Error("Different timeouts (60 vs 0) should produce different keys")
-	}
-
-	// Verify the key contains the timeout field
-	if !strings.Contains(key30, "timeout:30") {
-		t.Errorf("Key should contain 'timeout:30', got: %s", key30)
-	}
-	if !strings.Contains(key60, "timeout:60") {
-		t.Errorf("Key should contain 'timeout:60', got: %s", key60)
 	}
 }
 

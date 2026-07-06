@@ -1,6 +1,7 @@
 package cycletls
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -88,18 +89,36 @@ func TestPacketBufferBoundsCheck_WriteU32RangeValidation(t *testing.T) {
 	}
 }
 
+func TestPacketBufferBoundsCheck_WriteU32Overflow(t *testing.T) {
+	// WriteU32Safe must reject negatives and values above math.MaxUint32,
+	// and accept the boundary value exactly.
+	w := NewWriter()
+
+	if err := w.WriteU32Safe(-1); err == nil {
+		t.Error("Expected error writing negative U32 value")
+	}
+
+	if err := w.WriteU32Safe(int(math.MaxUint32) + 1); err == nil {
+		t.Error("Expected error writing U32 value > math.MaxUint32")
+	}
+
+	if err := w.WriteU32Safe(math.MaxUint32); err != nil {
+		t.Errorf("Expected no error writing U32 value at boundary, got %v", err)
+	}
+}
+
 // =============================================================================
 // Issue #5: Debug Logging Sensitive Header Redaction
 // =============================================================================
 
 func TestRedactSensitiveHeaders(t *testing.T) {
 	headers := map[string]string{
-		"Authorization":     "Bearer secret-token-12345",
-		"Cookie":            "session=abc123; csrf=xyz789",
-		"Content-Type":      "application/json",
-		"X-Custom-Header":   "safe-value",
+		"Authorization":       "Bearer secret-token-12345",
+		"Cookie":              "session=abc123; csrf=xyz789",
+		"Content-Type":        "application/json",
+		"X-Custom-Header":     "safe-value",
 		"Proxy-Authorization": "Basic dXNlcjpwYXNz",
-		"Set-Cookie":        "id=abc; Path=/; HttpOnly",
+		"Set-Cookie":          "id=abc; Path=/; HttpOnly",
 	}
 
 	redacted := RedactSensitiveHeaders(headers)
@@ -129,8 +148,8 @@ func TestRedactSensitiveHeaders(t *testing.T) {
 
 func TestRedactSensitiveHeaders_CaseInsensitive(t *testing.T) {
 	headers := map[string]string{
-		"authorization":     "Bearer token",
-		"COOKIE":            "session=abc",
+		"authorization":       "Bearer token",
+		"COOKIE":              "session=abc",
 		"proxy-authorization": "Basic auth",
 	}
 
@@ -264,7 +283,7 @@ func TestProxyInsecureSkipVerify_DefaultTrue(t *testing.T) {
 func TestProxyInsecureSkipVerify_SeparateFromTarget(t *testing.T) {
 	// When target InsecureSkipVerify is false, proxy should still be true
 	browser := Browser{
-		InsecureSkipVerify:      false,
+		InsecureSkipVerify: false,
 	}
 
 	proxyInsecureSkipVerify := getProxyInsecureSkipVerify(browser)

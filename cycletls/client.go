@@ -3,6 +3,9 @@ package cycletls
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -146,36 +149,61 @@ func NewTransportWithProxy(ja3 string, useragent string, proxy proxy.ContextDial
 
 // generateClientKey creates a unique key for client pooling based on browser configuration
 func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxyURL string) string {
-	// Create cookie signature for the key
-	cookieStr := ""
-	for _, cookie := range browser.Cookies {
-		cookieStr += fmt.Sprintf("|cookie:%s=%s", cookie.Name, cookie.Value)
+	// Cookies form a set, so sort their signatures to make the key independent
+	// of cookie slice ordering (identical cookie sets -> identical key).
+	cookieSigs := make([]string, 0, len(browser.Cookies))
+	for _, c := range browser.Cookies {
+		cookieSigs = append(cookieSigs, fmt.Sprintf("%s=%s;path=%s;domain=%s", c.Name, c.Value, c.Path, c.Domain))
+	}
+	sort.Strings(cookieSigs)
+
+	// HeaderOrder is order-significant (it defines header emission order and thus
+	// the fingerprint), so it is joined as-is and NOT sorted.
+	headerOrder := strings.Join(browser.HeaderOrder, ",")
+
+	// ProxyInsecureSkipVerify is a *bool; distinguish nil (default) from true/false.
+	proxyInsecure := "nil"
+	if browser.ProxyInsecureSkipVerify != nil {
+		proxyInsecure = fmt.Sprintf("%t", *browser.ProxyInsecureSkipVerify)
 	}
 
-	// Create a hash of the configuration that affects connection behavior
-	// Note: timeout MUST be included because clients with different timeouts
-	// should not share the same pool entry (a 5s timeout client vs 60s timeout
-	// client have very different behavior characteristics).
-	configStr := fmt.Sprintf("ja3:%s|ja4r:%s|http2:%s|quic:%s|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|forcehttp1:%t|forcehttp3:%t%s",
+	// TLSConfig carries func pointers, so incorporate only its stable,
+	// behavior-affecting sub-fields to keep the key deterministic within a process.
+	tlsCfg := "nil"
+	if browser.TLSConfig != nil {
+		tlsCfg = fmt.Sprintf("set:sni=%s:skip=%t", browser.TLSConfig.ServerName, browser.TLSConfig.InsecureSkipVerify)
+	}
+
+	// Every field below influences newRoundTripper / Browser behavior; changing
+	// any one of them must produce a different pooled client. timeout is included
+	// because clients with different timeouts must not share a pool entry.
+	configStr := fmt.Sprintf(
+		"ja3:%s|ja4r:%s|http2:%s|quic:%s|uspec:%v|grease:%t|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|proxyskip:%s|forcehttp1:%t|forcehttp3:%t|tls13retry:%t|headerorder:%s|tlscfg:%s|cookies:%s",
 		browser.JA3,
 		browser.JA4r,
 		browser.HTTP2Fingerprint,
 		browser.QUICFingerprint,
+		browser.USpec,
+		browser.DisableGrease,
 		browser.UserAgent,
 		browser.ServerName,
 		proxyURL,
 		timeout,
 		disableRedirect,
 		browser.InsecureSkipVerify,
+		proxyInsecure,
 		browser.ForceHTTP1,
 		browser.ForceHTTP3,
-		cookieStr,
+		browser.TLS13AutoRetry,
+		headerOrder,
+		tlsCfg,
+		strings.Join(cookieSigs, ","),
 	)
 
-	// Use the full config string as the key - map string lookups are already
-	// fast and this eliminates any hash collision risk that could cause wrong
-	// TLS client reuse.
-	return configStr
+	// FNV-1a 64-bit hash of the canonical config string. Fixed-size hex key.
+	h := fnv.New64a()
+	h.Write([]byte(configStr))
+	return fmt.Sprintf("%016x", h.Sum64())
 }
 
 // getOrCreateClient retrieves a client from the pool or creates a new one
@@ -221,6 +249,11 @@ func getOrCreateClient(browser Browser, timeout int, disableRedirect bool, userA
 		return fhttp.Client{}, err
 	}
 
+	// Bound the pool at insert time (evict least-recently-used) so it cannot grow
+	// without limit. Runs under the held write lock.
+	if len(advancedClientPool) >= maxClientPoolSize {
+		evictOldestClientLocked()
+	}
 	// Add to pool
 	now := time.Now()
 	advancedClientPool[clientKey] = &ClientPoolEntry{
@@ -267,6 +300,36 @@ func cleanupClientPool(maxAge time.Duration) {
 			delete(advancedClientPool, key)
 		}
 	}
+}
+
+// maxClientPoolSize bounds advancedClientPool so it cannot grow without limit.
+// Enforced at insert time via evictOldestClientLocked (LRU eviction), mirroring
+// the transport/connection caches (maxCachedConnections/maxCachedTransports).
+const maxClientPoolSize = 100
+
+// evictOldestClientLocked removes the least-recently-used entry from
+// advancedClientPool, closing its idle connections. The caller MUST hold
+// advancedClientPoolMutex.
+func evictOldestClientLocked() {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for key, entry := range advancedClientPool {
+		if first || entry.LastUsed.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = entry.LastUsed
+			first = false
+		}
+	}
+	if first {
+		return
+	}
+	if entry, ok := advancedClientPool[oldestKey]; ok {
+		if transport, ok := entry.Client.Transport.(*roundTripper); ok {
+			transport.CloseIdleConnections()
+		}
+	}
+	delete(advancedClientPool, oldestKey)
 }
 
 // clearAllConnections clears all connections from the pool for test isolation

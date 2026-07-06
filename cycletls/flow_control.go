@@ -83,7 +83,7 @@ func (cw *creditWindow) wake() {
 
 // Acquire blocks until n credits are available, then consumes them atomically.
 // The wait is cancellable via the context. No goroutines are spawned.
-func (cw *creditWindow) Acquire(n int64, ctx context.Context) error {
+func (cw *creditWindow) Acquire(ctx context.Context, n int64) error {
 	if cw.guard(n) {
 		return nil
 	}

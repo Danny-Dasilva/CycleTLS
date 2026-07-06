@@ -40,6 +40,10 @@ type safeChannelWriter struct {
 	ch     chan []byte
 	mu     sync.RWMutex
 	closed bool
+	// done is closed by setClosed to unblock any in-flight blocking sends. The
+	// underlying channel is never closed, so blocking sends can never panic on a
+	// send-to-closed channel; writeSocket drains and exits on this signal instead.
+	done chan struct{}
 }
 
 // newSafeChannelWriter creates a new safe channel writer
@@ -47,6 +51,7 @@ func newSafeChannelWriter(ch chan []byte) *safeChannelWriter {
 	return &safeChannelWriter{
 		ch:     ch,
 		closed: false,
+		done:   make(chan struct{}),
 	}
 }
 
@@ -93,11 +98,42 @@ func (scw *safeChannelWriter) writeBlocking(data []byte, timeout time.Duration) 
 	}
 }
 
+// writeBlockingCtx writes data with true backpressure: it blocks until the frame
+// is accepted by the writer, the writer is shut down (setClosed), or the request
+// context is cancelled. It returns false only in the latter two cases. Use this for
+// critical frames (response, data, end, error) that must never be silently dropped,
+// which would truncate the body or desync the reader's frame stream.
+func (scw *safeChannelWriter) writeBlockingCtx(data []byte, ctx context.Context) bool {
+	scw.mu.RLock()
+	closed := scw.closed
+	scw.mu.RUnlock()
+	if closed {
+		return false
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	select {
+	case scw.ch <- data:
+		return true
+	case <-scw.done:
+		return false
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // close marks the channel as closed (does not actually close it to avoid double-close panics)
 func (scw *safeChannelWriter) setClosed() {
 	scw.mu.Lock()
 	defer scw.mu.Unlock()
+	if scw.closed {
+		return
+	}
 	scw.closed = true
+	close(scw.done)
 }
 
 // Type definitions moved to types.go
@@ -386,6 +422,19 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	}
 }
 
+// reqContext returns the request's cancellation context, falling back to the
+// underlying *http.Request context and finally context.Background so callers can
+// always thread a non-nil context into blocking sends.
+func (res fullRequest) reqContext() context.Context {
+	if res.ctx != nil {
+		return res.ctx
+	}
+	if res.req != nil {
+		return res.req.Context()
+	}
+	return context.Background()
+}
+
 // dispatchHTTP3Request handles HTTP/3 specific request processing
 func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -547,31 +596,9 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 			res.cancel()
 		}
 		state.UnregisterRequest(res.options.RequestID)
-		b := getBuffer()
-		requestIDLength := len(res.options.RequestID)
-		statusCode := 400
-
-		b.WriteByte(byte(requestIDLength >> 8))
-		b.WriteByte(byte(requestIDLength))
-		b.WriteString(res.options.RequestID)
-		b.WriteByte(0)
-		b.WriteByte(5)
-		b.WriteString("error")
-		b.WriteByte(byte(statusCode >> 8))
-		b.WriteByte(byte(statusCode))
-
-		message := res.err.Error()
-		messageLength := len(message)
-
-		b.WriteByte(byte(messageLength >> 8))
-		b.WriteByte(byte(messageLength))
-		b.WriteString(message)
-
-		data := make([]byte, b.Len())
-		copy(data, b.Bytes())
-		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write error response for request %s: channel closed", res.options.RequestID)
+		frame := buildErrorFrame(res.options.RequestID, 400, res.err.Error())
+		if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+			debugLogger.Printf("Failed to write error response for request %s: writer closed", res.options.RequestID)
 		}
 		return
 	}
@@ -641,35 +668,10 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		}
 
 		parsedError := parseError(err)
-
-		{
-			b := getBuffer()
-			requestIDLength := len(res.options.RequestID)
-
-			b.WriteByte(byte(requestIDLength >> 8))
-			b.WriteByte(byte(requestIDLength))
-			b.WriteString(res.options.RequestID)
-			b.WriteByte(0)
-			b.WriteByte(5)
-			b.WriteString("error")
-			b.WriteByte(byte(parsedError.StatusCode >> 8))
-			b.WriteByte(byte(parsedError.StatusCode))
-
-			message := parsedError.ErrorMsg + "-> \n" + err.Error()
-			messageLength := len(message)
-
-			b.WriteByte(byte(messageLength >> 8))
-			b.WriteByte(byte(messageLength))
-			b.WriteString(message)
-
-			data := make([]byte, b.Len())
-			copy(data, b.Bytes())
-			putBuffer(b)
-			if !chanWrite.write(data) {
-				debugLogger.Printf("Failed to write error response for request %s: channel closed", res.options.RequestID)
-			}
+		frame := buildErrorFrame(res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg+"-> \n"+err.Error())
+		if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+			debugLogger.Printf("Failed to write error response for request %s: writer closed", res.options.RequestID)
 		}
-
 		return
 	}
 
@@ -681,53 +683,19 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	}
 
 	{
-		b := getBuffer()
-		headerLength := len(resp.Header)
-		requestIDLength := len(res.options.RequestID)
-		finalUrlLength := len(finalUrl)
-
-		b.WriteByte(byte(requestIDLength >> 8))
-		b.WriteByte(byte(requestIDLength))
-		b.WriteString(res.options.RequestID)
-		b.WriteByte(0)
-		b.WriteByte(8)
-		b.WriteString("response")
-		b.WriteByte(byte(resp.StatusCode >> 8))
-		b.WriteByte(byte(resp.StatusCode))
-
-		// Write finalUrl length and value
-		b.WriteByte(byte(finalUrlLength >> 8))
-		b.WriteByte(byte(finalUrlLength))
-		b.WriteString(finalUrl)
-
-		// Write headers
-		b.WriteByte(byte(headerLength >> 8))
-		b.WriteByte(byte(headerLength))
-
-		for name, values := range resp.Header {
-			nameLength := len(name)
-			valuesLength := len(values)
-
-			b.WriteByte(byte(nameLength >> 8))
-			b.WriteByte(byte(nameLength))
-			b.WriteString(name)
-			b.WriteByte(byte(valuesLength >> 8))
-			b.WriteByte(byte(valuesLength))
-
-			for _, value := range values {
-				valueLength := len(value)
-
-				b.WriteByte(byte(valueLength >> 8))
-				b.WriteByte(byte(valueLength))
-				b.WriteString(value)
+		// Checked encoder: on overflow (e.g. header value >= 64KB) send an error
+		// frame instead of a truncated response, so the reader stream stays synced.
+		frame, buildErr := buildResponseFrame(res.options.RequestID, resp.StatusCode, finalUrl, resp.Header)
+		if buildErr != nil {
+			debugLogger.Printf("Failed to build response frame for request %s: %v", res.options.RequestID, buildErr)
+			errFrame := buildErrorFrame(res.options.RequestID, 500, "failed to encode response frame: "+buildErr.Error())
+			if !chanWrite.writeBlockingCtx(errFrame, res.reqContext()) {
+				debugLogger.Printf("Failed to write to channel: writer closed")
 			}
+			return
 		}
-
-		data := make([]byte, b.Len())
-		copy(data, b.Bytes())
-		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write to channel: channel closed")
+		if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+			debugLogger.Printf("Failed to write to channel: writer closed")
 			return
 		}
 	}
@@ -757,30 +725,9 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 
 					// Send error frame before breaking
 					parsedError := parseError(err)
-					b := getBuffer()
-					requestIDLength := len(res.options.RequestID)
-
-					b.WriteByte(byte(requestIDLength >> 8))
-					b.WriteByte(byte(requestIDLength))
-					b.WriteString(res.options.RequestID)
-					b.WriteByte(0)
-					b.WriteByte(5)
-					b.WriteString("error")
-					b.WriteByte(byte(parsedError.StatusCode >> 8))
-					b.WriteByte(byte(parsedError.StatusCode))
-
-					message := parsedError.ErrorMsg
-					messageLength := len(message)
-
-					b.WriteByte(byte(messageLength >> 8))
-					b.WriteByte(byte(messageLength))
-					b.WriteString(message)
-
-					data := make([]byte, b.Len())
-					copy(data, b.Bytes())
-					putBuffer(b)
-					if !chanWrite.write(data) {
-						debugLogger.Printf("Failed to write to channel: channel closed")
+					frame := buildErrorFrame(res.options.RequestID, parsedError.StatusCode, parsedError.ErrorMsg)
+					if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+						debugLogger.Printf("Failed to write to channel: writer closed")
 						return
 					}
 					break loop
@@ -789,27 +736,9 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 				if err == io.EOF {
 					// Handle any remaining data first
 					if n > 0 {
-						b := getBuffer()
-						requestIDLength := len(res.options.RequestID)
-						bodyChunkLength := n
-
-						b.WriteByte(byte(requestIDLength >> 8))
-						b.WriteByte(byte(requestIDLength))
-						b.WriteString(res.options.RequestID)
-						b.WriteByte(0)
-						b.WriteByte(4)
-						b.WriteString("data")
-						b.WriteByte(byte(bodyChunkLength >> 24))
-						b.WriteByte(byte(bodyChunkLength >> 16))
-						b.WriteByte(byte(bodyChunkLength >> 8))
-						b.WriteByte(byte(bodyChunkLength))
-						b.Write(chunkBuffer[:n])
-
-						data := make([]byte, b.Len())
-						copy(data, b.Bytes())
-						putBuffer(b)
-						if !chanWrite.write(data) {
-							debugLogger.Printf("Failed to write to channel: channel closed")
+						frame := buildDataFrame(res.options.RequestID, chunkBuffer[:n])
+						if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+							debugLogger.Printf("Failed to write to channel: writer closed")
 							return
 						}
 					}
@@ -822,27 +751,9 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 					continue
 				}
 
-				b := getBuffer()
-				requestIDLength := len(res.options.RequestID)
-				bodyChunkLength := n
-
-				b.WriteByte(byte(requestIDLength >> 8))
-				b.WriteByte(byte(requestIDLength))
-				b.WriteString(res.options.RequestID)
-				b.WriteByte(0)
-				b.WriteByte(4)
-				b.WriteString("data")
-				b.WriteByte(byte(bodyChunkLength >> 24))
-				b.WriteByte(byte(bodyChunkLength >> 16))
-				b.WriteByte(byte(bodyChunkLength >> 8))
-				b.WriteByte(byte(bodyChunkLength))
-				b.Write(chunkBuffer[:n])
-
-				data := make([]byte, b.Len())
-				copy(data, b.Bytes())
-				putBuffer(b)
-				if !chanWrite.write(data) {
-					debugLogger.Printf("Failed to write to channel: channel closed")
+				frame := buildDataFrame(res.options.RequestID, chunkBuffer[:n])
+				if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+					debugLogger.Printf("Failed to write to channel: writer closed")
 					return
 				}
 			}
@@ -850,21 +761,9 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	}
 
 	{
-		b := getBuffer()
-		requestIDLength := len(res.options.RequestID)
-
-		b.WriteByte(byte(requestIDLength >> 8))
-		b.WriteByte(byte(requestIDLength))
-		b.WriteString(res.options.RequestID)
-		b.WriteByte(0)
-		b.WriteByte(3)
-		b.WriteString("end")
-
-		data := make([]byte, b.Len())
-		copy(data, b.Bytes())
-		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write to channel: channel closed")
+		frame := buildEndFrame(res.options.RequestID)
+		if !chanWrite.writeBlockingCtx(frame, res.reqContext()) {
+			debugLogger.Printf("Failed to write to channel: writer closed")
 			return
 		}
 	}
@@ -911,8 +810,8 @@ func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		data := make([]byte, b.Len())
 		copy(data, b.Bytes())
 		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write to channel: channel closed")
+		if !chanWrite.writeBlockingCtx(data, res.reqContext()) {
+			debugLogger.Printf("Failed to write to channel: writer closed or request cancelled")
 			return
 		}
 		return
@@ -966,8 +865,8 @@ func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		data := make([]byte, b.Len())
 		copy(data, b.Bytes())
 		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write to channel: channel closed")
+		if !chanWrite.writeBlockingCtx(data, res.reqContext()) {
+			debugLogger.Printf("Failed to write to channel: writer closed or request cancelled")
 			return
 		}
 	}
@@ -1030,8 +929,8 @@ sseLoop:
 			data := make([]byte, b.Len())
 			copy(data, b.Bytes())
 			putBuffer(b)
-			if !chanWrite.write(data) {
-				debugLogger.Printf("Failed to write to channel: channel closed")
+			if !chanWrite.writeBlockingCtx(data, res.reqContext()) {
+				debugLogger.Printf("Failed to write to channel: writer closed or request cancelled")
 				return
 			}
 		}
@@ -1052,8 +951,8 @@ sseLoop:
 		data := make([]byte, b.Len())
 		copy(data, b.Bytes())
 		putBuffer(b)
-		if !chanWrite.write(data) {
-			debugLogger.Printf("Failed to write to channel: channel closed")
+		if !chanWrite.writeBlockingCtx(data, res.reqContext()) {
+			debugLogger.Printf("Failed to write to channel: writer closed or request cancelled")
 			return
 		}
 	}
@@ -1498,13 +1397,28 @@ func sendWebSocketEnd(chanWrite *safeChannelWriter, requestID string) {
 	chanWrite.write(data)
 }
 
-func writeSocket(chanWrite chan []byte, wsSocket *websocket.Conn) {
-	for buf := range chanWrite {
-		err := wsSocket.WriteMessage(websocket.BinaryMessage, buf)
-
-		if err != nil {
-			debugLogger.Printf("Socket WriteMessage Failed: %s", err.Error())
-			continue
+func writeSocket(scw *safeChannelWriter, wsSocket *websocket.Conn) {
+	for {
+		select {
+		case buf := <-scw.ch:
+			if err := wsSocket.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+				debugLogger.Printf("Socket WriteMessage Failed: %s", err.Error())
+				continue
+			}
+		case <-scw.done:
+			// Writer shut down: drain any buffered frames so in-flight responses
+			// are flushed, then exit. The underlying channel is never closed, so
+			// this done signal is the sole termination path.
+			for {
+				select {
+				case buf := <-scw.ch:
+					if err := wsSocket.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+						debugLogger.Printf("Socket WriteMessage Failed: %s", err.Error())
+					}
+				default:
+					return
+				}
+			}
 		}
 	}
 }
@@ -1711,7 +1625,11 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 	legacyHandler:
 		// Legacy multiplexed JSON protocol
 		chanRead := make(chan fullRequest)
-		chanWrite := make(chan []byte)
+		// Buffered so bursts of frames are absorbed; combined with the blocking
+		// writeBlockingCtx sends in dispatcherAsync, response/data/end frames are
+		// never dropped (previously an unbuffered channel + non-blocking send
+		// silently discarded frames under concurrency).
+		chanWrite := make(chan []byte, 256)
 		safeWriter := newSafeChannelWriter(chanWrite)
 		done := make(chan struct{})
 
@@ -1724,15 +1642,16 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 
 		go readProcess(chanRead, safeWriter)
 
-		// Goroutine to close chanWrite when readSocket exits, allowing writeSocket to unblock
+		// When readSocket exits, signal the writer to shut down. We do NOT close
+		// chanWrite: blocking senders select on safeWriter.done, so the channel
+		// stays open and can never panic on a send-to-closed channel.
 		go func() {
 			<-done
 			safeWriter.setClosed()
-			close(chanWrite)
 		}()
 
-		// Run as main thread - exits when chanWrite is closed
-		writeSocket(chanWrite, ws)
+		// Run as main thread - exits when the writer is shut down (safeWriter.done)
+		writeSocket(safeWriter, ws)
 	}
 }
 

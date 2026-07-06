@@ -37,6 +37,17 @@ func writeStringWithLen(b *bytes.Buffer, s string) error {
 	return nil
 }
 
+// clampU16String truncates s so its byte length fits a uint16 length prefix.
+// Frame builders that cannot return an error use this to keep the length prefix
+// and payload consistent, since writeStringWithLen writes nothing on overflow and
+// would otherwise desync the reader. Realistic inputs (error messages) never hit this.
+func clampU16String(s string) string {
+	if len(s) > math.MaxUint16 {
+		return s[:math.MaxUint16]
+	}
+	return s
+}
+
 // writeRequestAndMethod writes the request ID and method name using length-prefixed format.
 func writeRequestAndMethod(b *bytes.Buffer, requestID, method string) error {
 	if err := writeStringWithLen(b, requestID); err != nil {
@@ -48,10 +59,11 @@ func writeRequestAndMethod(b *bytes.Buffer, requestID, method string) error {
 // buildErrorFrame creates an error response packet with status code and message.
 func buildErrorFrame(requestID string, statusCode int, message string) []byte {
 	var b bytes.Buffer
-	// Internal frames: requestID, method, statusCode, message are all bounded
+	// Internal frames: requestID/method are bounded; message is clamped so an
+	// over-long error string can never truncate its length prefix and desync.
 	_ = writeRequestAndMethod(&b, requestID, "error")
 	_ = writeU16(&b, statusCode)
-	_ = writeStringWithLen(&b, message)
+	_ = writeStringWithLen(&b, clampU16String(message))
 	return b.Bytes()
 }
 
@@ -92,17 +104,31 @@ func buildResponseFrame(requestID string, statusCode int, finalURL string, heade
 	}
 
 	var b bytes.Buffer
-	_ = writeRequestAndMethod(&b, requestID, "response")
-	_ = writeU16(&b, statusCode)
-	_ = writeStringWithLen(&b, finalURL)
+	if err := writeRequestAndMethod(&b, requestID, "response"); err != nil {
+		return nil, err
+	}
+	if err := writeU16(&b, statusCode); err != nil {
+		return nil, err
+	}
+	if err := writeStringWithLen(&b, finalURL); err != nil {
+		return nil, err
+	}
 
 	// headers
-	_ = writeU16(&b, len(headers))
+	if err := writeU16(&b, len(headers)); err != nil {
+		return nil, err
+	}
 	for name, values := range headers {
-		_ = writeStringWithLen(&b, name)
-		_ = writeU16(&b, len(values))
+		if err := writeStringWithLen(&b, name); err != nil {
+			return nil, err
+		}
+		if err := writeU16(&b, len(values)); err != nil {
+			return nil, err
+		}
 		for _, v := range values {
-			_ = writeStringWithLen(&b, v)
+			if err := writeStringWithLen(&b, v); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -170,6 +196,6 @@ func buildWebSocketErrorFrame(requestID string, statusCode int, message string) 
 	var b bytes.Buffer
 	_ = writeRequestAndMethod(&b, requestID, "ws_error")
 	_ = writeU16(&b, statusCode)
-	_ = writeStringWithLen(&b, message)
+	_ = writeStringWithLen(&b, clampU16String(message))
 	return b.Bytes()
 }
