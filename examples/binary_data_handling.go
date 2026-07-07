@@ -65,7 +65,7 @@ func demonstrateProblematicBinaryUpload(client cycletls.CycleTLS) {
 		0x80, 0x81, 0x82, 0x83, // Invalid UTF-8 sequences
 		0x00, 0x01, 0x02, 0x03, // Null bytes and control characters
 		0xFE, 0xFF, 0xC0, 0xC1, // More problematic bytes
-		0xEF, 0xBF, 0xBD,       // UTF-8 replacement character sequence (U+FFFD)
+		0xEF, 0xBF, 0xBD, // UTF-8 replacement character sequence (U+FFFD)
 	}
 
 	originalHasher := md5.New()
@@ -104,7 +104,7 @@ func demonstrateProblematicBinaryUpload(client cycletls.CycleTLS) {
 		receivedHasher := md5.New()
 		receivedHasher.Write(decodedData)
 		receivedHash := hex.EncodeToString(receivedHasher.Sum(nil))
-		
+
 		fmt.Printf("   Received data hash: %s\n", receivedHash)
 		fmt.Printf("   ✅ Data integrity preserved: %t\n", originalHash == receivedHash)
 	} else {
@@ -273,7 +273,7 @@ func demonstrateFileUpload(client cycletls.CycleTLS) {
 	var fileName string
 
 	testFiles := []string{"./examples/test-image.jpg", "./tests/images/test.jpeg", "./go.mod", "./package.json"}
-	
+
 	for _, filePath := range testFiles {
 		if data, err := os.ReadFile(filePath); err == nil {
 			testFileData = data

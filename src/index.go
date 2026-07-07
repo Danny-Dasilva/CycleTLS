@@ -3,13 +3,12 @@ package main
 import (
 	"flag"
 
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"log"
 	nhttp "net/http"
 	"os"
 	"runtime"
-	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
-
 
 func setupRoutes() {
 	nhttp.HandleFunc("/", cycletls.WSEndpoint)

@@ -64,6 +64,18 @@ func NewSSEClient(client *http.Client, headers http.Header) *SSEClient {
 	}
 }
 
+// maxSSELineSize bounds a single SSE line so a large data: field does not trip
+// bufio.Scanner's 64KB default token limit with ErrTooLong.
+const maxSSELineSize = 1024 * 1024
+
+// newSSEScanner returns a scanner sized for SSE payloads larger than bufio's
+// 64KB default line limit.
+func newSSEScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxSSELineSize)
+	return scanner
+}
+
 // Connect establishes an SSE connection and returns an SSE response
 func (sse *SSEClient) Connect(ctx context.Context, urlStr string) (*SSEResponse, error) {
 	// Create request with the provided context
@@ -106,7 +118,55 @@ func (sse *SSEClient) Connect(ctx context.Context, urlStr string) (*SSEResponse,
 	// Create and return SSE response
 	return &SSEResponse{
 		Response: resp,
-		Scanner:  bufio.NewScanner(resp.Body),
+		Scanner:  newSSEScanner(resp.Body),
+		client:   sse,
+	}, nil
+}
+
+// ConnectWithTimeout establishes an SSE connection with a header timeout.
+// The timeout only applies until headers arrive; it does not cancel streaming.
+func (sse *SSEClient) ConnectWithTimeout(ctx context.Context, urlStr string, timeout time.Duration) (*SSEResponse, error) {
+	// Create request with the provided context
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add headers to the request
+	for k, vs := range sse.Headers {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+
+	// Add Last-Event-ID header if available
+	if sse.LastEventID != "" {
+		req.Header.Set("Last-Event-ID", sse.LastEventID)
+	}
+
+	// Send the request with header timeout
+	resp, err := doRequestWithHeaderTimeout(ctx, nil, *sse.HTTPClient, req, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, errors.New("unexpected status code: " + strconv.Itoa(resp.StatusCode))
+	}
+
+	// Check content type
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/event-stream") {
+		resp.Body.Close()
+		return nil, errors.New("unexpected content type: " + contentType)
+	}
+
+	// Create and return SSE response
+	return &SSEResponse{
+		Response: resp,
+		Scanner:  newSSEScanner(resp.Body),
 		client:   sse,
 	}, nil
 }
@@ -133,6 +193,8 @@ func (r *SSEResponse) Close() error {
 
 // NextEvent reads the next event from the SSE stream
 func (r *SSEResponse) NextEvent() (*SSEEvent, error) {
+	// NextEvent is not safe for concurrent use: it mutates the shared
+	// SSEClient's LastEventID/ReconnectionTime, so drive it from a single goroutine.
 	var event SSEEvent
 	var data bytes.Buffer
 	var inData bool
@@ -197,16 +259,13 @@ func (r *SSEResponse) NextEvent() (*SSEEvent, error) {
 		}
 	}
 
-	// Check if we reached EOF or encountered an error
+	// Check if we encountered an error. bufio.Scanner reports a clean
+	// end-of-stream as a nil Err, so only a genuine read error surfaces here.
 	if err := r.Scanner.Err(); err != nil {
-		if err == io.EOF {
-			// EOF indicates end of stream, return nil event and nil error
-			return nil, io.EOF
-		}
 		return nil, err
 	}
 
-	// If we have data but no complete event, return what we have
+	// If we have data but no terminating blank line, return the buffered event.
 	if inData {
 		event.Data = strings.TrimSuffix(data.String(), "\n")
 		if event.ID != "" {
@@ -215,6 +274,7 @@ func (r *SSEResponse) NextEvent() (*SSEEvent, error) {
 		return &event, nil
 	}
 
-	// No event data, return nil event and nil error
-	return nil, nil
+	// The stream is exhausted; return io.EOF so callers looping on NextEvent
+	// receive a stop sentinel instead of a nil event with a nil error.
+	return nil, io.EOF
 }

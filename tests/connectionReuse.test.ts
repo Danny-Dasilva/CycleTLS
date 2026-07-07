@@ -1,4 +1,4 @@
-import initCycleTLS from "../dist/index.js";
+import { CycleTLS } from "../dist/index.js";
 import * as http from "http";
 import * as https from "https";
 import * as fs from "fs";
@@ -65,7 +65,7 @@ describe("Connection Reuse Tests", () => {
   
   test("Should reuse connections for multiple requests to same host", async () => {
     // Initialize CycleTLS
-    const cycleTLS = await initCycleTLS();
+    const client = new CycleTLS();
     
     // Options for requests
     const options = {
@@ -79,22 +79,22 @@ describe("Connection Reuse Tests", () => {
     
     // Make the first request - should establish a connection
     const url = `https://localhost:${PORT}`;
-    const response1 = await cycleTLS.get(`${url}/first`, options);
+    const response1 = await client.get(`${url}/first`, options);
     expect(response1.status).toBe(200);
     
     // Make a second request - should reuse the connection
-    const response2 = await cycleTLS.get(`${url}/second`, options);
+    const response2 = await client.get(`${url}/second`, options);
     expect(response2.status).toBe(200);
     
     // Make a third request to get the handshake count
-    const countResponse = await cycleTLS.get(`${url}/handshake-count`, options);
+    const countResponse = await client.get(`${url}/handshake-count`, options);
     const count = parseInt(await countResponse.text(), 10);
     
     // If connection reuse is working, we expect only 1 handshake
     // But we'll allow up to 2 since the count request itself might trigger a new connection
     expect(count).toBeLessThanOrEqual(2);
     
-    // Exit CycleTLS to clean up
-    await cycleTLS.exit();
+    // Close CycleTLS to clean up
+    await client.close();
   });
 });

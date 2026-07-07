@@ -6,3 +6,11 @@ golang/go.sum
 tests/images/output*
 tests/images/source*
 .serena/*
+.claude/
+thoughts/
+.tldr/
+# Continuous Claude cache (local only)
+.claude/cache/
+
+# Binary artifacts
+src/src

@@ -44,6 +44,7 @@ type connectDialer struct {
 	DialTLS func(network string, address string) (net.Conn, string, error)
 
 	EnableH2ConnReuse  bool
+	InsecureSkipVerify bool // TLS verification for proxy connection only. Controlled by ProxyInsecureSkipVerify option; defaults to true for backward compat.
 	cacheH2Mu          sync.Mutex
 	cachedH2ClientConn *http2.ClientConn
 	cachedH2RawConn    net.Conn
@@ -52,7 +53,7 @@ type connectDialer struct {
 // newConnectDialer creates a dialer to issue CONNECT requests and tunnel traffic via HTTP/S proxy.
 // proxyUrlStr must provide Scheme and Host, may provide credentials and port.
 // Example: https://username:password@golang.org:443
-func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer, error) {
+func newConnectDialer(proxyURLStr string, UserAgent string, insecureSkipVerify bool) (proxy.ContextDialer, error) {
 	proxyURL, err := url.Parse(proxyURLStr)
 	if err != nil {
 		return nil, err
@@ -64,9 +65,10 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 	}
 
 	client := &connectDialer{
-		ProxyURL:          *proxyURL,
-		DefaultHeader:     make(http.Header),
-		EnableH2ConnReuse: true,
+		ProxyURL:           *proxyURL,
+		DefaultHeader:      make(http.Header),
+		EnableH2ConnReuse:  true,
+		InsecureSkipVerify: insecureSkipVerify,
 	}
 
 	switch proxyURL.Scheme {
@@ -80,12 +82,10 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		}
 	case "socks5", "socks5h":
 		var auth *proxy.Auth
-		if proxyURL.User != nil {
-			if proxyURL.User.Username() != "" {
-				username := proxyURL.User.Username()
-				password, _ := proxyURL.User.Password()
-				auth = &proxy.Auth{User: username, Password: password}
-			}
+		if proxyURL.User != nil && proxyURL.User.Username() != "" {
+			username := proxyURL.User.Username()
+			password, _ := proxyURL.User.Password()
+			auth = &proxy.Auth{User: username, Password: password}
 		}
 		var forward proxy.Dialer
 		if proxyURL.Scheme == "socks5h" {
@@ -103,8 +103,7 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 		client.DefaultHeader.Set("User-Agent", UserAgent)
 		return client, nil
 	case "socks4":
-		var dialer *SocksDialer
-		dialer = &SocksDialer{socks.DialSocksProxy(socks.SOCKS4, proxyURL.Host)}
+		dialer := &SocksDialer{socks.DialSocksProxy(socks.SOCKS4, proxyURL.Host)}
 		client.Dialer = dialer
 		client.DefaultHeader.Set("User-Agent", UserAgent)
 		return client, nil
@@ -116,20 +115,12 @@ func newConnectDialer(proxyURLStr string, UserAgent string) (proxy.ContextDialer
 
 	client.Dialer = &net.Dialer{}
 
-	if proxyURL.User != nil {
-		if proxyURL.User.Username() != "" {
-			// password, _ := proxyUrl.User.Password()
-			// transport.DefaultHeader.Set("Proxy-Authorization", "Basic "+
-			// 	base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.Username()+":"+password)))
-
-			username := proxyURL.User.Username()
-			password, _ := proxyURL.User.Password()
-
-			// transport.DefaultHeader.SetBasicAuth(username, password)
-			auth := username + ":" + password
-			basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
-			client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
-		}
+	if proxyURL.User != nil && proxyURL.User.Username() != "" {
+		username := proxyURL.User.Username()
+		password, _ := proxyURL.User.Password()
+		auth := username + ":" + password
+		basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
+		client.DefaultHeader.Add("Proxy-Authorization", basicAuth)
 	}
 	client.DefaultHeader.Set("User-Agent", UserAgent)
 	return client, nil
@@ -247,7 +238,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 			tlsConf := tls.Config{
 				NextProtos:         []string{"h2", "http/1.1"},
 				ServerName:         c.ProxyURL.Hostname(),
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: c.InsecureSkipVerify,
 			}
 			tlsConn, err := tls.Dial(network, c.ProxyURL.Host, &tlsConf)
 			if err != nil {
@@ -316,7 +307,7 @@ func (h *http2Conn) Write(p []byte) (n int, err error) {
 }
 
 func (h *http2Conn) Close() error {
-	var retErr error = nil
+	var retErr error
 	if err := h.in.Close(); err != nil {
 		retErr = err
 	}

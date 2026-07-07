@@ -6,9 +6,9 @@ import (
 )
 
 func main() {
-	// Test v1 default behavior - using Init() for chan Response  
+	// Test v1 default behavior - using Init() for chan Response
 	client := cycletls.Init(true)
-	
+
 	// Queue a request
 	go func() {
 		client.Queue("https://tls.peet.ws/api/clean", cycletls.Options{
@@ -17,7 +17,7 @@ func main() {
 			UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
 		}, "GET")
 	}()
-	
+
 	// V1 default pattern: receive from RespChan which provides Response objects
 	select {
 	case response := <-client.RespChan:
@@ -25,13 +25,13 @@ func main() {
 		fmt.Printf("V1 Default - Status: %d\n", response.Status)
 		fmt.Printf("V1 Default - RequestID: %s\n", response.RequestID)
 		fmt.Printf("V1 Default - FinalURL: %s\n", response.FinalUrl)
-		
+
 		// Users can access all Response fields directly
 		if response.Status == 200 {
 			fmt.Println("V1 default test: SUCCESS - Response received as struct")
 		}
 	}
-	
+
 	client.Close()
 	fmt.Println("V1 default test completed")
 }

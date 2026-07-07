@@ -81,7 +81,7 @@ async function testJA4RRoundtrip(testName, inputJA4R, expectedExtensions = null)
         console.error(`Error: ${error.message} ❌`);
         return { success: false, error: error.message };
     } finally {
-        await cycleTLS.exit();
+        await cycleTLS.close();
     }
 }
 

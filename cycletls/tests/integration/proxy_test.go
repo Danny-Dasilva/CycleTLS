@@ -8,6 +8,7 @@ import (
 	cycletls "github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"log"
 	"net"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -52,8 +53,8 @@ func doProxyRequestWithRetry(t *testing.T, client cycletls.CycleTLS, opts cyclet
 }
 
 func TestProxySuccess(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping this test on non-linux platforms")
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping proxy test on Windows - no SOCKS proxy in CI")
 		return
 	}
 
@@ -76,8 +77,14 @@ func TestProxySuccess(t *testing.T) {
 	log.Print("Body: " + resp.Body)
 }
 func TestSocks4Proxy(t *testing.T) {
+	// SOCKS4 only supported on Linux with a SOCKS4-compatible proxy
+	// CI uses gost which only supports SOCKS5, so skip in CI
 	if runtime.GOOS != "linux" {
-		t.Skip("Skipping this test on non-linux platforms")
+		t.Skip("Skipping SOCKS4 test - only supported on Linux")
+		return
+	}
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		t.Skip("Skipping SOCKS4 test in CI - gost proxy only supports SOCKS5")
 		return
 	}
 
@@ -102,8 +109,8 @@ func TestSocks4Proxy(t *testing.T) {
 }
 
 func TestSocks5hProxy(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping this test on non-linux platforms")
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping proxy test on Windows - no SOCKS proxy in CI")
 		return
 	}
 

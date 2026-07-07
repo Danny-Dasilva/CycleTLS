@@ -1,4 +1,4 @@
-import initCycleTLS from "../dist/index.js";
+import { initCycleTLS } from "../dist/index.js";
 
 let ja3 =
   "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0";
@@ -58,21 +58,36 @@ var myDictionary = {
     let value = myDictionary[key];
 
     let body = value.body ?? "";
-    let method = value.method ?? "GET";
+    let method = (value.method ?? "GET").toUpperCase();
     let ja3Token = value.ja3 ?? ja3;
     let Agent = value.userAgent ?? userAgent;
     let cookies = value.cookies;
-    const response = cycleTLS(
-      key,
-      {
-        body: body,
-        ja3: ja3Token,
-        userAgent: Agent,
-        headers: value.headers,
-        cookies: cookies,
-      },
-      method
-    );
+
+    const options = {
+      body: body,
+      ja3: ja3Token,
+      userAgent: Agent,
+      headers: value.headers,
+      cookies: cookies,
+    };
+
+    let response: Promise<any>;
+    switch (method) {
+      case "POST":
+        response = cycleTLS.post(key, options);
+        break;
+      case "PUT":
+        response = cycleTLS.put(key, options);
+        break;
+      case "PATCH":
+        response = cycleTLS.patch(key, options);
+        break;
+      case "DELETE":
+        response = cycleTLS.delete(key, options);
+        break;
+      default:
+        response = cycleTLS.get(key, options);
+    }
 
     response.then((out) => {
       console.log(key, out);

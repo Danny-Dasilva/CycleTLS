@@ -9,30 +9,27 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x]
-        go-version: ['1.21']
+        node-version: [20.x]
+        go-version: ['1.25']
     steps:
       - uses: actions/checkout@v4
       - name: 🟢 Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           registry-url: "https://registry.npmjs.org"
 
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Export Go
-        run: go env -w  GO111MODULE=auto
-        working-directory: ./
+          cache: true
+          cache-dependency-path: ./cycletls/go.sum
+      - name: Install golang dependencies
+        run: cd cycletls && go mod download && go mod verify
 
-      - name: Install golang all deps
-        run: while read l; do go get -v "$l"; done < <(go list -f '{{ join .Imports "\n" }}' ./cycletls)
-        shell: bash
-
-      - name: Install npm depencencies
+      - name: Install npm dependencies
         run: npm ci --unsafe-perm
 
         working-directory: ./

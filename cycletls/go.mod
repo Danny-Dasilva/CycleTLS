@@ -1,17 +1,16 @@
 module github.com/Danny-Dasilva/CycleTLS/cycletls
 
-go 1.24
-
-toolchain go1.24.4
+go 1.25.0
 
 require (
 	github.com/Danny-Dasilva/fhttp v0.0.0-20260106165651-41258808b131
 	github.com/andybalholm/brotli v1.2.0
 	github.com/gorilla/websocket v1.5.1
-	github.com/quic-go/quic-go v0.53.0
+	github.com/quic-go/quic-go v0.57.0
 	github.com/refraction-networking/uquic v0.0.6
-	github.com/refraction-networking/utls v1.8.0
-	golang.org/x/net v0.42.0
+	github.com/refraction-networking/utls v1.8.2
+	golang.org/x/net v0.55.0
+	golang.org/x/sync v0.20.0
 	h12.io/socks v1.0.3
 )
 
@@ -23,14 +22,17 @@ require (
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.23.4 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
-	golang.org/x/mod v0.26.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/tools v0.35.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 )
+
+// Self-replace ensures local development uses the local module rather than
+// a published version, required because src/go.mod references this module path.
+replace github.com/Danny-Dasilva/CycleTLS/cycletls => ./

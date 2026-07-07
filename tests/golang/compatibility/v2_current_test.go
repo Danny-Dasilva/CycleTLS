@@ -3,14 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"log"
 )
 
 func main() {
 	// Test v2 performance pattern - using WithRawBytes() option for chan []byte
 	client := cycletls.Init(cycletls.WithRawBytes())
-	
+
 	// Queue a request
 	go func() {
 		client.Queue("https://tls.peet.ws/api/clean", cycletls.Options{
@@ -19,7 +19,7 @@ func main() {
 			UserAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
 		}, "GET")
 	}()
-	
+
 	// Performance pattern: receive from RespChanV2 which provides []byte
 	select {
 	case respBytes := <-client.RespChanV2:
@@ -28,26 +28,26 @@ func main() {
 		if err := json.Unmarshal(respBytes, &response); err != nil {
 			log.Fatal("Failed to unmarshal response:", err)
 		}
-		
+
 		fmt.Printf("V2 Performance - Status: %d\n", response.Status)
 		fmt.Printf("V2 Performance - RequestID: %s\n", response.RequestID)
 		fmt.Printf("V2 Performance - FinalURL: %s\n", response.FinalUrl)
-		
+
 		if response.Status == 200 {
 			fmt.Println("Performance test: SUCCESS - Response received as bytes")
 		}
-	
+
 	// Alternative: can still use v1 pattern with WithRawBytes() option
 	case response := <-client.RespChan:
 		fmt.Printf("V1 Fallback - Status: %d\n", response.Status)
 		fmt.Printf("V1 Fallback - RequestID: %s\n", response.RequestID)
 		fmt.Printf("V1 Fallback - FinalURL: %s\n", response.FinalUrl)
-		
+
 		if response.Status == 200 {
 			fmt.Println("V1 fallback test: SUCCESS - Response received as struct")
 		}
 	}
-	
+
 	client.Close()
 	fmt.Println("Performance test completed")
 }
