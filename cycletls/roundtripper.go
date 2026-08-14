@@ -55,8 +55,28 @@ type roundTripper struct {
 	cachedConnections map[string]net.Conn
 	cachedTransports  map[string]http.RoundTripper
 
+	// Idle eviction. cachedTransports keeps a transport per address, and a
+	// transport keeps its own connections alive indefinitely -- fhttp's
+	// http2.Transport only honours an idle timeout when it was built from an
+	// http.Transport (t1), which is unexported and nil here. Without eviction a
+	// long-lived client accumulates one open socket per distinct host it has
+	// ever contacted.
+	lastUsed  map[string]time.Time
+	lastSweep time.Time
+
 	dialer proxy.ContextDialer
 }
+
+// idleConnTTL is how long a per-address transport may go unused before its idle
+// connections are closed. Transports untouched for twice that are dropped from
+// the cache entirely; the delay before eviction keeps a request that is still
+// in flight from having its entry removed out from under it.
+const idleConnTTL = 90 * time.Second
+
+// idleSweepInterval throttles how often a sweep actually walks the cache, since
+// it is driven from RoundTrip rather than a background goroutine -- a
+// roundTripper has no Close hook to stop one with.
+const idleSweepInterval = 30 * time.Second
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Apply cookies to the request
@@ -172,6 +192,9 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return rt.makeHTTP3Request(req, conn)
 	}
 
+	rt.markUsed(addr)
+	rt.sweepIdle()
+
 	// Use cached transport if available, otherwise create a new one
 	if _, ok := rt.cachedTransports[addr]; !ok {
 		if err := rt.getTransport(req, addr); err != nil {
@@ -228,8 +251,16 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	rt.Lock()
 	defer rt.Unlock()
 
-	// Return cached connection if available
+	// Return cached connection if available.
+	//
+	// This entry exists only to hand the just-negotiated connection to the
+	// transport's first DialTLS call, so it is consumed rather than kept.
+	// Leaving it in place meant every later dial for this address -- the ones a
+	// transport makes when it wants a second connection -- was answered with
+	// the same conn it was already using, and the map held a reference to every
+	// connection the client had ever opened.
 	if conn := rt.cachedConnections[addr]; conn != nil {
+		delete(rt.cachedConnections, addr)
 		return conn, nil
 	}
 
@@ -588,6 +619,81 @@ func (rt *roundTripper) getAddressMutex(addr string) *sync.Mutex {
 	return mu
 }
 
+// deleteAddressMutex drops the per-address creation mutex once its address is
+// gone from the cache, so addressMutexes does not outlive what it guards.
+func (rt *roundTripper) deleteAddressMutex(addr string) {
+	rt.addressMutexLock.Lock()
+	defer rt.addressMutexLock.Unlock()
+	delete(rt.addressMutexes, addr)
+}
+
+// markUsed records that addr was just requested, so the sweep can tell a live
+// address from one nothing has touched in a while.
+func (rt *roundTripper) markUsed(addr string) {
+	rt.Lock()
+	defer rt.Unlock()
+
+	if rt.lastUsed == nil {
+		rt.lastUsed = make(map[string]time.Time)
+	}
+	rt.lastUsed[addr] = time.Now()
+}
+
+// sweepIdle closes the idle connections of transports nothing has used in
+// idleConnTTL, and forgets transports idle for twice that.
+//
+// CloseIdleConnections is the operation that matters here: on both
+// http.Transport and http2.Transport it closes only connections with no request
+// on them, so a sweep cannot interrupt traffic in flight. Dropping the cache
+// entry is held back to 2*idleConnTTL because a request that is still running
+// keeps using a transport this map no longer refers to, and its connections
+// would then have nothing left to close them.
+func (rt *roundTripper) sweepIdle() {
+	rt.Lock()
+
+	now := time.Now()
+	if now.Sub(rt.lastSweep) < idleSweepInterval {
+		rt.Unlock()
+		return
+	}
+	rt.lastSweep = now
+
+	type closer interface{ CloseIdleConnections() }
+	var toClose []closer
+	var evicted []string
+
+	for addr, transport := range rt.cachedTransports {
+		idle := now.Sub(rt.lastUsed[addr])
+		if idle < idleConnTTL {
+			continue
+		}
+		if c, ok := transport.(closer); ok {
+			toClose = append(toClose, c)
+		}
+		if idle < 2*idleConnTTL {
+			continue
+		}
+		delete(rt.cachedTransports, addr)
+		delete(rt.lastUsed, addr)
+		if conn := rt.cachedConnections[addr]; conn != nil {
+			_ = conn.Close()
+			delete(rt.cachedConnections, addr)
+		}
+		evicted = append(evicted, addr)
+	}
+	rt.Unlock()
+
+	// Outside the lock: CloseIdleConnections walks the transport's own pool and
+	// has no reason to reach back into this roundTripper, but holding rt while
+	// calling into another package's locks is not worth the risk.
+	for _, c := range toClose {
+		c.CloseIdleConnections()
+	}
+	for _, addr := range evicted {
+		rt.deleteAddressMutex(addr)
+	}
+}
+
 // CloseIdleConnections closes connections that have been idle for too long
 // If selectedAddr is provided, only close connections not matching this address
 func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
@@ -636,6 +742,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		Cookies:            browser.Cookies,
 		cachedTransports:   make(map[string]http.RoundTripper),
 		cachedConnections:  make(map[string]net.Conn),
+		lastUsed:           make(map[string]time.Time),
 		InsecureSkipVerify: browser.InsecureSkipVerify,
 		ForceHTTP1:         browser.ForceHTTP1,
 		ForceHTTP3:         browser.ForceHTTP3,
