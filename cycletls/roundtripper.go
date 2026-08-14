@@ -588,6 +588,50 @@ func (rt *roundTripper) getAddressMutex(addr string) *sync.Mutex {
 	return mu
 }
 
+// closeAll drops every connection and transport this roundTripper is holding.
+//
+// Meant for a roundTripper that served exactly one request: the client built
+// outside the pool when EnableConnectionReuse is off. There is no second user
+// to wait for, so unlike CloseIdleConnections this does not care whether a
+// connection is idle -- the request is over.
+//
+// Without this, turning connection reuse off leaks harder than leaving it on.
+// The client is discarded after its request and everything it opened goes with
+// it, still connected, with nothing left holding a reference to close it.
+func (rt *roundTripper) closeAll() {
+	rt.Lock()
+
+	type closer interface{ CloseIdleConnections() }
+	var toClose []closer
+
+	for addr, conn := range rt.cachedConnections {
+		_ = conn.Close()
+		delete(rt.cachedConnections, addr)
+	}
+	for addr, transport := range rt.cachedTransports {
+		if c, ok := transport.(closer); ok {
+			toClose = append(toClose, c)
+		}
+		delete(rt.cachedTransports, addr)
+	}
+	rt.Unlock()
+
+	// Outside the lock: CloseIdleConnections walks the transport's own pool and
+	// has no reason to reach back into this roundTripper, but holding rt while
+	// calling into another package's locks is not worth the risk.
+	for _, c := range toClose {
+		c.CloseIdleConnections()
+	}
+}
+
+// closeClientConnections closes what a client's transport is holding, if that
+// transport is one of ours.
+func closeClientConnections(transport http.RoundTripper) {
+	if rt, ok := transport.(*roundTripper); ok {
+		rt.closeAll()
+	}
+}
+
 // CloseIdleConnections closes connections that have been idle for too long
 // If selectedAddr is provided, only close connections not matching this address
 func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
