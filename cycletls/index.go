@@ -1783,6 +1783,16 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		return Response{}, err
 	}
 
+	// With reuse off this client is not in the pool and serves only this
+	// request, so nothing else can be using its connections once we return.
+	// Close them here: the caller asked for a fresh connection per request, and
+	// a discarded client with no one left to close it just strands sockets.
+	// Registered before the deferred resp.Body.Close, so it runs after the
+	// body has been read.
+	if !options.EnableConnectionReuse {
+		defer closeClientConnections(httpClient.Transport)
+	}
+
 	// Create request using fhttp
 	var bodyReader io.Reader
 	if len(options.BodyBytes) > 0 {

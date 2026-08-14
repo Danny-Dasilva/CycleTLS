@@ -667,9 +667,43 @@ func (rt *roundTripper) pruneAddressMutexesLocked() {
 	}
 }
 
+// closeAll drops every connection and transport this roundTripper is holding.
+//
+// Meant for a roundTripper that served exactly one request: the client built
+// outside the pool when EnableConnectionReuse is off. That client is discarded
+// after its request, and without this everything it opened stays connected
+// with nothing left holding a reference to close it.
+//
+// CloseIdleConnections with no address closes the cached connections, the
+// HTTP/3 transports and the inner transports' idle connections, and stops the
+// cleanup goroutine.
+func (rt *roundTripper) closeAll() {
+	rt.CloseIdleConnections()
+}
+
+// closeClientConnections closes what a client's transport is holding, if that
+// transport is one of ours.
+func closeClientConnections(transport http.RoundTripper) {
+	if rt, ok := transport.(*roundTripper); ok {
+		rt.closeAll()
+	}
+}
+
 // CloseIdleConnections closes connections that have been idle for too long
 // If selectedAddr is provided, only close connections not matching this address
 func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
+	// Inner transports dropped by the close-everything branch below. Their own
+	// CloseIdleConnections runs after both locks are released (this defer is
+	// registered first, so it runs last): it walks the transport's own pool and
+	// should not be called while holding this roundTripper's locks.
+	type idleCloser interface{ CloseIdleConnections() }
+	var inner []idleCloser
+	defer func() {
+		for _, c := range inner {
+			c.CloseIdleConnections()
+		}
+	}()
+
 	rt.Lock()
 	defer rt.Unlock()
 
@@ -712,7 +746,16 @@ func (rt *roundTripper) CloseIdleConnections(selectedAddr ...string) {
 				_ = cc.conn.Close()
 			}
 			delete(rt.cachedConnections, addr)
-			// Also clean up the transport cache for this address
+		}
+		// Drop every cached transport, including those with no entry in
+		// cachedConnections: a plain-HTTP transport dials its own keep-alive
+		// connections, and only its CloseIdleConnections can close them.
+		for addr, ct := range rt.cachedTransports {
+			if ct != nil {
+				if c, ok := ct.transport.(idleCloser); ok {
+					inner = append(inner, c)
+				}
+			}
 			delete(rt.cachedTransports, addr)
 		}
 		// Close all HTTP/3 transports
