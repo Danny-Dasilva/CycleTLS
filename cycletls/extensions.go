@@ -103,38 +103,6 @@ func (c *CustomApplicationSettingsExtension) GetPreservedID() uint16 {
 	return c.OriginalID
 }
 
-// CustomECHExtension preserves the original extension ID for Encrypted Client Hello
-type CustomECHExtension struct {
-	*utls.GenericExtension
-	OriginalID uint16
-}
-
-// NewCustomECHExtension creates a new ECH extension with preserved ID
-func NewCustomECHExtension(extID uint16) *CustomECHExtension {
-	// ECH extension data - using a simple placeholder for now
-	// In a full implementation, this would contain actual ECH configuration
-	data := []byte{
-		0x00, 0x00, // config_id
-		0x00, 0x00, // kem_id placeholder
-		0x00, 0x00, // public_key length
-		// public_key would follow
-		0x00, 0x00, // cipher_suites length
-		// cipher_suites would follow
-	}
-
-	return &CustomECHExtension{
-		GenericExtension: &utls.GenericExtension{
-			Id:   extID,
-			Data: data,
-		},
-		OriginalID: extID,
-	}
-}
-
-// GetPreservedID returns the original extension ID
-func (c *CustomECHExtension) GetPreservedID() uint16 {
-	return c.OriginalID
-}
 
 // CustomCompressCertificateExtension preserves the original extension ID
 type CustomCompressCertificateExtension struct {
@@ -305,7 +273,7 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 		// Add post-quantum curves if supported
 		if tlsVersion == utls.VersionTLS13 {
 			// Add X25519MLKEM768 if supported by uTLS version
-			curves = append([]utls.CurveID{utls.X25519}, curves...)
+			curves = append([]utls.CurveID{utls.X25519MLKEM768}, curves...)
 		}
 		return &utls.SupportedCurvesExtension{Curves: curves}
 	case 0x000b: // EC Point Formats
@@ -396,10 +364,9 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 	case 0x0033: // Key Share
 		if tlsVersion == utls.VersionTLS13 {
 			keyShares := []utls.KeyShare{
+				{Group: utls.X25519MLKEM768},
 				{Group: utls.X25519},
-				{Group: utls.CurveP256},
 			}
-			// Add post-quantum key share if supported
 			return &utls.KeyShareExtension{
 				KeyShares: keyShares,
 			}
@@ -412,7 +379,10 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 	case 0x6399: // X25519Kyber768Draft00 (Post-Quantum) - 25497
 		return NewCustomPostQuantumExtension(extID, 0x6399)
 	case 0xfe0d: // Encrypted Client Hello (ECH) - 65037
-		return NewCustomECHExtension(extID)
+		if disableGrease {
+			return nil
+		}
+		return utls.BoringGREASEECH()
 	case 0xff01: // Renegotiation Info - 65281
 		return &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
