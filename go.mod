@@ -4,8 +4,8 @@ go 1.24
 
 require (
 	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.26 // indirect
-	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 // indirect
-	github.com/andybalholm/brotli v1.2.0 // indirect
+	github.com/Danny-Dasilva/fhttp v0.0.0-20260106165651-41258808b131 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
