@@ -1007,6 +1007,24 @@ func createTlsVersion(ver uint16, disableGrease bool) (tlsMaxVersion uint16, tls
 	return
 }
 
+// extensionTrustAnchors is the trust_anchors extension from
+// draft-ietf-tls-trust-anchor-ids. 0xca34 (51764) is the pre-standard
+// codepoint BoringSSL uses (TLSEXT_TYPE_trust_anchors); IANA has not assigned
+// one yet. Chrome sends it from version 141 when the TLSTrustAnchorIDs feature
+// is on.
+const extensionTrustAnchors uint16 = 0xca34
+
+// newTrustAnchorsExtension builds the trust_anchors extension the way Chrome
+// sends it when it has no trust anchor IDs from DNS: a zero-length
+// TrustAnchorIdentifierList, which is the two bytes 00 00 on the wire. An empty
+// extension body is not valid; BoringSSL servers answer it with decode_error.
+func newTrustAnchorsExtension() *utls.GenericExtension {
+	return &utls.GenericExtension{
+		Id:   extensionTrustAnchors,
+		Data: []byte{0x00, 0x00},
+	}
+}
+
 func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
@@ -1103,6 +1121,7 @@ func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 			Data: []byte{0x00, 0x03, 0x02, 0x68, 0x32},
 		},
 		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, // Channel ID extension
+		"51764": newTrustAnchorsExtension(),                          // trust_anchors
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},
