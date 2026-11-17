@@ -146,7 +146,14 @@ class InstanceManager {
       this.sharedInstances.set(port, sharedInstance);
       
       // Initialize the shared instance
-      await sharedInstance.initialize();
+      try {
+        await sharedInstance.initialize();
+      } catch (error) {
+        // Don't hand a dead instance to the next caller on this port
+        this.sharedInstances.delete(port);
+        await sharedInstance.cleanup();
+        throw error;
+      }
     }
     
     return sharedInstance;
@@ -167,6 +174,12 @@ class InstanceManager {
   }
 }
 
+// Limits on restarting the Go process after a fatal error
+const MAX_RESPAWN_ATTEMPTS = 3;
+const RESPAWN_BASE_DELAY_MS = 500;
+// A child that stayed up this long counts as healthy; the attempt counter starts over
+const RESPAWN_RESET_MS = 30000;
+
 // Manages one Go server process and multiple TypeScript client connections
 class SharedInstance extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -181,6 +194,13 @@ class SharedInstance extends EventEmitter {
   private failedInitialization: boolean = false;
   private isShuttingDown: boolean = false;
   private httpServer: http.Server | null = null;
+  // Respawn bookkeeping: how many restarts in a row, the pending restart, when the
+  // current child started, and how to reject initialize() while it is still pending.
+  private respawnAttempts: number = 0;
+  private respawnTimer: NodeJS.Timeout | null = null;
+  private lastSpawnAt: number = 0;
+  private portInUse: boolean = false;
+  private initReject: ((reason: Error) => void) | null = null;
 
   constructor(port: number, debug: boolean, timeout: number, executablePath?: string) {
     super();
@@ -196,7 +216,7 @@ class SharedInstance extends EventEmitter {
     });
   }
 
-  private checkSpawnedInstance(resolve: () => void, reject: (reason: string) => void): void {
+  private checkSpawnedInstance(resolve: () => void, reject: (reason: Error) => void): void {
     this.httpServer = http.createServer();
 
     this.httpServer.once('listening', () => {
@@ -279,8 +299,10 @@ class SharedInstance extends EventEmitter {
         cwd: path.dirname(execPath)
       };
       
-      this.child = spawn(execPath, [], spawnOptions);
-      
+      const child = spawn(execPath, [], spawnOptions);
+      this.child = child;
+      this.lastSpawnAt = Date.now();
+
       this.child.stdout.on("data", (stdout) => {
         console.log(stdout.toString());
       });
@@ -295,11 +317,7 @@ class SharedInstance extends EventEmitter {
           const fatalErrorPattern = /panic|fatal error|runtime error|address already in use/i;
           
           if (fatalErrorPattern.test(errorMessage)) {
-            // Critical error - restart the process
-            this.cleanExit(
-              `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
-            );
-            this.handleSpawn(fileName);
+            this.handleFatalError(child, fileName, errorMessage);
           } else {
             // Non-fatal error - just log it for debugging
             if (this.debug) {
@@ -326,7 +344,82 @@ class SharedInstance extends EventEmitter {
     }
   }
 
-  private createClient(resolve: () => void, reject: (reason: string) => void): void {
+  // Called when the Go process writes a fatal error to stderr. Restarts it a
+  // bounded number of times with a growing delay, and never after shutdown or
+  // a failed initialization.
+  private handleFatalError(child: ChildProcessWithoutNullStreams, fileName: string, errorMessage: string): void {
+    // One crash can write to stderr several times; handle each child once.
+    if (child !== this.child) return;
+
+    this.killChild();
+    this.child = null;
+
+    if (this.isShuttingDown || this.failedInitialization) return;
+
+    if (/address already in use/i.test(errorMessage)) {
+      // Something else took the port after our probe. Spawning again on the same
+      // port fails the same way, so stop. createClient keeps trying to connect:
+      // if the holder is another CycleTLS server we share it, otherwise
+      // initialization times out with a port-in-use error.
+      this.isHost = false;
+      this.portInUse = true;
+      const message = `CycleTLS could not bind port ${this.port} (address already in use); not restarting -> ${errorMessage}`;
+      if (this.initReject) {
+        console.log(message);
+      } else {
+        this.fail(new Error(message));
+      }
+      return;
+    }
+
+    // A child that ran for a while before crashing gets a fresh set of attempts.
+    if (Date.now() - this.lastSpawnAt > RESPAWN_RESET_MS) {
+      this.respawnAttempts = 0;
+    }
+
+    if (this.respawnAttempts >= MAX_RESPAWN_ATTEMPTS) {
+      this.fail(new Error(
+        `CycleTLS process kept crashing after ${MAX_RESPAWN_ATTEMPTS} restarts, giving up (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
+      ));
+      return;
+    }
+
+    const delay = RESPAWN_BASE_DELAY_MS * 2 ** this.respawnAttempts;
+    this.respawnAttempts++;
+    console.log(
+      `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose), restarting in ${delay}ms (attempt ${this.respawnAttempts} of ${MAX_RESPAWN_ATTEMPTS}) -> ${errorMessage}`
+    );
+
+    this.respawnTimer = setTimeout(() => {
+      this.respawnTimer = null;
+      if (this.isShuttingDown || this.failedInitialization) return;
+      try {
+        this.handleSpawn(fileName);
+      } catch (error) {
+        this.fail(error as Error);
+      }
+    }, delay);
+  }
+
+  // Report an unrecoverable error: reject initialize() if it is still pending,
+  // otherwise log it (requests on this instance will fail from here on).
+  private fail(error: Error): void {
+    if (this.initReject) {
+      const reject = this.initReject;
+      this.initReject = null;
+      this.failedInitialization = true;
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+      reject(error);
+    } else {
+      console.error(error.message);
+    }
+  }
+
+  private createClient(resolve: () => void, reject: (reason: Error) => void): void {
+    this.initReject = reject;
     const attemptConnection = () => {
       const server = new WebSocket(`ws://localhost:${this.port}`);
 
@@ -336,6 +429,7 @@ class SharedInstance extends EventEmitter {
           clearTimeout(this.connectionTimeout);
           this.connectionTimeout = null;
         }
+        this.initReject = null;
         this.server = server;
 
         this.server.on("message", (data: Buffer) => {
@@ -421,7 +515,12 @@ class SharedInstance extends EventEmitter {
     // Store the timeout so that we can clear it when the connection succeeds.
     this.connectionTimeout = setTimeout(() => {
       this.failedInitialization = true;
-      reject(`Could not connect to the CycleTLS instance within ${this.timeout}ms`);
+      this.initReject = null;
+      reject(new Error(
+        this.portInUse
+          ? `Port ${this.port} is already in use and no CycleTLS instance answered on it within ${this.timeout}ms`
+          : `Could not connect to the CycleTLS instance within ${this.timeout}ms`
+      ));
     }, this.timeout);
   }
 
@@ -515,26 +614,37 @@ class SharedInstance extends EventEmitter {
 
     this.isShuttingDown = true;
 
-    if (this.child) {
-      if (process.platform === "win32") {
-        try {
-          this.child.kill('SIGKILL');
-        } catch (error) {
-          console.error("Error killing Windows process:", error);
-        }
-      } else {
-        try {
-          process.kill(-this.child.pid!, 'SIGKILL');
-        } catch (error) {
-          if ((error as any).code !== "ESRCH") {
-            console.error("Error killing process:", error);
-          }
+    this.killChild();
+  }
+
+  private killChild(): void {
+    if (!this.child) return;
+
+    if (process.platform === "win32") {
+      try {
+        this.child.kill('SIGKILL');
+      } catch (error) {
+        console.error("Error killing Windows process:", error);
+      }
+    } else {
+      try {
+        process.kill(-this.child.pid!, 'SIGKILL');
+      } catch (error) {
+        if ((error as any).code !== "ESRCH") {
+          console.error("Error killing process:", error);
         }
       }
     }
   }
 
   async cleanup(): Promise<void> {
+    // No respawns from here on
+    this.isShuttingDown = true;
+    if (this.respawnTimer) {
+      clearTimeout(this.respawnTimer);
+      this.respawnTimer = null;
+    }
+
     // Clear any pending timeouts
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
@@ -554,21 +664,7 @@ class SharedInstance extends EventEmitter {
 
     // Kill child process forcefully
     if (this.isHost && this.child) {
-      if (process.platform === "win32") {
-        try {
-          this.child.kill('SIGKILL');
-        } catch (error) {
-          console.error("Error killing Windows process:", error);
-        }
-      } else {
-        try {
-          process.kill(-this.child.pid!, 'SIGKILL');
-        } catch (error) {
-          if ((error as any).code !== "ESRCH") {
-            console.error("Error killing process:", error);
-          }
-        }
-      }
+      this.killChild();
       this.child = null;
     }
 
