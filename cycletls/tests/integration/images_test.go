@@ -75,8 +75,9 @@ func CompareFiles(filepath1 string, filepath2 string) bool {
 
 	return bytes.Equal(f1, f2)
 }
-func GetRequest(url string, client cycletls.CycleTLS) cycletls.Response {
-	resp, err := client.Do(url, cycletls.Options{
+func GetRequest(t *testing.T, url string, client cycletls.CycleTLS) cycletls.Response {
+	t.Helper()
+	resp, err := doUpstream(t, client, url, cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0",
 		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36",
@@ -93,7 +94,7 @@ func TestFileWriting(t *testing.T) {
 	defer client.Close() // Ensure resources are cleaned up
 
 	//jpeg
-	resp := GetRequest("http://httpbin.org/image/jpeg", client)
+	resp := GetRequest(t, "http://httpbin.org/image/jpeg", client)
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	}
@@ -104,7 +105,7 @@ func TestFileWriting(t *testing.T) {
 	}
 
 	//png
-	resp = GetRequest("http://httpbin.org/image/png", client)
+	resp = GetRequest(t, "http://httpbin.org/image/png", client)
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	}
@@ -115,7 +116,7 @@ func TestFileWriting(t *testing.T) {
 	}
 
 	if runtime.GOOS != "windows" {
-		resp = GetRequest("http://httpbin.org/image/svg", client)
+		resp = GetRequest(t, "http://httpbin.org/image/svg", client)
 		if resp.Status != 200 {
 			t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 		}
@@ -126,7 +127,7 @@ func TestFileWriting(t *testing.T) {
 		}
 	}
 	//webp
-	resp = GetRequest("http://httpbin.org/image/webp", client)
+	resp = GetRequest(t, "http://httpbin.org/image/webp", client)
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	}
@@ -137,7 +138,7 @@ func TestFileWriting(t *testing.T) {
 	}
 
 	//gif
-	resp = GetRequest("https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif", client)
+	resp = GetRequest(t, "https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif", client)
 	if resp.Status != 200 {
 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	}
@@ -149,7 +150,7 @@ func TestFileWriting(t *testing.T) {
 
 	// if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 	// 	//avif
-	// 	resp = GetRequest("https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
+	// 	resp = GetRequest(t, "https://images.unsplash.com/photo-1608481337062-4093bf3ed404", client)
 	// 	if resp.Status != 200 {
 	// 		t.Fatalf("Expected %d Got %d for Status", 200, resp.Status)
 	// 	}
