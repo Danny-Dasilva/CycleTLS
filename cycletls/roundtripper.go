@@ -622,6 +622,13 @@ func (rt *roundTripper) closeAll() {
 	for _, c := range toClose {
 		c.CloseIdleConnections()
 	}
+
+	// An HTTPS proxy that speaks HTTP/2 leaves one more connection behind: the
+	// dialer keeps it for later CONNECTs, and closing a tunnel only closes its
+	// stream. The dialer is built per client, so it is ours to close.
+	if d, ok := rt.dialer.(*connectDialer); ok {
+		d.closeCachedH2()
+	}
 }
 
 // closeClientConnections closes what a client's transport is holding, if that
