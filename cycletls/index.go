@@ -694,6 +694,13 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		finalUrl = resp.Request.URL.String()
 	}
 
+	// Decode the body as it streams, so the client receives the payload and
+	// not the compressed bytes. fhttp does no decompression of its own. The
+	// Content-Encoding and Content-Length headers describe the compressed
+	// body, so drop them once we decode (net/http does the same).
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
+
 	{
 		// Checked encoder: on overflow (e.g. header value >= 64KB) send an error
 		// frame instead of a truncated response, so the reader stream stays synced.
@@ -724,7 +731,7 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 				break loop
 
 			default:
-				n, err := resp.Body.Read(chunkBuffer)
+				n, err := body.Read(chunkBuffer)
 
 				if res.req.Context().Err() != nil {
 					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)
@@ -779,6 +786,31 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 			return
 		}
 	}
+}
+
+// decodeResponseBody returns the response body with its content codings
+// removed, so a dispatcher streams the payload and not the compressed bytes.
+// fhttp does no decompression of its own.
+//
+// When it decodes, it also removes the Content-Encoding and Content-Length
+// headers from resp, because they describe the compressed body (net/http does
+// the same). Call it before the response frame is built.
+//
+// HEAD, 204 and 304 responses have no body to decode, and a coding we don't
+// know is left alone: in those cases the body and headers pass through as they
+// are. Closing the result releases the decoders, not resp.Body.
+func decodeResponseBody(req *http.Request, resp *http.Response) io.ReadCloser {
+	if req.Method == http.MethodHead || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
+		return io.NopCloser(resp.Body)
+	}
+	decoded, ok := newDecodedBody(resp.Body, resp.Header.Values("Content-Encoding"))
+	if ok {
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength = -1
+		resp.Uncompressed = true
+	}
+	return decoded
 }
 
 // dispatchSSEAsync handles SSE connections asynchronously

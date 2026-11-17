@@ -574,6 +574,13 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 		finalUrl = resp.Request.URL.String()
 	}
 
+	// Decode the body as it streams, so the client receives the payload and
+	// not the compressed bytes. This also drops the Content-Encoding and
+	// Content-Length headers, so it has to run before the response frame is
+	// built.
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
+
 	// Send response frame
 	responseFrame, err := buildResponseFrame(res.options.RequestID, resp.StatusCode, finalUrl, resp.Header)
 	if err != nil {
@@ -598,7 +605,7 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 			return
 		}
 
-		n, readErr := resp.Body.Read(chunkBuffer)
+		n, readErr := body.Read(chunkBuffer)
 
 		// Send any data we got before handling errors
 		if n > 0 {
@@ -651,6 +658,11 @@ func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 		finalUrl = resp.Request.URL.String()
 	}
 
+	// The client parses events out of the bytes it is sent, so a compressed
+	// event stream has to be decoded here like any other body.
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
+
 	// Send response frame with headers
 	responseFrame, err := buildResponseFrame(res.options.RequestID, resp.StatusCode, finalUrl, resp.Header)
 	if err != nil {
@@ -675,7 +687,7 @@ func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 			return
 		}
 
-		n, readErr := resp.Body.Read(chunkBuffer)
+		n, readErr := body.Read(chunkBuffer)
 
 		// Send any data we got before handling errors
 		if n > 0 {
