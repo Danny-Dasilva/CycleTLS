@@ -583,7 +583,13 @@ class InstanceManager {
     const initPromise = (async () => {
       try {
         const sharedInstance = new SharedInstance(port, debug, timeout, executablePath);
-        await sharedInstance.initialize();
+        try {
+          await sharedInstance.initialize();
+        } catch (error) {
+          // The failed instance is never stored; stop its timers and child too
+          await sharedInstance.cleanup();
+          throw error;
+        }
         this.sharedInstances.set(port, sharedInstance);
         return sharedInstance;
       } finally {
@@ -634,6 +640,12 @@ class InstanceManager {
   }
 }
 
+// Limits on restarting the Go process after a fatal error
+const MAX_RESPAWN_ATTEMPTS = 3;
+const RESPAWN_BASE_DELAY_MS = 500;
+// A child that stayed up this long counts as healthy; the attempt counter starts over
+const RESPAWN_RESET_MS = 30000;
+
 // Manages one Go server process and multiple TypeScript client connections
 class SharedInstance extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -650,6 +662,12 @@ class SharedInstance extends EventEmitter {
   private httpServer: http.Server | null = null;
   private initializationReject: ((reason: string) => void) | null = null;
   private authToken: string = ''; // Issue #4: WebSocket auth token
+  // Respawn bookkeeping: restarts in a row, the pending restart, when the
+  // current child started, and whether the Go process failed to bind the port.
+  private respawnAttempts: number = 0;
+  private respawnTimer: NodeJS.Timeout | null = null;
+  private lastSpawnAt: number = 0;
+  private portInUse: boolean = false;
 
   constructor(port: number, debug: boolean, timeout: number, executablePath?: string) {
     super();
@@ -811,6 +829,8 @@ class SharedInstance extends EventEmitter {
       };
 
       this.child = spawn(execPath, [], spawnOptions);
+      const child = this.child;
+      this.lastSpawnAt = Date.now();
 
       this.child.stdout.on("data", (stdout) => {
         // Issue #5: Don't log stdout if it contains auth token
@@ -830,11 +850,7 @@ class SharedInstance extends EventEmitter {
           const fatalErrorPattern = /panic|fatal error|runtime error|address already in use/i;
           
           if (fatalErrorPattern.test(errorMessage)) {
-            // Critical error - restart the process
-            this.cleanExit(
-              `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`
-            );
-            this.handleSpawn(fileName);
+            this.handleFatalError(child, fileName, errorMessage);
           } else {
             // Non-fatal error - just log it for debugging
             if (this.debug) {
@@ -862,6 +878,63 @@ class SharedInstance extends EventEmitter {
     }
   }
 
+  // Called when the Go process writes a fatal error to stderr. Restarts it a
+  // bounded number of times with a growing delay, and never after shutdown or
+  // a failed initialization.
+  private handleFatalError(child: ChildProcessWithoutNullStreams, fileName: string, errorMessage: string): void {
+    // One crash can write to stderr several times; handle each child once.
+    if (child !== this.child) return;
+
+    forceKillProcess(child, true);
+    this.child = null;
+
+    if (this.isShuttingDown || this.failedInitialization) return;
+
+    if (/address already in use/i.test(errorMessage)) {
+      // Something else took the port after our probe. Spawning again on the same
+      // port fails the same way, so stop. createClient keeps trying to connect,
+      // without our own child's token: if the holder is another CycleTLS server
+      // we share it, otherwise initialization times out with a port-in-use error.
+      this.isHost = false;
+      this.portInUse = true;
+      this.authToken = '';
+      const message = `CycleTLS could not bind port ${this.port} (address already in use); not restarting -> ${errorMessage}`;
+      if (this.initializationReject) {
+        console.log(message);
+      } else {
+        console.error(message);
+      }
+      return;
+    }
+
+    // A child that ran for a while before crashing gets a fresh set of attempts.
+    if (Date.now() - this.lastSpawnAt > RESPAWN_RESET_MS) {
+      this.respawnAttempts = 0;
+    }
+
+    if (this.respawnAttempts >= MAX_RESPAWN_ATTEMPTS) {
+      const message = `CycleTLS process kept crashing after ${MAX_RESPAWN_ATTEMPTS} restarts, giving up (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose) -> ${errorMessage}`;
+      if (this.initializationReject) {
+        this.rejectInitialization(message);
+      } else {
+        console.error(message);
+      }
+      return;
+    }
+
+    const delay = RESPAWN_BASE_DELAY_MS * 2 ** this.respawnAttempts;
+    this.respawnAttempts++;
+    console.log(
+      `Fatal error detected (please open an issue https://github.com/Danny-Dasilva/CycleTLS/issues/new/choose), restarting in ${delay}ms (attempt ${this.respawnAttempts} of ${MAX_RESPAWN_ATTEMPTS}) -> ${errorMessage}`
+    );
+
+    this.respawnTimer = setTimeout(() => {
+      this.respawnTimer = null;
+      if (this.isShuttingDown || this.failedInitialization) return;
+      this.handleSpawn(fileName);
+    }, delay);
+  }
+
   private createClient(resolve: () => void, reject: (reason: string) => void): void {
     const attemptConnection = () => {
       // Use ?v=1 to request legacy JSON protocol (V2 flow-control is now default)
@@ -875,6 +948,8 @@ class SharedInstance extends EventEmitter {
           clearTimeout(this.connectionTimeout);
           this.connectionTimeout = null;
         }
+        // Initialization is over; later fatal errors are logged, not rejected
+        this.initializationReject = null;
         this.server = server;
 
         this.server.on("message", (data: Buffer) => {
@@ -1003,7 +1078,12 @@ class SharedInstance extends EventEmitter {
     // Store the timeout so that we can clear it when the connection succeeds.
     this.connectionTimeout = setTimeout(() => {
       this.failedInitialization = true;
-      reject(`Could not connect to the CycleTLS instance within ${this.timeout}ms`);
+      this.initializationReject = null;
+      reject(
+        this.portInUse
+          ? `Port ${this.port} is already in use and no CycleTLS instance answered on it within ${this.timeout}ms`
+          : `Could not connect to the CycleTLS instance within ${this.timeout}ms`
+      );
     }, this.timeout);
   }
 
@@ -1131,6 +1211,13 @@ class SharedInstance extends EventEmitter {
   }
 
   async cleanup(): Promise<void> {
+    // No respawns from here on
+    this.isShuttingDown = true;
+    if (this.respawnTimer) {
+      clearTimeout(this.respawnTimer);
+      this.respawnTimer = null;
+    }
+
     // Clear any pending timeouts
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
@@ -2205,7 +2292,8 @@ const initCycleTLS = async (
 
     return publicInterface;
   } catch (error) {
-    throw new Error(`Failed to initialize CycleTLS: ${error.message}`);
+    // SharedInstance rejects with a plain string; error.message would be undefined
+    throw new Error(`Failed to initialize CycleTLS: ${error instanceof Error ? error.message : error}`);
   }
 };
 
