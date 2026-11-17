@@ -176,20 +176,12 @@ var dispatchPaths = []dispatchPath{
 	},
 }
 
-// noHeaderTimeout is the Timeout the dispatcher tests send. A negative value
-// turns the header timeout off. With any other value doRequestWithHeaderTimeout
-// cancels the request context as soon as the headers arrive, and both
-// dispatchers then stop before reading the body. That is a separate bug; these
-// tests are about what happens to the connection once the body has streamed.
-const noHeaderTimeout = -1
-
 // runAsync sends one request down the given dispatcher path and returns the
 // frames it wrote.
 func runAsync(t *testing.T, path dispatchPath, id, url string, opts Options) [][]byte {
 	t.Helper()
 	opts.URL = url
 	opts.Method = "GET"
-	opts.Timeout = noHeaderTimeout
 
 	chanWrite := make(chan []byte, 64)
 	path.start(cycleTLSRequest{RequestID: id, Options: opts}, chanWrite)
@@ -426,7 +418,6 @@ func TestDispatcherAsyncStreamsWholeBodyWithoutReuse(t *testing.T) {
 				InsecureSkipVerify:    true,
 				ForceHTTP1:            !h2,
 				EnableConnectionReuse: false,
-				Timeout:               noHeaderTimeout,
 			}
 			chanWrite := make(chan []byte, 16)
 			path.start(cycleTLSRequest{RequestID: id, Options: opts}, chanWrite)

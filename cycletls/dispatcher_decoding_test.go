@@ -189,7 +189,6 @@ func TestDispatchersDecodeResponseBody(t *testing.T) {
 						Headers:               map[string]string{"Accept-Encoding": "gzip, deflate, br, zstd"},
 						InsecureSkipVerify:    true,
 						EnableConnectionReuse: true,
-						Timeout:               noHeaderTimeout,
 					},
 				}, chanWrite)
 
