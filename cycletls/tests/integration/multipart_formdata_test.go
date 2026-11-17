@@ -66,7 +66,7 @@ func TestMultipartFormDataMixed(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response, err := doUpstream(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
@@ -131,7 +131,7 @@ func TestMultipartFormDataUpload(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response, err := doUpstream(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
@@ -176,7 +176,7 @@ func TestMultipartFormDataText(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response, err := doUpstream(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
