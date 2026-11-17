@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/Danny-Dasilva/fhttp v0.0.0-20260106165651-41258808b131
-	github.com/andybalholm/brotli v1.2.0
+	github.com/andybalholm/brotli v1.2.7
 	github.com/gorilla/websocket v1.5.1
 	github.com/quic-go/quic-go v0.57.0
 	github.com/refraction-networking/uquic v0.0.6
