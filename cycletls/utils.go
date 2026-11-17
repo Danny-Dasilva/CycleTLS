@@ -213,8 +213,8 @@ func ModernChromeSpec(forceHTTP1 bool) *utls.ClientHelloSpec {
 	}
 
 	return &utls.ClientHelloSpec{
-		TLSVersMin:   utls.VersionTLS12,
-		TLSVersMax:   utls.VersionTLS13,
+		TLSVersMin: utls.VersionTLS12,
+		TLSVersMax: utls.VersionTLS13,
 		CipherSuites: []uint16{
 			utls.GREASE_PLACEHOLDER,
 			utls.TLS_AES_128_GCM_SHA256,
@@ -310,6 +310,18 @@ func StringToSpec(ja3 string, userAgent string, forceHTTP1 bool) (*utls.ClientHe
 	}
 
 	extMap["10"] = &utls.SupportedCurvesExtension{Curves: targetCurves}
+
+	// When the JA3 advertises the X25519MLKEM768 post-quantum group in
+	// supported_groups, real Chrome/Edge also send a matching MLKEM key_share.
+	// Insert one before the X25519 share so the emitted key_share matches;
+	// utls generates the ~1216-byte MLKEM share. Non-PQ JA3s are untouched.
+	if containsCurveID(targetCurves, utls.X25519MLKEM768) {
+		if keyShareExt, ok := extMap["51"]; ok {
+			if keyShare, ok := keyShareExt.(*utls.KeyShareExtension); ok {
+				keyShare.KeyShares = insertKeyShareBeforeX25519(keyShare.KeyShares, utls.KeyShare{Group: utls.X25519MLKEM768})
+			}
+		}
+	}
 
 	// parse point formats
 	var targetPointFormats []byte
@@ -443,6 +455,38 @@ func filterTLS13CompatibleCurves(curves []uint16) []uint16 {
 		}
 	}
 	return compatibleCurves
+}
+
+// containsCurveID reports whether the curve list contains the given CurveID.
+func containsCurveID(curves []utls.CurveID, target utls.CurveID) bool {
+	for _, c := range curves {
+		if c == target {
+			return true
+		}
+	}
+	return false
+}
+
+// insertKeyShareBeforeX25519 inserts ins immediately before the first X25519
+// key_share, preserving any leading GREASE placeholder. It is a no-op if a
+// key_share for ins.Group is already present, and appends if no X25519 share
+// exists, so non-PQ key_share sets stay byte-for-byte unchanged.
+func insertKeyShareBeforeX25519(shares []utls.KeyShare, ins utls.KeyShare) []utls.KeyShare {
+	for _, s := range shares {
+		if s.Group == ins.Group {
+			return shares
+		}
+	}
+	for i, s := range shares {
+		if s.Group == utls.X25519 {
+			out := make([]utls.KeyShare, 0, len(shares)+1)
+			out = append(out, shares[:i]...)
+			out = append(out, ins)
+			out = append(out, shares[i:]...)
+			return out
+		}
+	}
+	return append(shares, ins)
 }
 
 // JA4Components represents the parsed components of a JA4 string
@@ -1020,6 +1064,24 @@ func createTlsVersion(ver uint16, disableGrease bool) (tlsMaxVersion uint16, tls
 	return
 }
 
+// extensionTrustAnchors is the trust_anchors extension from
+// draft-ietf-tls-trust-anchor-ids. 0xca34 (51764) is the pre-standard
+// codepoint BoringSSL uses (TLSEXT_TYPE_trust_anchors); IANA has not assigned
+// one yet. Chrome sends it from version 141 when the TLSTrustAnchorIDs feature
+// is on.
+const extensionTrustAnchors uint16 = 0xca34
+
+// newTrustAnchorsExtension builds the trust_anchors extension the way Chrome
+// sends it when it has no trust anchor IDs from DNS: a zero-length
+// TrustAnchorIdentifierList, which is the two bytes 00 00 on the wire. An empty
+// extension body is not valid; BoringSSL servers answer it with decode_error.
+func newTrustAnchorsExtension() *utls.GenericExtension {
+	return &utls.GenericExtension{
+		Id:   extensionTrustAnchors,
+		Data: []byte{0x00, 0x00},
+	}
+}
+
 func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
@@ -1116,6 +1178,7 @@ func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 			Data: []byte{0x00, 0x03, 0x02, 0x68, 0x32},
 		},
 		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, // Channel ID extension
+		"51764": newTrustAnchorsExtension(),                          // trust_anchors
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},

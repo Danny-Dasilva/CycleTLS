@@ -1,4 +1,4 @@
-import initCycleTLS from "../dist/index.js";
+import CycleTLS from "../dist/index.js";
 import { withCycleTLS } from "./test-utils.js";
 
 let ja3 =
@@ -7,22 +7,19 @@ let userAgent =
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0";
 
 test("Should return a 301 redirect", async () => {
-    await withCycleTLS({ port: 9114 }, async (cycleTLS) => {
-        const response = await cycleTLS('https://google.com', {
-            body: '',
+    await withCycleTLS({ port: 9114 }, async (client) => {
+        const response = await client.get('https://google.com', {
             ja3: ja3,
             userAgent: userAgent,
             disableRedirect: true,
-        },
-            'get');
+        });
         expect(response.status).toBe(301);
     });
 });
 
 test("Should return a 200 redirect", async () => {
-    await withCycleTLS({ port: 9121 }, async (cycleTLS) => {
-        const response = await cycleTLS('https://google.com', {
-            body: '',
+    await withCycleTLS({ port: 9121 }, async (client) => {
+        const response = await client.get('https://google.com', {
             ja3: ja3,
             userAgent: userAgent,
             disableRedirect: false,
@@ -33,35 +30,27 @@ test("Should return a 200 redirect", async () => {
 });
 
 test("Should return final url a 301 redirect", async () => {
-    await withCycleTLS({ port: 9122 }, async (cycleTLS) => {
+    await withCycleTLS({ port: 9122 }, async (client) => {
         const url = "https://rb.gy/3hwz5h";
-        const redirectResponse = await cycleTLS(url, {
-            body: '',
+        const redirectResponse = await client.get(url, {
             ja3: ja3,
             userAgent: userAgent,
             disableRedirect: true,
-        },
-            "get"
-        );
+        });
         expect(redirectResponse.status).toBe(301);
         expect(redirectResponse.finalUrl).toBe(url)
     });
 });
 
 test("Should return final url a 200 redirect", async () => {
-    await withCycleTLS({ port: 9124 }, async (cycleTLS) => {
+    await withCycleTLS({ port: 9124 }, async (client) => {
         const url = "https://rb.gy/3hwz5h";
 
-        const normalResponse = await cycleTLS(
-            url,
-            {
-                body: "",
-                ja3: ja3,
-                userAgent: userAgent,
-                disableRedirect: false,
-            },
-            "get"
-        );
+        const normalResponse = await client.get(url, {
+            ja3: ja3,
+            userAgent: userAgent,
+            disableRedirect: false,
+        });
 
         expect(normalResponse.status).toBe(200);
         expect(normalResponse.finalUrl).toBe("https://www.google.com/");

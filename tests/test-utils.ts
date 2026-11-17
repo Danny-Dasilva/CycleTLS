@@ -1,13 +1,46 @@
-import initCycleTLS, { CycleTLSClient } from "../dist/index.js";
+import CycleTLS from "../dist/index.js";
+import { Readable } from "stream";
+
+export { CycleTLS };
 
 // Track all active instances for emergency cleanup
-const activeInstances = new Set<CycleTLSClient>();
+const activeInstances = new Set<CycleTLS>();
 
 export interface CycleTLSOptions {
   port?: number;
   timeout?: number;
   debug?: boolean;
-  [key: string]: any;
+  executablePath?: string;
+  autoSpawn?: boolean;
+  initialWindow?: number;
+  creditThreshold?: number;
+}
+
+/**
+ * Helper to consume a Readable stream into a Buffer
+ */
+export async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Helper to consume a Readable stream into a string
+ */
+export async function streamToText(stream: Readable): Promise<string> {
+  const buffer = await streamToBuffer(stream);
+  return buffer.toString("utf8");
+}
+
+/**
+ * Helper to consume a Readable stream and parse as JSON
+ */
+export async function streamToJson<T = unknown>(stream: Readable): Promise<T> {
+  const text = await streamToText(stream);
+  return JSON.parse(text) as T;
 }
 
 /**
@@ -20,28 +53,28 @@ export interface CycleTLSOptions {
  *
  * @example
  * test("Should handle timeout", async () => {
- *   await withCycleTLS(9117, async (cycleTLS) => {
- *     const response = await cycleTLS('https://example.com');
+ *   await withCycleTLS(9117, async (client) => {
+ *     const response = await client.get('https://example.com');
  *     expect(response.status).toBe(200);
  *   });
  * });
  */
 export async function withCycleTLS<T>(
   portOrOptions: number | CycleTLSOptions,
-  testFn: (cycleTLS: CycleTLSClient) => Promise<T>
+  testFn: (client: CycleTLS) => Promise<T>
 ): Promise<T> {
   const options = typeof portOrOptions === 'number'
     ? { port: portOrOptions }
     : portOrOptions;
 
-  const cycleTLS = await initCycleTLS(options);
-  activeInstances.add(cycleTLS);
+  const client = new CycleTLS(options);
+  activeInstances.add(client);
 
   try {
-    return await testFn(cycleTLS);
+    return await testFn(client);
   } finally {
-    activeInstances.delete(cycleTLS);
-    await cycleTLS.exit();
+    activeInstances.delete(client);
+    await client.close();
   }
 }
 
@@ -54,23 +87,23 @@ export async function withCycleTLS<T>(
  *
  * @example
  * test("Multiple instances", async () => {
- *   const cycleTLS1 = await createSafeCycleTLS({ port: 9001 });
- *   const cycleTLS2 = await createSafeCycleTLS({ port: 9002 });
+ *   const client1 = createSafeCycleTLS({ port: 9001 });
+ *   const client2 = createSafeCycleTLS({ port: 9002 });
  *
  *   try {
  *     // Test logic here
  *   } finally {
- *     await cleanupCycleTLS(cycleTLS1);
- *     await cleanupCycleTLS(cycleTLS2);
+ *     await cleanupCycleTLS(client1);
+ *     await cleanupCycleTLS(client2);
  *   }
  * });
  */
-export async function createSafeCycleTLS(
+export function createSafeCycleTLS(
   options?: CycleTLSOptions
-): Promise<CycleTLSClient> {
-  const cycleTLS = await initCycleTLS(options);
-  activeInstances.add(cycleTLS);
-  return cycleTLS;
+): CycleTLS {
+  const client = new CycleTLS(options);
+  activeInstances.add(client);
+  return client;
 }
 
 /**
@@ -78,10 +111,10 @@ export async function createSafeCycleTLS(
  *
  * @param instance - CycleTLS instance to cleanup
  */
-export async function cleanupCycleTLS(instance: CycleTLSClient): Promise<void> {
+export async function cleanupCycleTLS(instance: CycleTLS): Promise<void> {
   if (activeInstances.has(instance)) {
     activeInstances.delete(instance);
-    await instance.exit();
+    await instance.close();
   }
 }
 
@@ -94,11 +127,11 @@ export async function cleanupCycleTLS(instance: CycleTLSClient): Promise<void> {
  *
  * @example
  * describe("Test Suite", () => {
- *   let cycleTLS: CycleTLSClient;
+ *   let client: CycleTLS;
  *   let cleanup: () => Promise<void>;
  *
- *   beforeAll(async () => {
- *     ({ instance: cycleTLS, cleanup } = await createSuiteInstance({ port: 9001 }));
+ *   beforeAll(() => {
+ *     ({ instance: client, cleanup } = createSuiteInstance({ port: 9001 }));
  *   });
  *
  *   afterAll(async () => {
@@ -106,14 +139,14 @@ export async function cleanupCycleTLS(instance: CycleTLSClient): Promise<void> {
  *   });
  *
  *   test("test 1", async () => {
- *     // Use cycleTLS here
+ *     // Use client here
  *   });
  * });
  */
-export async function createSuiteInstance(
+export function createSuiteInstance(
   options?: CycleTLSOptions
-): Promise<{ instance: CycleTLSClient; cleanup: () => Promise<void> }> {
-  const instance = await createSafeCycleTLS(options);
+): { instance: CycleTLS; cleanup: () => Promise<void> } {
+  const instance = createSafeCycleTLS(options);
 
   const cleanup = async () => {
     await cleanupCycleTLS(instance);
@@ -130,16 +163,55 @@ export function getActiveInstanceCount(): number {
 }
 
 /**
+ * Status codes treated as transient upstream flake (rate limit, gateway timeout, etc.)
+ */
+export const UPSTREAM_FLAKE_STATUSES: ReadonlySet<number> = new Set([408, 502, 503, 504]);
+
+/**
+ * Retry a request-producing function on upstream-flake statuses (408/502/503/504).
+ * The fn is expected to return an object that has a `.status` (number) field — both
+ * the legacy `.do()` shape and the modern `.get/.request()` Response work, since
+ * `Response.status` is a getter.
+ *
+ * Returns the *last* response so the caller can still inspect the final status (and
+ * choose to skip the test if all retries flake out).
+ */
+export async function withUpstreamRetry<T extends { status: number }>(
+  fn: () => Promise<T>,
+  attempts = 3
+): Promise<T> {
+  // Short backoff (500ms, 1s, 2s) — keeps total retry budget under ~3.5s so we
+  // don't blow the Jest test timeout in CI when an upstream is flaking hard.
+  const backoffsMs = [500, 1000, 2000];
+  let last!: T;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      last = await fn();
+      if (last.status >= 200 && last.status < 400) return last;
+      if (!UPSTREAM_FLAKE_STATUSES.has(last.status)) return last;
+      // Flake — retry after backoff
+    } catch (e) {
+      // Network error counts as flake; retry
+      if (i === attempts - 1) throw e;
+    }
+    if (i < backoffsMs.length) {
+      await new Promise<void>((res) => setTimeout(res, backoffsMs[i]));
+    }
+  }
+  return last;
+}
+
+/**
  * Emergency cleanup of all active instances
  * This is called automatically on process exit
  */
 async function cleanupAll(): Promise<void> {
   if (activeInstances.size > 0) {
-    console.warn(`⚠️  Cleaning up ${activeInstances.size} orphaned CycleTLS instances`);
+    console.warn(`Warning: Cleaning up ${activeInstances.size} orphaned CycleTLS instances`);
     const instances = [...activeInstances];
     await Promise.all(instances.map(async (instance) => {
       try {
-        await instance.exit();
+        await instance.close();
       } catch (error) {
         console.error('Error cleaning up CycleTLS instance:', error);
       }

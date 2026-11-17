@@ -1,6 +1,102 @@
 # CycleTLS Changelog
 
 
+## 3.0.0 - Unreleased
+
+### New Features
+- **Modern Streaming Protocol** - Credit-based flow control for memory-efficient large file downloads
+  - `new CycleTLS()` is now the only API - streaming with backpressure
+  - Binary protocol with credit-based flow control - server blocks until client signals capacity
+  - One WebSocket per request model for cleaner resource management
+  - Go: Added `flow_control.go` with `creditWindow` semaphore (context-aware blocking)
+  - Go: Added `packet_builder.go` and `packet_reader.go` for binary frame encoding/decoding
+  - Go: Added `ws_handler_v2.go` with errgroup-based request handling
+  - TypeScript: Added `protocol.ts`, `credit-manager.ts`, and `flow-control-client.ts`
+  - 26 new unit tests for flow control and protocol components
+  - See [FLOW_CONTROL.md](./FLOW_CONTROL.md) for detailed documentation
+
+### Breaking Changes
+- **New Default API** - `import CycleTLS from 'cycletls'` returns a class-based streaming client
+  - Before: `const cycleTLS = await initCycleTLS()` (buffered response)
+  - After: `const client = new CycleTLS()` (streaming response)
+  - Response body is now a stream - use `for await (const chunk of response.body)`
+  - Legacy API still available via named export: `import { initCycleTLS } from 'cycletls'`
+- **Response Object Changes**:
+  - `response.status` renamed to `response.statusCode` (`status` kept as alias)
+  - `response.body` is now a `Readable` stream (was a buffered string)
+  - `response.data` removed; use `await response.json()` / `await response.text()` instead
+  - Response headers are now always `Record<string, string[]>` (all values are arrays, even single-value headers)
+- **WebSocket API Changes** - Now uses EventEmitter pattern matching the `ws` library:
+  - `.onMessage()` replaced by `.on('message')`
+  - `.onClose()` replaced by `.on('close')`
+  - `.onError()` replaced by `.on('error')`
+  - Added: `.on('open')`, `.ping()`, `.pong()`, `.terminate()`
+- **SSE API Changes** - Added async iterator support via `sse.events()`
+- **Cleanup Method Changed** - `cycleTLS.exit()` replaced by `client.close()`
+- **New Types**:
+  - `CycleTLS` - Main client class
+  - `CycleTLSOptions` - Client configuration
+  - `RequestOptions` - Per-request options
+  - `Response` - Streaming response
+  - `CycleTLSError` - Error class
+
+### Bug Fixes
+- **Connection Reuse Race Condition** - Fixed critical panic when using `enableConnectionReuse: true` with concurrent requests across multiple instances [#407](https://github.com/Danny-Dasilva/CycleTLS/issues/407)
+  - Eliminated panic: "send on closed channel" when WebSocket disconnects during concurrent request processing
+  - Fixed port binding errors: "listen tcp :9119: bind: address already in use" after process crashes
+  - Go: Added `safeChannelWriter` struct with mutex protection and closed-state tracking in `cycletls/index.go`
+  - Go: Updated all channel write operations (23 sites) to use safe writes with graceful failure handling
+  - Go: Added panic recovery in `dispatcherAsync`, `dispatchSSEAsync`, and `dispatchWebSocketAsync` functions
+  - Go: Enhanced `CloseIdleConnections` method with nil checks and synchronized cleanup of connection and transport caches
+  - Performance: Connection reuse now provides 2-3x improvement for repeated requests (first: ~800ms, subsequent: ~350ms)
+  - Added comprehensive test coverage: `test_issue_407.js` (Node.js) and `issue_407_connection_reuse_test.go` (Go integration tests with 50 concurrent request stress test)
+
+### Security & Safety Fixes (2026-02-07)
+- **Removed 18MB binary artifact** (`src/src`) from repository and added to `.gitignore` - eliminates supply chain risk
+- **Fixed race condition in safeChannelWriter** - Changed RLock to exclusive Lock with non-blocking select send; removed panic/recover anti-pattern
+- **Fixed buffer pool data corruption** - Buffer data is now copied before returning to pool across all 18 usage sites; prevents intermittent data corruption when channel consumer reads after pool reclaim
+- **Fixed unchecked type assertion** - WebSocket connection lookup now uses comma-ok pattern instead of bare assertion that could panic
+- **Eliminated FNV hash collision risk** - Client pool keys now use full config string instead of 64-bit FNV-1a hash; prevents wrong TLS client reuse on hash collision
+- **Fixed context leak for SSE/WebSocket** - Moved `defer cancel()` and `defer state.UnregisterRequest()` before early returns in `dispatcherAsync`; SSE and WebSocket requests previously leaked contexts
+- **Fixed HTTP response body leak** - Added `resp.Body.Close()` on error path after `doRequestWithHeaderTimeout`
+- **Added 10MB max size validation to packet reader** - `ReadBytes(n)` now rejects allocations over 10MB to prevent OOM from malformed packets
+- **Eliminated double context cancel in Client.Do** - Replaced redundant `context.WithTimeout` with `context.WithCancel`; `doRequestWithHeaderTimeout` is now sole timeout authority
+- **Fixed WebSocket event listener memory leak** (TypeScript) - Added `ws.removeAllListeners()` on close for `request()`, `ws()`, and `sse()` methods
+- **Fixed zombie process on early rejection** (TypeScript) - `rejectInitialization()` now kills child process before rejecting
+- **Fixed pid undefined panic** (TypeScript) - All `this.child.pid!` non-null assertions replaced with undefined checks
+- **Fixed HTTP server async close race** (TypeScript) - `createClient()` now called inside `httpServer.close()` callback
+- **Fixed buffer overread in protocol parser** (TypeScript) - All `parseXxxPayload` functions and `BufferReader.readString()` now validate length prefixes against buffer size
+- **Fixed CreditManager.flush() ignoring pause** (TypeScript) - `flush()` now respects paused state for proper backpressure
+- **Fixed WebSocket error after resolution** (TypeScript) - Errors after promise resolution now propagate to `bodyStream.destroy(err)` instead of being silently dropped
+
+### New Tests (2026-02-07)
+- `cycletls/tests/unit/safe_channel_writer_test.go` - 4 tests for concurrent write+close safety
+- `cycletls/tests/unit/buffer_pool_test.go` - 3 tests including corruption detection
+- `cycletls/tests/unit/type_assertion_test.go` - 2 tests for safe type assertion pattern
+- `cycletls/tests/unit/client_key_test.go` - 3 tests for client key generation
+- `cycletls/packet_reader_test.go` - 3 tests for bounds validation
+- `tests/memory-leak.test.ts` - 5 tests for listener cleanup
+- `tests/zombie-process.test.ts` - 3 tests for process cleanup
+- `tests/pid-safety.test.ts` - 3 tests for pid validation
+- `tests/async-close-race.test.ts` - 2 tests for server close ordering
+- `tests/instanceManager.test.ts` - 2 additional race condition tests
+- `tests/protocol.test.ts` - 12 tests for buffer validation
+- `tests/credit-manager.test.ts` - 4 tests for pause/resume/flush
+- `tests/ws-error-propagation.test.ts` - 1 test for error forwarding
+
+### Documentation Cleanup
+- Removed duplicate JA4R sections in README
+- Updated README examples to use `response.json()` / `response.text()` helpers
+- Removed stale internal docs: `LOCAL_CHANGES.md`, `WEBSOCKET_IMPLEMENTATION_SUMMARY.md`
+- Fixed changelog date from November 2025 to February 2026
+
+### Enhancements
+- Improved error handling and logging for WebSocket channel operations
+- Enhanced concurrency safety with proper mutex usage throughout request dispatchers
+- Request-level failure isolation - single request failures no longer crash entire process
+
+---
+
 ## 2.0.5 - (9-15-2025)
 
 ### Enhancements
@@ -313,21 +409,16 @@ response, err := client.Do("https://tls.peet.ws/api/all", cycletls.Options{
 | Firefox 141 | `t13d1717h2_5b57614c22b0_f2748d6cd58d` |
 | Chrome 138 | `t13d1517h2_8daaf6152771_7e51fdad25f2` |
 
-### ⚠️ BREAKING CHANGES ⚠️
+### Breaking Changes
 
-```
-🚨🚨🚨 CRITICAL BREAKING CHANGES 🚨🚨🚨
+**JavaScript/TypeScript code requires updates.**
 
-Your JavaScript/TypeScript code WILL BREAK if you don't update it!
-Do NOT upgrade to v2.0.0 without reading the migration guide below.
-
-❌ response.body is REMOVED
-✅ Use response.json(), response.text(), etc. instead
-```
+- `response.body` removed
+- Use `response.json()`, `response.text()`, etc. instead
 
 ---
 
-#### 🚨 CRITICAL CHANGES (WILL BREAK YOUR CODE)
+#### Required Changes
 
 | Change Type | Old (v1.x) | New (v2.0.0) | Status |
 |-------------|------------|--------------|--------|
@@ -337,24 +428,24 @@ Do NOT upgrade to v2.0.0 without reading the migration guide below.
 
 ---
 
-#### 📋 DETAILED BREAKING CHANGES
+#### Detailed Breaking Changes
 
-**1. ⚠️ Response Body Access (CRITICAL)**
+**1. Response Body Access**
 - Direct `response.body` access **REMOVED**
 - Must use: `response.json()`, `response.text()`, `response.arrayBuffer()`, or `response.blob()` methods
 - Impact: **ALL existing code that accesses response.body will break**
 
-**2. ⚠️ Form Data Headers (RECOMMENDED)**
+**2. Form Data Headers**
 - Manual `Content-Type: multipart/form-data` headers **DEPRECATED**
 - Must use: `formData.getHeaders()` instead
 - Impact: **Form uploads may fail without proper boundary headers**
 
-**3. ⚠️ Async Response Methods (BEHAVIORAL CHANGE)**
+**3. Async Response Methods**
 - All response data access is now asynchronous and returns Promises
 - Must use `await` or `.then()` with response methods
 - Impact: **Synchronous response handling will not work**
 
-**4. ✨ NEW API Methods (ADDITIONS - NON-BREAKING)**
+**4. New API Methods (non-breaking)**
 - Added `cycleTLS.ws()`, `cycleTLS.webSocket()` for WebSocket connections
 - Added `cycleTLS.sse()`, `cycleTLS.eventSource()` for Server-Sent Events
 - Added HTTP method shortcuts: `cycleTLS.get()`, `cycleTLS.post()`, etc.
@@ -362,9 +453,9 @@ Do NOT upgrade to v2.0.0 without reading the migration guide below.
 
 ---
 
-### 🔄 Quick Migration Examples
+### Migration Examples
 
-#### ⚠️ JavaScript/TypeScript: Response Handling (BREAKING)
+#### JavaScript/TypeScript: Response Handling
 ```javascript
 // ❌ OLD (v1.x)
 const response = await cycleTLS(url, options);
@@ -376,9 +467,9 @@ const data = await response.json(); // or .text(), .arrayBuffer(), .blob()
 console.log(data);
 ```
 
-#### ✨ New Features - WebSocket & SSE
+#### New Features - WebSocket & SSE
 
-##### WebSocket Implementation
+##### WebSocket
 ```javascript
 // JavaScript/TypeScript - WebSocket connection
 const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
@@ -417,7 +508,7 @@ if err != nil {
 }
 ```
 
-##### Server-Sent Events Implementation
+##### Server-Sent Events
 ```javascript
 // JavaScript/TypeScript - SSE connection
 const sseResponse = await cycleTLS.sse('https://example.com/events', {
@@ -459,8 +550,8 @@ for scanner.Scan() {
 }
 ```
 
-##### Connection Reuse Performance Enhancement
-Connection reuse significantly reduces TLS handshake overhead by maintaining persistent connections to the same host:
+##### Connection Reuse
+Connection reuse reduces TLS handshake overhead through persistent connections:
 
 ```javascript
 // JavaScript/TypeScript - Automatic connection reuse
@@ -531,24 +622,20 @@ sseClient := cycletls.NewSSEClient(httpClient, headers)
 
 ---
 
-### 🔄 MIGRATION GUIDE (v1.x → v2.0.0)
+### Migration Guide (v1.x to v2.0.0)
 
-```
-🛠️ STEP-BY-STEP MIGRATION CHECKLIST
+**Required changes:**
 
-□ 1. Update all response.body references
-□ 2. Fix form data headers
-□ 3. Add error handling for async methods
-□ 4. (Optional) Use new API features
-```
-
-**⚠️ REQUIRED CHANGES - Your code will break without these updates:**
+1. Update all `response.body` references
+2. Fix form data headers
+3. Add error handling for async methods
+4. (Optional) Use new API features
 
 ---
 
-#### ⚠️ STEP 1: Update Response Handling (REQUIRED)
+#### Step 1: Update Response Handling
 
-**🚨 CRITICAL: This change affects ALL existing code**
+This change affects all existing code.
 
 ```javascript
 // ❌ OLD (v1.x) - THIS WILL NO LONGER WORK
@@ -575,7 +662,7 @@ const blob = await response.blob();
 console.log(blob);
 ```
 
-**📝 Quick Fix Pattern:**
+**Quick fix:**
 ```javascript
 // Find and replace in your codebase:
 // OLD: response.body
@@ -585,9 +672,9 @@ console.log(blob);
 
 ---
 
-#### ⚠️ STEP 2: Update Form Data Headers (STRONGLY RECOMMENDED)
+#### Step 2: Update Form Data Headers
 
-**🔧 ISSUE: Manual Content-Type headers break multipart boundaries**
+Manual Content-Type headers break multipart boundaries.
 
 ```javascript
 // ❌ OLD (v1.x) - WILL CAUSE UPLOAD FAILURES
@@ -612,14 +699,13 @@ const response = await cycleTLS(url, {
 const result = await response.json(); // ✅ Parse response too!
 ```
 
-**📝 Why This Matters:**
-Multipart form data requires unique boundaries. Manual headers miss this critical detail.
+Multipart form data requires unique boundaries. Manual headers miss this detail.
 
 ---
 
-#### ⚠️ STEP 3: Add Error Handling (RECOMMENDED)
+#### Step 3: Add Error Handling
 
-**🛡️ PROTECTION: Response parsing can now fail**
+Response parsing can fail.
 
 ```javascript
 // ✅ ROBUST ERROR HANDLING
@@ -644,31 +730,29 @@ try {
 }
 ```
 
-**🔍 Common Errors to Handle:**
+Common errors:
 - **JSON parsing errors**: Server returned non-JSON data
 - **Network errors**: Connection failed
 - **HTTP errors**: 4xx/5xx status codes
 
 ---
 
-#### ✨ STEP 4: Explore New Features (OPTIONAL)
-
-**🎉 BONUS: Take advantage of new capabilities**
+#### Step 4: Explore New Features (Optional)
 
 ```javascript
-// ✨ HTTP METHOD SHORTCUTS (cleaner code)
+// HTTP method shortcuts
 const getResponse = await cycleTLS.get(url, options);
 const postResponse = await cycleTLS.post(url, options);
 const putResponse = await cycleTLS.put(url, options);
 const deleteResponse = await cycleTLS.delete(url, options);
 // ... and more!
 
-// ⚠️ Still need to parse responses!
+// Still need to parse responses
 const data = await getResponse.json();
 ```
 
 ```javascript
-// ✨ WEBSOCKET CONNECTIONS
+// WebSocket connections
 const wsResponse = await cycleTLS.ws('wss://echo.websocket.org', {
   ja3: 'your_ja3_string',
   userAgent: 'your_user_agent'
@@ -681,7 +765,7 @@ if (wsResponse.status === 101) {
 ```
 
 ```javascript
-// ✨ SERVER-SENT EVENTS
+// Server-sent events
 const sseResponse = await cycleTLS.sse('https://example.com/events', {
   ja3: 'your_ja3_string',
   userAgent: 'your_user_agent'
@@ -693,7 +777,7 @@ console.log('SSE events:', eventData);
 ```
 
 ```javascript
-// ✨ STREAMING RESPONSES (for large data)
+// Streaming responses
 const response = await cycleTLS('https://example.com/large-file', {
   responseType: 'stream'
 });
@@ -709,7 +793,7 @@ stream.on('end', () => {
 
 ---
 
-### 🐛 Bug Fixes
+### Bug Fixes
 - Fix uncaught `ESRCH` on `SIGINT`/`SIGTERM` signals [#370](https://github.com/Danny-Dasilva/CycleTLS/issues/370)
 - Improved error handling for Windows systems
 - Fixed syntax issues with redirects
@@ -719,9 +803,7 @@ stream.on('end', () => {
 
 ---
 
-### ✅ What Remains Unchanged (Backward Compatible)
-
-**🎯 GOOD NEWS: These parts of your code don't need changes**
+### Unchanged (Backward Compatible)
 
 | Category | Details | Status |
 |----------|---------|--------|
@@ -731,11 +813,7 @@ stream.on('end', () => {
 | **Lifecycle Methods** | `cycleTLS.exit()`, `initCycleTLS()` | ✅ **Unchanged** |
 | **Golang API** | All Go package methods and types | ✅ **100% Compatible** |
 
-**📋 What This Means:**
-- Your request configuration stays the same
-- Your TLS fingerprinting setup works unchanged
-- Your proxy and authentication logic is preserved
-- Only response parsing needs updates
+Request configuration, TLS fingerprinting, and proxy settings stay the same. Only response parsing changes.
 
 ## 1.0.26 - (2-16-2024)
 ### Release Highlights

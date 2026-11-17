@@ -1,4 +1,3 @@
-const initCycleTLS = require("../dist/index.js");
 const { withCycleTLS } = require("./test-utils.js");
 
 jest.setTimeout(10000);

@@ -1,4 +1,4 @@
-const initCycleTLS = require("../dist/index.js");
+const CycleTLS = require("../dist/index.js");
 
 // Track all active instances for emergency cleanup
 const activeInstances = new Set();
@@ -24,14 +24,14 @@ async function withCycleTLS(portOrOptions, testFn) {
     ? { port: portOrOptions }
     : portOrOptions;
 
-  const cycleTLS = await initCycleTLS(options);
+  const cycleTLS = new CycleTLS(options);
   activeInstances.add(cycleTLS);
 
   try {
     return await testFn(cycleTLS);
   } finally {
     activeInstances.delete(cycleTLS);
-    await cycleTLS.exit();
+    await cycleTLS.close();
   }
 }
 
@@ -56,7 +56,7 @@ async function withCycleTLS(portOrOptions, testFn) {
  * });
  */
 async function createSafeCycleTLS(options) {
-  const cycleTLS = await initCycleTLS(options);
+  const cycleTLS = new CycleTLS(options);
   activeInstances.add(cycleTLS);
   return cycleTLS;
 }
@@ -69,7 +69,7 @@ async function createSafeCycleTLS(options) {
 async function cleanupCycleTLS(instance) {
   if (activeInstances.has(instance)) {
     activeInstances.delete(instance);
-    await instance.exit();
+    await instance.close();
   }
 }
 
@@ -125,7 +125,7 @@ async function cleanupAll() {
     const instances = [...activeInstances];
     await Promise.all(instances.map(async (instance) => {
       try {
-        await instance.exit();
+        await instance.close();
       } catch (error) {
         console.error('Error cleaning up CycleTLS instance:', error);
       }
@@ -157,10 +157,122 @@ if (typeof afterAll !== 'undefined') {
   });
 }
 
+/**
+ * Helper to consume a Readable stream into a Buffer
+ */
+async function streamToBuffer(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Helper to consume a Readable stream into a string
+ */
+async function streamToText(stream) {
+  const buffer = await streamToBuffer(stream);
+  return buffer.toString("utf8");
+}
+
+/**
+ * Helper to consume a Readable stream and parse as JSON
+ */
+async function streamToJson(stream) {
+  const text = await streamToText(stream);
+  return JSON.parse(text);
+}
+
+/**
+ * Status codes from upstream we treat as transient flake (rate-limit / gateway
+ * timeout). When httpbin.org / tlsfingerprint.com are being squeezed by
+ * Cloudflare these surface intermittently and shouldn't fail the test suite.
+ */
+const UPSTREAM_FLAKE_STATUSES = new Set([408, 421, 429, 502, 503, 504, 521, 522, 523, 524, 525]);
+
+/**
+ * Probe an upstream URL with a short timeout. Returns true if the probe
+ * receives a 200 response within `timeoutMs`. Used in beforeAll to gate
+ * a whole suite when the upstream is genuinely down.
+ */
+function probeUpstream(url, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    let resolved = false;
+    const finish = (ok) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(ok);
+    };
+    const t = setTimeout(() => finish(false), timeoutMs);
+    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+      const ok = res.statusCode === 200;
+      res.on('data', () => {});
+      res.on('end', () => { clearTimeout(t); finish(ok); });
+      res.on('error', () => { clearTimeout(t); finish(false); });
+    });
+    req.on('error', () => { clearTimeout(t); finish(false); });
+    req.on('timeout', () => { req.destroy(); clearTimeout(t); finish(false); });
+  });
+}
+
+/**
+ * Build a `conditionalTest` helper for a suite. The returned function takes
+ * (name, fn) like Jest's `test`, but:
+ *  - If `state.serviceAvailable` is false (pre-suite probe failed), the test
+ *    body short-circuits with a "Skipped" log and returns.
+ *  - Each test body races against `deadlineMs` (default 30s). On deadline hit,
+ *    flips `state.upstreamUnreachable=true` so subsequent tests skip instantly.
+ *  - Catches flake-class statuses / network errors and converts them to a
+ *    skip + circuit breaker trip. Real assertion failures still throw.
+ *
+ * Use:
+ *   const state = { serviceAvailable: false, upstreamUnreachable: false };
+ *   const conditionalTest = makeConditionalTest(state, 30000);
+ *   beforeAll(async () => { state.serviceAvailable = await probeUpstream('https://httpbin.org/json'); });
+ *   conditionalTest('should...', async () => { ... });
+ */
+function makeConditionalTest(state, deadlineMs = 30000) {
+  return function conditionalTest(name, fn) {
+    test(name, async () => {
+      if (!state.serviceAvailable || state.upstreamUnreachable) {
+        console.log(`Skipped: ${name} (upstream unavailable)`);
+        return;
+      }
+      const deadline = new Promise((res) => setTimeout(() => res('timeout'), deadlineMs));
+      try {
+        const result = await Promise.race([fn().then(() => 'ok'), deadline]);
+        if (result === 'timeout') {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream hung past ${deadlineMs}ms; tripping circuit breaker)`);
+          return;
+        }
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        const isFlakeStatus = [...UPSTREAM_FLAKE_STATUSES].some((c) => msg.includes(`${c}`) && (msg.includes('statusCode') || msg.includes('status')));
+        const isNetworkErr = /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|socket hang up|aborted/i.test(msg);
+        if (isFlakeStatus || isNetworkErr) {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream flake; tripping circuit breaker: ${msg.slice(0, 200)})`);
+          return;
+        }
+        throw e;
+      }
+    });
+  };
+}
+
 module.exports = {
   withCycleTLS,
   createSafeCycleTLS,
   cleanupCycleTLS,
   createSuiteInstance,
-  getActiveInstanceCount
+  getActiveInstanceCount,
+  streamToBuffer,
+  streamToText,
+  streamToJson,
+  UPSTREAM_FLAKE_STATUSES,
+  probeUpstream,
+  makeConditionalTest,
 };

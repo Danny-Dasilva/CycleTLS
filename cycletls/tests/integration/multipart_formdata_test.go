@@ -66,18 +66,19 @@ func TestMultipartFormDataMixed(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response := doHTTPBinRequestWithRetry(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
 		},
 		InsecureSkipVerify: true,
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
 
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake: status %d after retries", response.Status)
+			return
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 	var respData HttpBinResponse
@@ -131,18 +132,19 @@ func TestMultipartFormDataUpload(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response := doHTTPBinRequestWithRetry(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
 		},
 		InsecureSkipVerify: true,
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
 
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake: status %d after retries", response.Status)
+			return
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 	var respData HttpBinResponse
@@ -176,18 +178,19 @@ func TestMultipartFormDataText(t *testing.T) {
 	contentType := multipartWriter.FormDataContentType()
 	multipartWriter.Close()
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response := doHTTPBinRequestWithRetry(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: requestBody.String(),
 		Headers: map[string]string{
 			"Content-Type": contentType,
 		},
 		InsecureSkipVerify: true,
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
-	}
 
 	if response.Status != 200 {
+		if isUpstreamFlake(response.Status) {
+			t.Skipf("httpbin upstream flake: status %d after retries", response.Status)
+			return
+		}
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 	var respData HttpBinResponse

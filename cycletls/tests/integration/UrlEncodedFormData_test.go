@@ -30,24 +30,24 @@ func TestUrlEncodedFormDataUpload(t *testing.T) {
 	form.Add("key1", "value1")
 	form.Add("key2", "value2")
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
-		Body: form.Encode(),
+	response := doHTTPBinRequestWithRetry(t, client, "http://httpbin.org/post", cycletls.Options{
+		// httpbin.org/tlsfingerprint.com fixture cert may be expired/rotated; we test the outgoing TLS fingerprint and HTTP body, not the fixture's cert chain.
+		InsecureSkipVerify: true,
+		Body:               form.Encode(),
 		Headers: map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
 		},
 	}, "POST")
-	if err != nil {
-		t.Fatal("Request Failed: ", err)
+	if isUpstreamFlake(response.Status) {
+		t.Skipf("httpbin upstream flake after retries: status %d", response.Status)
 	}
-
 	if response.Status != 200 {
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
 	// Parse the JSON response
 	var respData FormResponse
-	err = json.Unmarshal([]byte(response.Body), &respData)
-	if err != nil {
+	if err := json.Unmarshal([]byte(response.Body), &respData); err != nil {
 		t.Fatal("Unmarshal Error: ", err)
 	}
 
