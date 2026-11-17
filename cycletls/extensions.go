@@ -103,7 +103,6 @@ func (c *CustomApplicationSettingsExtension) GetPreservedID() uint16 {
 	return c.OriginalID
 }
 
-
 // CustomCompressCertificateExtension preserves the original extension ID
 type CustomCompressCertificateExtension struct {
 	*utls.GenericExtension
@@ -331,9 +330,13 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 	case 0x0017: // Extended Master Secret
 		return &utls.ExtendedMasterSecretExtension{}
 	case 0x001b: // Compress Certificate
-		return NewCustomCompressCertificateExtension(extID, []utls.CertCompressionAlgo{
+		// Use the uTLS type, not a GenericExtension: uTLS only accepts the
+		// CompressedCertificate message that servers send in reply (Cloudflare
+		// does) when this extension has registered its algorithms on the conn.
+		// The bytes on the wire are the same.
+		return &utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
 			utls.CertCompressionBrotli,
-		})
+		}}
 	case 0x001c: // Record Size Limit
 		return NewCustomRecordSizeLimitExtension(extID, 0x4001)
 	case 0x0022: // Delegated Credentials - PROBLEMATIC EXTENSION
@@ -379,9 +382,10 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 	case 0x6399: // X25519Kyber768Draft00 (Post-Quantum) - 25497
 		return NewCustomPostQuantumExtension(extID, 0x6399)
 	case 0xfe0d: // Encrypted Client Hello (ECH) - 65037
-		if disableGrease {
-			return nil
-		}
+		// Sent even when disableGrease is set. 0xfe0d is a real extension ID
+		// that JA4 counts and hashes, so dropping it would change the
+		// fingerprint the caller asked for. The JA3 path (genMap) also sends it
+		// unconditionally.
 		return utls.BoringGREASEECH()
 	case 0xff01: // Renegotiation Info - 65281
 		return &utls.RenegotiationInfoExtension{
