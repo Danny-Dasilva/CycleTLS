@@ -5,6 +5,8 @@ on: [push]
 jobs:
   test:
     strategy:
+      # One platform hitting a flaky public host must not cancel the others.
+      fail-fast: false
       matrix:
         go-version: ['1.24']
         platform: [ubuntu-latest, macos-latest, windows-latest]
