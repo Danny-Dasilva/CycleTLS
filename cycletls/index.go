@@ -287,7 +287,7 @@ func buildHTTPRequest(request cycleTLSRequest, ctx context.Context) (*http.Reque
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	return req, nil
 }
@@ -409,7 +409,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -483,7 +483,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -553,9 +553,13 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		ServerName:         browser.ServerName,
 	}
 
-	// Prepare headers for WebSocket (preserving exact key casing and multi-value entries)
+	// Prepare headers for WebSocket (multi-value entries are kept).
+	// gorilla/websocket matches handshake headers (Host, Upgrade, Connection,
+	// Sec-Websocket-*) by canonical key, so this path keeps canonical keys.
 	headers := make(http.Header)
-	setRequestHeaders(headers, request.Options, false)
+	for k, values := range request.Options.requestHeaders() {
+		headers[http.CanonicalHeaderKey(k)] = append([]string(nil), values...)
+	}
 
 	// Create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(headers)
@@ -649,6 +653,14 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	// Don't close connections when finished - they'll be reused for the same host
 	// Instead, tell the roundtripper to keep this connection but close others
 	defer func() {
+		// With reuse off the client was built for this request alone and is
+		// dropped when we return, so keeping its connection only strands it.
+		// This runs after the deferred resp.Body.Close below, once the body
+		// has been streamed or the request has been cancelled.
+		if !res.options.Options.EnableConnectionReuse {
+			closeClientConnections(res.client.Transport)
+			return
+		}
 		// Use type assertion to access the roundTripper
 		if transport, ok := res.client.Transport.(*roundTripper); ok {
 			transport.CloseIdleConnections(hostPort)
@@ -682,6 +694,13 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		finalUrl = resp.Request.URL.String()
 	}
 
+	// Decode the body as it streams, so the client receives the payload and
+	// not the compressed bytes. fhttp does no decompression of its own. The
+	// Content-Encoding and Content-Length headers describe the compressed
+	// body, so drop them once we decode (net/http does the same).
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
+
 	{
 		// Checked encoder: on overflow (e.g. header value >= 64KB) send an error
 		// frame instead of a truncated response, so the reader stream stays synced.
@@ -712,7 +731,7 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 				break loop
 
 			default:
-				n, err := resp.Body.Read(chunkBuffer)
+				n, err := body.Read(chunkBuffer)
 
 				if res.req.Context().Err() != nil {
 					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)
@@ -769,6 +788,31 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	}
 }
 
+// decodeResponseBody returns the response body with its content codings
+// removed, so a dispatcher streams the payload and not the compressed bytes.
+// fhttp does no decompression of its own.
+//
+// When it decodes, it also removes the Content-Encoding and Content-Length
+// headers from resp, because they describe the compressed body (net/http does
+// the same). Call it before the response frame is built.
+//
+// HEAD, 204 and 304 responses have no body to decode, and a coding we don't
+// know is left alone: in those cases the body and headers pass through as they
+// are. Closing the result releases the decoders, not resp.Body.
+func decodeResponseBody(req *http.Request, resp *http.Response) io.ReadCloser {
+	if req.Method == http.MethodHead || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
+		return io.NopCloser(resp.Body)
+	}
+	decoded, ok := newDecodedBody(resp.Body, resp.Header.Values("Content-Encoding"))
+	if ok {
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength = -1
+		resp.Uncompressed = true
+	}
+	return decoded
+}
+
 // dispatchSSEAsync handles SSE connections asynchronously
 func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	defer func() {
@@ -782,6 +826,12 @@ func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		}
 		state.UnregisterRequest(res.options.RequestID)
 	}()
+
+	// With reuse off the SSE client was built for this stream alone. Registered
+	// before the deferred sseResp.Close so it runs after the stream is closed.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
 
 	// Connect to SSE endpoint
 	timeout := timeoutSeconds(res.options.Options.Timeout)
@@ -1777,6 +1827,16 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	)
 	if err != nil {
 		return Response{}, err
+	}
+
+	// With reuse off this client is not in the pool and serves only this
+	// request, so nothing else can be using its connections once we return.
+	// Close them here: the caller asked for a fresh connection per request, and
+	// a discarded client with no one left to close it just strands sockets.
+	// Registered before the deferred resp.Body.Close, so it runs after the
+	// body has been read.
+	if !options.EnableConnectionReuse {
+		defer closeClientConnections(httpClient.Transport)
 	}
 
 	// Create request using fhttp

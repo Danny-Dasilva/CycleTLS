@@ -550,6 +550,14 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 		defer res.cancel()
 	}
 
+	// With reuse off the client was built for this request alone and is dropped
+	// when we return, so its connections have to go with it. Registered before
+	// the deferred resp.Body.Close below, so it runs after the body has been
+	// streamed or the request has been cancelled.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
+
 	// Perform the HTTP request
 	timeout := timeoutMilliseconds(res.options.Options.Timeout)
 	resp, err := doRequestWithHeaderTimeout(res.ctx, res.cancel, res.client, res.req, timeout)
@@ -565,6 +573,13 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
 		finalUrl = resp.Request.URL.String()
 	}
+
+	// Decode the body as it streams, so the client receives the payload and
+	// not the compressed bytes. This also drops the Content-Encoding and
+	// Content-Length headers, so it has to run before the response frame is
+	// built.
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
 
 	// Send response frame
 	responseFrame, err := buildResponseFrame(res.options.RequestID, resp.StatusCode, finalUrl, resp.Header)
@@ -590,7 +605,7 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 			return
 		}
 
-		n, readErr := resp.Body.Read(chunkBuffer)
+		n, readErr := body.Read(chunkBuffer)
 
 		// Send any data we got before handling errors
 		if n > 0 {
@@ -621,6 +636,12 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 	limiter := res.limiter
 
+	// With reuse off the SSE client was built for this stream alone. Registered
+	// before the deferred resp.Body.Close so it runs after the stream is closed.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
+
 	// Perform the SSE HTTP request
 	timeout := timeoutMilliseconds(res.options.Options.Timeout)
 	resp, err := doRequestWithHeaderTimeout(res.ctx, res.cancel, res.client, res.req, timeout)
@@ -636,6 +657,11 @@ func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
 		finalUrl = resp.Request.URL.String()
 	}
+
+	// The client parses events out of the bytes it is sent, so a compressed
+	// event stream has to be decoded here like any other body.
+	body := decodeResponseBody(res.req, resp)
+	defer body.Close()
 
 	// Send response frame with headers
 	responseFrame, err := buildResponseFrame(res.options.RequestID, resp.StatusCode, finalUrl, resp.Header)
@@ -661,7 +687,7 @@ func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 			return
 		}
 
-		n, readErr := resp.Body.Read(chunkBuffer)
+		n, readErr := body.Read(chunkBuffer)
 
 		// Send any data we got before handling errors
 		if n > 0 {

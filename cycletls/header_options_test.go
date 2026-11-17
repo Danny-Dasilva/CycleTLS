@@ -33,8 +33,10 @@ func TestOptionsUnmarshalJSONSupportsMultiValueHeaders(t *testing.T) {
 	if got, want := options.Headers["accept"], "text/plain"; got != want {
 		t.Fatalf("Headers[accept] = %q, want %q", got, want)
 	}
-	if got := options.HeaderValues["accept"]; !reflect.DeepEqual(got, []string{"text/plain"}) {
-		t.Fatalf("HeaderValues[accept] = %#v, want [text/plain]", got)
+	// Only array values go into HeaderValues, so a later edit to Headers still
+	// changes what is sent.
+	if got, ok := options.HeaderValues["accept"]; ok {
+		t.Fatalf("HeaderValues[accept] = %#v, want no entry for a string value", got)
 	}
 }
 

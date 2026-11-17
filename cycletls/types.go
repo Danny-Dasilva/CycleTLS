@@ -48,8 +48,9 @@ type Options struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
-	// HeaderValues supports request headers with multiple values and exact key casing.
-	// It is populated automatically when JSON headers contain array values.
+	// HeaderValues holds request headers that carry more than one value. Each value
+	// is sent as its own header line. JSON decoding fills it for headers whose value
+	// is an array. When a key is in both Headers and HeaderValues, HeaderValues wins.
 	HeaderValues map[string][]string `json:"-"`
 	Body         string              `json:"body"`
 	BodyBytes    []byte              `json:"bodyBytes"` // New field for binary request data
@@ -110,7 +111,6 @@ func (options *Options) UnmarshalJSON(data []byte) error {
 		var single string
 		if err := json.Unmarshal(rawValue, &single); err == nil {
 			options.Headers[k] = single
-			options.HeaderValues[k] = []string{single}
 			continue
 		}
 
@@ -159,15 +159,32 @@ func (options Options) requestHeaders() map[string][]string {
 	return headers
 }
 
+// transportHeaderKeys are the request headers that fhttp and the round tripper
+// read or write under their canonical key (Request.write checks Header["Host"],
+// AddCookie and the round tripper set "Cookie" and "User-Agent"). A copy stored
+// under any other casing is sent as a second line next to the transport's own,
+// so these names keep the canonical key. Every other name keeps the caller's casing.
+var transportHeaderKeys = []string{"Host", "User-Agent", "Cookie"}
+
+func requestHeaderKey(name string) string {
+	for _, key := range transportHeaderKeys {
+		if strings.EqualFold(name, key) {
+			return key
+		}
+	}
+	return name
+}
+
 // setRequestHeaders writes the request headers onto an http.Header using direct
-// map assignment so the exact key casing is preserved (http.Header.Set would
+// map assignment so the caller's key casing is kept (http.Header.Set would
 // canonicalize the key) and multiple values are sent as repeated headers.
+// Host, User-Agent and Cookie are the exception: see transportHeaderKeys.
 func setRequestHeaders(headers http.Header, options Options, skipContentLength bool) {
 	for k, values := range options.requestHeaders() {
 		if skipContentLength && strings.EqualFold(k, "Content-Length") {
 			continue
 		}
-		headers[k] = append([]string(nil), values...)
+		headers[requestHeaderKey(k)] = append([]string(nil), values...)
 	}
 }
 

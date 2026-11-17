@@ -23,6 +23,10 @@ import (
 const (
 	chrome  = "chrome"  //chrome User agent enum
 	firefox = "firefox" //firefox User agent enum
+
+	// maxDecompressedBody caps gzip/deflate/brotli inflate so io.ReadAll
+	// cannot grow without bound on a malicious Content-Encoding payload.
+	maxDecompressedBody = 64 << 20 // 64 MiB
 )
 
 // Cipher suite mappings from hex to uTLS constants
@@ -108,14 +112,25 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 	}
 }
 
+func readLimited(r io.Reader) ([]byte, error) {
+	limited := io.LimitReader(r, maxDecompressedBody+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxDecompressedBody {
+		return nil, errors.New("decompressed body exceeds size limit")
+	}
+	return data, nil
+}
+
 func gUnzipData(data []byte) (resData []byte, err error) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return []byte{}, err
 	}
 	defer gz.Close()
-	respBody, err := io.ReadAll(gz)
-	return respBody, err
+	return readLimited(gz)
 }
 func enflateData(data []byte) (resData []byte, err error) {
 	zr, err := zlib.NewReader(bytes.NewReader(data))
@@ -123,13 +138,11 @@ func enflateData(data []byte) (resData []byte, err error) {
 		return []byte{}, err
 	}
 	defer zr.Close()
-	enflated, err := io.ReadAll(zr)
-	return enflated, err
+	return readLimited(zr)
 }
 func unBrotliData(data []byte) (resData []byte, err error) {
 	br := brotli.NewReader(bytes.NewReader(data))
-	respBody, err := io.ReadAll(br)
-	return respBody, err
+	return readLimited(br)
 }
 
 func ModernChromeSpec(forceHTTP1 bool) *utls.ClientHelloSpec {
@@ -1051,6 +1064,24 @@ func createTlsVersion(ver uint16, disableGrease bool) (tlsMaxVersion uint16, tls
 	return
 }
 
+// extensionTrustAnchors is the trust_anchors extension from
+// draft-ietf-tls-trust-anchor-ids. 0xca34 (51764) is the pre-standard
+// codepoint BoringSSL uses (TLSEXT_TYPE_trust_anchors); IANA has not assigned
+// one yet. Chrome sends it from version 141 when the TLSTrustAnchorIDs feature
+// is on.
+const extensionTrustAnchors uint16 = 0xca34
+
+// newTrustAnchorsExtension builds the trust_anchors extension the way Chrome
+// sends it when it has no trust anchor IDs from DNS: a zero-length
+// TrustAnchorIdentifierList, which is the two bytes 00 00 on the wire. An empty
+// extension body is not valid; BoringSSL servers answer it with decode_error.
+func newTrustAnchorsExtension() *utls.GenericExtension {
+	return &utls.GenericExtension{
+		Id:   extensionTrustAnchors,
+		Data: []byte{0x00, 0x00},
+	}
+}
+
 func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 	extMap = map[string]utls.TLSExtension{
 		"0": &utls.SNIExtension{},
@@ -1147,6 +1178,7 @@ func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 			Data: []byte{0x00, 0x03, 0x02, 0x68, 0x32},
 		},
 		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, // Channel ID extension
+		"51764": newTrustAnchorsExtension(),                          // trust_anchors
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},

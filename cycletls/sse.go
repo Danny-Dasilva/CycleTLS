@@ -53,7 +53,15 @@ func NewSSEClient(client *http.Client, headers http.Header) *SSEClient {
 	}
 
 	// Set Accept header to text/event-stream if not already set
-	if headers.Get("Accept") == "" {
+	// Header keys keep the caller's casing, so look for Accept in any casing.
+	hasAccept := false
+	for k, vs := range headers {
+		if strings.EqualFold(k, "Accept") && len(vs) > 0 && vs[0] != "" {
+			hasAccept = true
+			break
+		}
+	}
+	if !hasAccept {
 		headers.Set("Accept", "text/event-stream")
 	}
 
@@ -84,11 +92,10 @@ func (sse *SSEClient) Connect(ctx context.Context, urlStr string) (*SSEResponse,
 		return nil, err
 	}
 
-	// Add headers to the request
+	// Add headers to the request.
+	// Assign the slices directly: Header.Add would rewrite the key casing.
 	for k, vs := range sse.Headers {
-		for _, v := range vs {
-			req.Header.Add(k, v)
-		}
+		req.Header[k] = append([]string(nil), vs...)
 	}
 
 	// Add Last-Event-ID header if available
@@ -132,11 +139,10 @@ func (sse *SSEClient) ConnectWithTimeout(ctx context.Context, urlStr string, tim
 		return nil, err
 	}
 
-	// Add headers to the request
+	// Add headers to the request.
+	// Assign the slices directly: Header.Add would rewrite the key casing.
 	for k, vs := range sse.Headers {
-		for _, v := range vs {
-			req.Header.Add(k, v)
-		}
+		req.Header[k] = append([]string(nil), vs...)
 	}
 
 	// Add Last-Event-ID header if available
