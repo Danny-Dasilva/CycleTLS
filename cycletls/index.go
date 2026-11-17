@@ -287,7 +287,7 @@ func buildHTTPRequest(request cycleTLSRequest, ctx context.Context) (*http.Reque
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	return req, nil
 }
@@ -409,7 +409,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -483,7 +483,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	if !hasRequestHeader(request.Options, "Host") {
 		req.Header["Host"] = []string{u.Host}
 	}
-	setHeaderExact(req.Header, "user-agent", request.Options.UserAgent)
+	setHeaderExact(req.Header, "User-Agent", request.Options.UserAgent)
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -553,9 +553,13 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		ServerName:         browser.ServerName,
 	}
 
-	// Prepare headers for WebSocket (preserving exact key casing and multi-value entries)
+	// Prepare headers for WebSocket (multi-value entries are kept).
+	// gorilla/websocket matches handshake headers (Host, Upgrade, Connection,
+	// Sec-Websocket-*) by canonical key, so this path keeps canonical keys.
 	headers := make(http.Header)
-	setRequestHeaders(headers, request.Options, false)
+	for k, values := range request.Options.requestHeaders() {
+		headers[http.CanonicalHeaderKey(k)] = append([]string(nil), values...)
+	}
 
 	// Create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(headers)
