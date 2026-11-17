@@ -19,7 +19,7 @@ func TestCookieJar(t *testing.T) {
 	}
 
 	// First request to set cookies
-	firstResponse, err := client.Do("https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
+	firstResponse, err := doUpstream(t, client, "https://httpbin.org/cookies/set?a=1&b=2&c=3", cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent:       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -34,7 +34,7 @@ func TestCookieJar(t *testing.T) {
 	jar.SetCookies(firstURL, firstResponse.Cookies)
 
 	// Second request to verify cookies
-	secondResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	secondResponse, err := doUpstream(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -83,7 +83,7 @@ func TestCookieJarMultipleDomains(t *testing.T) {
 	}
 
 	// Set cookies for httpbin.org
-	httpbinResponse, err := client.Do("https://httpbin.org/cookies/set?httpbin=test", cycletls.Options{
+	httpbinResponse, err := doUpstream(t, client, "https://httpbin.org/cookies/set?httpbin=test", cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent:       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -97,7 +97,7 @@ func TestCookieJarMultipleDomains(t *testing.T) {
 	jar.SetCookies(httpbinURL, httpbinResponse.Cookies)
 
 	// Verify cookies are sent to the correct domain
-	verifyResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	verifyResponse, err := doUpstream(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -125,7 +125,7 @@ func TestCookieJarPersistence(t *testing.T) {
 	}
 
 	// First request - set initial cookies
-	firstResponse, err := client.Do("https://httpbin.org/cookies/set?session=12345", cycletls.Options{
+	firstResponse, err := doUpstream(t, client, "https://httpbin.org/cookies/set?session=12345", cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent:       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -139,7 +139,7 @@ func TestCookieJarPersistence(t *testing.T) {
 	jar.SetCookies(firstURL, firstResponse.Cookies)
 
 	// Second request - add more cookies
-	secondResponse, err := client.Do("https://httpbin.org/cookies/set?user=alice", cycletls.Options{
+	secondResponse, err := doUpstream(t, client, "https://httpbin.org/cookies/set?user=alice", cycletls.Options{
 		Body:            "",
 		Ja3:             "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent:       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
@@ -156,7 +156,7 @@ func TestCookieJarPersistence(t *testing.T) {
 	jar.SetCookies(secondURL, secondResponse.Cookies)
 
 	// Third request - verify all cookies are maintained
-	finalResponse, err := client.Do("https://httpbin.org/cookies", cycletls.Options{
+	finalResponse, err := doUpstream(t, client, "https://httpbin.org/cookies", cycletls.Options{
 		Body:      "",
 		Ja3:       "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",

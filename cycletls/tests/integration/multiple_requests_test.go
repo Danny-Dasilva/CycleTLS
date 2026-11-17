@@ -65,7 +65,7 @@ func TestDelayResponseOrder(t *testing.T) {
 	responses := make([]cycletls.Response, len(requests))
 	for i, req := range requests {
 
-		resp, err := client.Do(req.URL, req.Options, req.Method)
+		resp, err := doUpstream(t, client, req.URL, req.Options, req.Method)
 		if err != nil {
 			t.Errorf("Request %s failed: %v", req.Name, err)
 			continue
