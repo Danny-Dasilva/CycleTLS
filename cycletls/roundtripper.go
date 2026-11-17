@@ -677,8 +677,17 @@ func (rt *roundTripper) pruneAddressMutexesLocked() {
 // CloseIdleConnections with no address closes the cached connections, the
 // HTTP/3 transports and the inner transports' idle connections, and stops the
 // cleanup goroutine.
+//
+// An HTTPS proxy that speaks HTTP/2 leaves one more connection behind: the
+// dialer keeps it for later CONNECTs, and closing a tunnel only closes its
+// stream. The dialer is built per client, so with reuse off it is ours to
+// close. Pooled clients do not come through here.
 func (rt *roundTripper) closeAll() {
 	rt.CloseIdleConnections()
+
+	if d, ok := rt.dialer.(*connectDialer); ok {
+		d.closeCachedH2()
+	}
 }
 
 // closeClientConnections closes what a client's transport is holding, if that

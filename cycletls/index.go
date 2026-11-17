@@ -653,6 +653,14 @@ func dispatcherAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	// Don't close connections when finished - they'll be reused for the same host
 	// Instead, tell the roundtripper to keep this connection but close others
 	defer func() {
+		// With reuse off the client was built for this request alone and is
+		// dropped when we return, so keeping its connection only strands it.
+		// This runs after the deferred resp.Body.Close below, once the body
+		// has been streamed or the request has been cancelled.
+		if !res.options.Options.EnableConnectionReuse {
+			closeClientConnections(res.client.Transport)
+			return
+		}
 		// Use type assertion to access the roundTripper
 		if transport, ok := res.client.Transport.(*roundTripper); ok {
 			transport.CloseIdleConnections(hostPort)
@@ -786,6 +794,12 @@ func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		}
 		state.UnregisterRequest(res.options.RequestID)
 	}()
+
+	// With reuse off the SSE client was built for this stream alone. Registered
+	// before the deferred sseResp.Close so it runs after the stream is closed.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
 
 	// Connect to SSE endpoint
 	timeout := timeoutSeconds(res.options.Options.Timeout)

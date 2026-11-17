@@ -550,6 +550,14 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 		defer res.cancel()
 	}
 
+	// With reuse off the client was built for this request alone and is dropped
+	// when we return, so its connections have to go with it. Registered before
+	// the deferred resp.Body.Close below, so it runs after the body has been
+	// streamed or the request has been cancelled.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
+
 	// Perform the HTTP request
 	timeout := timeoutMilliseconds(res.options.Options.Timeout)
 	resp, err := doRequestWithHeaderTimeout(res.ctx, res.cancel, res.client, res.req, timeout)
@@ -620,6 +628,12 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 // dispatchSSEAsyncV2 handles SSE connections with flow control using native V2 protocol.
 func dispatchSSEAsyncV2(res fullRequest, sender *frameSender) {
 	limiter := res.limiter
+
+	// With reuse off the SSE client was built for this stream alone. Registered
+	// before the deferred resp.Body.Close so it runs after the stream is closed.
+	if !res.options.Options.EnableConnectionReuse {
+		defer closeClientConnections(res.client.Transport)
+	}
 
 	// Perform the SSE HTTP request
 	timeout := timeoutMilliseconds(res.options.Options.Timeout)
