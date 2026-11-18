@@ -65,7 +65,7 @@ describe("Connection Reuse Tests", () => {
   
   test("Should reuse connections for multiple requests to same host", async () => {
     // Initialize CycleTLS
-    const client = new CycleTLS();
+    const client = new CycleTLS({ port: 0 });
     
     // Options for requests
     const options = {

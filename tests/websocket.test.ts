@@ -13,7 +13,7 @@ describe('WebSocket Tests', () => {
   let serverUrl: string;
 
   beforeAll(async () => {
-    cycleTLS = new CycleTLS();
+    cycleTLS = new CycleTLS({ port: 0 });
 
     // Create a local WebSocket server for testing (similar to Go tests)
     httpServer = http.createServer();

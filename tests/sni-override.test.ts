@@ -56,7 +56,7 @@ describe("Custom SNI (serverName) support", () => {
   });
 
   test("Should send custom SNI while keeping custom Host header", async () => {
-    const cycleTLS = new CycleTLS();
+    const cycleTLS = new CycleTLS({ port: 0 });
 
     const url = `https://127.0.0.1:${port}/`; // connect by IP to ensure SNI matters
 
