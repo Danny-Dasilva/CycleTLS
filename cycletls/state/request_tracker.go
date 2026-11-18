@@ -15,7 +15,7 @@ const (
 
 // requestEntry stores a cancel function alongside its registration time.
 type requestEntry struct {
-	cancel     context.CancelFunc
+	cancel       context.CancelFunc
 	registeredAt time.Time
 }
 

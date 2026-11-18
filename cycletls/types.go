@@ -124,11 +124,19 @@ type Options struct {
 }
 
 // UnmarshalJSON accepts both legacy string header values and multi-value arrays.
+//
+// It also gives enableConnectionReuse its documented default: a request that
+// leaves the field out (or sends null) reuses connections, and only an
+// explicit false turns reuse off. This applies to JSON requests, which is
+// every request from the Node clients. A Go caller who builds Options as a
+// struct literal still gets the bool zero value, false.
 func (options *Options) UnmarshalJSON(data []byte) error {
 	type optionsAlias Options
 	var raw struct {
 		optionsAlias
 		Headers map[string]json.RawMessage `json:"headers"`
+		// Shadows the bool in Options so "absent" can be told from false.
+		EnableConnectionReuse *bool `json:"enableConnectionReuse"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -136,6 +144,7 @@ func (options *Options) UnmarshalJSON(data []byte) error {
 	}
 
 	*options = Options(raw.optionsAlias)
+	options.EnableConnectionReuse = raw.EnableConnectionReuse == nil || *raw.EnableConnectionReuse
 	options.Headers = make(map[string]string, len(raw.Headers))
 	options.HeaderValues = make(map[string][]string, len(raw.Headers))
 
@@ -294,6 +303,10 @@ type Response struct {
 	Headers   map[string]string `json:"headers"`
 	Cookies   []*nhttp.Cookie   `json:"cookies"`
 	FinalUrl  string            `json:"finalUrl"`
+	// HeaderValues holds every value of each response header, for headers a
+	// server sends more than once (Set-Cookie, Link, Via). Headers keeps only
+	// the first value of each.
+	HeaderValues map[string][]string `json:"headerValues,omitempty"`
 }
 
 // JSONBody parses the response body as JSON and returns a map.

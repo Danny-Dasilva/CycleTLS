@@ -86,52 +86,12 @@ func newSSEScanner(r io.Reader) *bufio.Scanner {
 
 // Connect establishes an SSE connection and returns an SSE response
 func (sse *SSEClient) Connect(ctx context.Context, urlStr string) (*SSEResponse, error) {
-	// Create request with the provided context
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add headers to the request.
-	// Assign the slices directly: Header.Add would rewrite the key casing.
-	for k, vs := range sse.Headers {
-		req.Header[k] = append([]string(nil), vs...)
-	}
-
-	// Add Last-Event-ID header if available
-	if sse.LastEventID != "" {
-		req.Header.Set("Last-Event-ID", sse.LastEventID)
-	}
-
-	// Send the request
-	resp, err := sse.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, errors.New("unexpected status code: " + strconv.Itoa(resp.StatusCode))
-	}
-
-	// Check content type
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "text/event-stream") {
-		resp.Body.Close()
-		return nil, errors.New("unexpected content type: " + contentType)
-	}
-
-	// Create and return SSE response
-	return &SSEResponse{
-		Response: resp,
-		Scanner:  newSSEScanner(resp.Body),
-		client:   sse,
-	}, nil
+	return sse.ConnectWithTimeout(ctx, urlStr, 0)
 }
 
 // ConnectWithTimeout establishes an SSE connection with a header timeout.
 // The timeout only applies until headers arrive; it does not cancel streaming.
+// A timeout of zero or less means no timeout.
 func (sse *SSEClient) ConnectWithTimeout(ctx context.Context, urlStr string, timeout time.Duration) (*SSEResponse, error) {
 	// Create request with the provided context
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
@@ -145,13 +105,21 @@ func (sse *SSEClient) ConnectWithTimeout(ctx context.Context, urlStr string, tim
 		req.Header[k] = append([]string(nil), vs...)
 	}
 
+	return sse.ConnectRequest(req, timeout)
+}
+
+// ConnectRequest opens an event stream with a request the caller has built,
+// so the method, body, headers and header order are the caller's own. The
+// timeout only applies until headers arrive. A timeout of zero or less means
+// no timeout.
+func (sse *SSEClient) ConnectRequest(req *http.Request, timeout time.Duration) (*SSEResponse, error) {
 	// Add Last-Event-ID header if available
 	if sse.LastEventID != "" {
 		req.Header.Set("Last-Event-ID", sse.LastEventID)
 	}
 
 	// Send the request with header timeout
-	resp, err := doRequestWithHeaderTimeout(ctx, nil, *sse.HTTPClient, req, timeout)
+	resp, err := doRequestWithHeaderTimeout(req.Context(), nil, *sse.HTTPClient, req, timeout)
 	if err != nil {
 		return nil, err
 	}

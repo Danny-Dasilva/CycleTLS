@@ -303,6 +303,26 @@ func buildHTTPRequest(request cycleTLSRequest, ctx context.Context) (*http.Reque
 	return req, nil
 }
 
+// requestError is what a dispatch function returns when it cannot build the
+// request. The dispatchers turn err into an error frame for this request only,
+// so bad input (an unknown proxy scheme, a bad method, a bad URL) never takes
+// the process down with it.
+func requestError(request cycleTLSRequest, err error) fullRequest {
+	return fullRequest{options: request, err: err}
+}
+
+// safeProcessRequest runs build and turns a panic into a request error.
+// readSocket builds requests on its own goroutine, where an escaped panic
+// would end the process and every other request with it.
+func safeProcessRequest(request cycleTLSRequest, build func(cycleTLSRequest) fullRequest) (result fullRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = requestError(request, fmt.Errorf("invalid request: %v", r))
+		}
+	}()
+	return build(request)
+}
+
 // ready Request
 func processRequest(request cycleTLSRequest) (result fullRequest) {
 	// Handle protocol-specific clients first (they build their own browser config)
@@ -328,7 +348,8 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 		request.Options.Proxy,
 	)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("failed to create HTTP client: %w", err))
 	}
 
 	// Handle both string body and byte body
@@ -340,7 +361,8 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	}
 	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, bodyReader)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("invalid request: %w", err))
 	}
 	headerorder := []string{}
 	//master header order, all your headers will be ordered based on this list and anything extra will be appended to the end
@@ -408,6 +430,7 @@ func processRequest(request cycleTLSRequest) (result fullRequest) {
 	//set our Host header
 	u, err := url.Parse(request.Options.URL)
 	if err != nil {
+		cancel()
 		result.options = request
 		result.err = fmt.Errorf("invalid URL: %w", err)
 		return result
@@ -473,7 +496,8 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 		request.Options.Proxy,
 	)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("failed to create HTTP client: %w", err))
 	}
 
 	// Handle both string body and byte body
@@ -485,7 +509,8 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	}
 	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(request.Options.Method), request.Options.URL, bodyReader)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("invalid request: %w", err))
 	}
 
 	// Set headers for HTTP/3 request (preserving exact key casing and multi-value entries)
@@ -494,6 +519,7 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	// Parse URL for Host header
 	u, err := url.Parse(request.Options.URL)
 	if err != nil {
+		cancel()
 		result.options = request
 		result.err = fmt.Errorf("invalid URL: %w", err)
 		return result
@@ -515,6 +541,36 @@ func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
 	}
 }
 
+// withSSEAccept returns the request with "Accept: text/event-stream" added
+// when the caller sent no Accept header of their own, in any letter case. The
+// caller's header maps are not modified.
+func withSSEAccept(request cycleTLSRequest) cycleTLSRequest {
+	for k, values := range request.Options.requestHeaders() {
+		if strings.EqualFold(k, "Accept") && len(values) > 0 && values[0] != "" {
+			return request
+		}
+	}
+	headers := make(map[string]string, len(request.Options.Headers)+1)
+	for k, v := range request.Options.Headers {
+		if !strings.EqualFold(k, "Accept") {
+			headers[k] = v
+		}
+	}
+	headers["Accept"] = "text/event-stream"
+	request.Options.Headers = headers
+
+	if len(request.Options.HeaderValues) > 0 {
+		values := make(map[string][]string, len(request.Options.HeaderValues))
+		for k, v := range request.Options.HeaderValues {
+			if !strings.EqualFold(k, "Accept") {
+				values[k] = v
+			}
+		}
+		request.Options.HeaderValues = values
+	}
+	return request
+}
+
 // dispatchSSERequest handles SSE specific request processing
 func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -530,21 +586,24 @@ func dispatchSSERequest(request cycleTLSRequest) (result fullRequest) {
 		request.Options.Proxy,
 	)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("failed to create HTTP client: %w", err))
 	}
 
-	// Prepare headers for SSE (preserving exact key casing and multi-value entries)
+	// Build the request the way a plain HTTP request is built, so the caller's
+	// headers, header order, method, body and User-Agent all reach the server.
+	// Both dispatchers send this request. The default Accept goes in before
+	// the build so it takes its place in the header order.
+	req, err := buildHTTPRequest(withSSEAccept(request), ctx)
+	if err != nil {
+		cancel()
+		return requestError(request, fmt.Errorf("invalid request: %w", err))
+	}
+
+	// The SSE client keeps the same headers for callers that use it directly.
 	headers := make(http.Header)
 	setRequestHeaders(headers, request.Options, false)
-
-	// Create SSE client
 	sseClient := NewSSEClient(&client, headers)
-
-	// Create a placeholder request for consistency
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.Options.URL, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	state.RegisterRequest(request.RequestID, cancel)
 
@@ -581,22 +640,30 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 		ServerName:         browser.ServerName,
 	}
 
-	// Prepare headers for WebSocket (multi-value entries are kept).
-	// gorilla/websocket matches handshake headers (Host, Upgrade, Connection,
-	// Sec-Websocket-*) by canonical key, so this path keeps canonical keys.
-	headers := make(http.Header)
-	for k, values := range request.Options.requestHeaders() {
-		headers[http.CanonicalHeaderKey(k)] = append([]string(nil), values...)
-	}
+	// Handshake headers: the caller's headers plus User-Agent and Cookie from
+	// the userAgent and cookies options.
+	headers := webSocketHandshakeHeaders(request.Options)
 
 	// Create WebSocket client
 	convertedHeaders := ConvertFhttpHeader(headers)
 	wsClient := NewWebSocketClient(tlsConfig, convertedHeaders)
 
+	// Send the connection through the request's proxy. Without this the
+	// handshake would leave from the caller's own address.
+	if request.Options.Proxy != "" {
+		dialer, err := newConnectDialer(request.Options.Proxy, request.Options.UserAgent, getProxyInsecureSkipVerify(browser))
+		if err != nil {
+			cancel()
+			return requestError(request, fmt.Errorf("failed to create proxy dialer: %w", err))
+		}
+		wsClient.UseProxyDialer(dialer)
+	}
+
 	// Create a placeholder request for consistency
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.Options.URL, nil)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		return requestError(request, fmt.Errorf("invalid request: %w", err))
 	}
 
 	state.RegisterRequest(request.RequestID, cancel)
@@ -863,7 +930,7 @@ func dispatchSSEAsync(res fullRequest, chanWrite *safeChannelWriter) {
 
 	// Connect to SSE endpoint
 	timeout := timeoutSeconds(res.options.Options.Timeout)
-	sseResp, err := res.sseClient.ConnectWithTimeout(res.req.Context(), res.options.Options.URL, timeout)
+	sseResp, err := res.sseClient.ConnectRequest(res.req, timeout)
 	if err != nil {
 		// Send error response
 		b := getBuffer()
@@ -1059,7 +1126,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	}()
 
 	// Connect to WebSocket endpoint
-	conn, resp, err := res.wsClient.Connect(res.options.Options.URL)
+	conn, resp, err := res.wsClient.ConnectContext(res.reqContext(), res.options.Options.URL)
 	if err != nil {
 		sendWebSocketError(chanWrite, res.options.RequestID, res.options.Options.URL, resp, err)
 		return
@@ -1102,8 +1169,32 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		}
 	}
 
-	// Read deadline timeout - prevents goroutine from blocking forever on reads
-	const wsReadDeadline = 30 * time.Second
+	// finish ends the connection: whichever goroutine stops first calls it and
+	// the wait below tears the rest down.
+	var finishOnce sync.Once
+	finish := func() {
+		finishOnce.Do(func() { close(wsConn.closeChan) })
+	}
+
+	// reportClose tells the client the connection is closed, once, whoever
+	// notices first.
+	var closeOnce sync.Once
+	reportClose := func(code int, reason string) {
+		closeOnce.Do(func() {
+			wsConn.mu.Lock()
+			if wsConn.ReadyState < 2 {
+				wsConn.ReadyState = 2 // CLOSING
+			}
+			wsConn.mu.Unlock()
+			sendWebSocketClose(chanWrite, res.options.RequestID, code, reason)
+		})
+	}
+
+	// Reads carry no deadline: a server may stay quiet for as long as it
+	// likes. The watch pings a quiet connection and closes one that has gone
+	// silent for the whole idle window, which wakes the reader below.
+	watch := watchUpstream(conn)
+	defer watch.Stop()
 
 	// Start goroutines with WaitGroup tracking
 	wsConn.wg.Add(2)
@@ -1111,42 +1202,24 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	// Goroutine to handle incoming WebSocket messages
 	go func() {
 		defer wsConn.wg.Done()
+		defer finish()
 		for {
-			// Check if we should exit before blocking on read
-			select {
-			case <-wsConn.done:
-				return
-			default:
-			}
-
-			// Set read deadline to prevent blocking forever
-			conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
-
 			messageType, message, err := conn.ReadMessage()
 			if err != nil {
-				// Check if this is a timeout - if so, just continue the loop
-				if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-					// Issue #5 fix: Check both done channel and context cancellation
-					// on timeout to prevent goroutine leak when parent context is cancelled
-					select {
-					case <-wsConn.done:
-						return
-					case <-res.req.Context().Done():
-						return
-					default:
-						continue // Just a timeout, keep reading
-					}
+				// A read error is final for this connection. Never read again:
+				// gorilla panics on repeated reads of a failed connection.
+				select {
+				case <-wsConn.done:
+					// We closed the connection ourselves.
+					return
+				default:
 				}
-
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					// Normal close
-					sendWebSocketClose(chanWrite, res.options.RequestID, websocket.CloseNormalClosure, "Connection closed normally")
-				} else {
-					debugLogger.Printf("WebSocket read error: %s", err.Error())
-					sendWebSocketError(chanWrite, res.options.RequestID, res.options.Options.URL, nil, err)
-				}
+				code, reason := watch.closeInfo(err)
+				debugLogger.Printf("WebSocket read ended: %s", err.Error())
+				reportClose(code, reason)
 				return
 			}
+			watch.touch()
 
 			// Send ws_message event
 			sendWebSocketMessage(chanWrite, res.options.RequestID, messageType, message)
@@ -1156,6 +1229,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 	// Goroutine to handle outgoing commands
 	go func() {
 		defer wsConn.wg.Done()
+		defer finish()
 		for {
 			select {
 			case <-wsConn.done:
@@ -1175,6 +1249,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 						// Issue #11 fix: Stop processing commands on write error -
 						// the connection is likely broken. Continuing would just
 						// accumulate errors on a dead connection.
+						reportClose(websocket.CloseAbnormalClosure, err.Error())
 						return
 					}
 
@@ -1193,7 +1268,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 						debugLogger.Printf("WebSocket close error: %s", err.Error())
 					}
 
-					sendWebSocketClose(chanWrite, res.options.RequestID, closeCode, cmd.CloseReason)
+					reportClose(closeCode, cmd.CloseReason)
 					return
 
 				case "ping":
@@ -1201,6 +1276,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 					if err != nil {
 						debugLogger.Printf("WebSocket ping error: %s", err.Error())
 						// Issue #11 fix: Stop on write error for ping too
+						reportClose(websocket.CloseAbnormalClosure, err.Error())
 						return
 					}
 
@@ -1209,6 +1285,7 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 					if err != nil {
 						debugLogger.Printf("WebSocket pong error: %s", err.Error())
 						// Issue #11 fix: Stop on write error for pong too
+						reportClose(websocket.CloseAbnormalClosure, err.Error())
 						return
 					}
 				}
@@ -1223,16 +1300,22 @@ func dispatchWebSocketAsync(res fullRequest, chanWrite *safeChannelWriter) {
 		}
 	}()
 
-	// Wait for context cancellation or close signal
+	// Wait until the connection ends, the request is cancelled, or the client's
+	// own socket to this process is gone.
 	select {
 	case <-wsConn.closeChan:
-		// Connection close requested
+		// The reader or the command loop stopped
 	case <-res.req.Context().Done():
 		debugLogger.Printf("WebSocket request %s was canceled", res.options.RequestID)
+	case <-chanWrite.done:
+		debugLogger.Printf("WebSocket request %s: client socket closed", res.options.RequestID)
 	}
 
-	// Signal all goroutines to exit and wait for them
+	// Signal all goroutines to exit. The reader is blocked in ReadMessage with
+	// no deadline, so closing the connection is what wakes it.
 	close(wsConn.done)
+	watch.Stop()
+	_ = conn.Close()
 	wsConn.wg.Wait()
 
 	// Update connection state to CLOSED
@@ -1520,8 +1603,11 @@ func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
 
 		var baseMessage map[string]interface{}
 		if err := json.Unmarshal(message, &baseMessage); err != nil {
-			log.Print("Unmarshal Error", err)
-			return
+			// Not a JSON object, so there is no request ID to answer. Skip the
+			// message and keep reading: returning here would leave the socket
+			// open with nobody reading it, and every later request would hang.
+			log.Print("Unmarshal Error: ", err)
+			continue
 		}
 		if action, ok := baseMessage["action"]; ok {
 			if action == "exit" {
@@ -1616,10 +1702,17 @@ func readSocket(chanRead chan fullRequest, wsSocket *websocket.Conn) {
 		// (If there was no "action" field, process as usual)
 		request := new(cycleTLSRequest)
 		if err := json.Unmarshal(message, &request); err != nil {
-			log.Print("Unmarshal Error", err)
-			return
+			// The options did not decode (a numeric header value, an object
+			// body). Answer this request with an error frame and keep reading.
+			log.Print("Unmarshal Error: ", err)
+			requestID, _ := baseMessage["requestId"].(string)
+			chanRead <- requestError(
+				cycleTLSRequest{RequestID: requestID},
+				fmt.Errorf("invalid request options: %w", err),
+			)
+			continue
 		}
-		chanRead <- processRequest(*request)
+		chanRead <- safeProcessRequest(*request, processRequest)
 	}
 }
 
@@ -1683,7 +1776,7 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 		}
 		headers, err := PrettyStruct(r.Header)
 		if err != nil {
-			log.Fatal(err)
+			log.Print("Invalid Request:", err)
 		}
 		log.Println(headers)
 		log.Println(body)
@@ -1730,6 +1823,9 @@ func WSEndpoint(w nhttp.ResponseWriter, r *nhttp.Request) {
 
 		// Run as main thread - exits when the writer is shut down (safeWriter.done)
 		writeSocket(safeWriter, ws)
+		// Nothing reads or writes this socket any more. Close it so the client
+		// sees the end instead of writing into a connection nobody serves.
+		_ = ws.Close()
 	}
 }
 
@@ -1841,6 +1937,9 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		JA4r:                    options.Ja4r,
 		HTTP2Fingerprint:        options.HTTP2Fingerprint,
 		QUICFingerprint:         options.QUICFingerprint,
+		DisableGrease:           options.DisableGrease,
+		ServerName:              options.ServerName,
+		TLS13AutoRetry:          options.TLS13AutoRetry,
 		UserAgent:               options.UserAgent,
 		Cookies:                 options.Cookies,
 		InsecureSkipVerify:      options.InsecureSkipVerify,
@@ -1861,7 +1960,10 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	// Note: Don't automatically set HeaderOrder from UserAgent here as it can interfere with connection management
 	// The pseudo-header order should be set through explicit HTTP2Fingerprint or Options.HeaderOrder
 
-	// Create HTTP client with connection reuse enabled by default
+	// Connection reuse follows options.EnableConnectionReuse. For a Go caller
+	// that is the bool zero value, false, unless they set it: the field cannot
+	// tell "left out" from false, and flipping it would change every existing
+	// caller. Requests decoded from JSON default to true (Options.UnmarshalJSON).
 	httpClient, err := newClientWithReuse(
 		browser,
 		options.Timeout,
@@ -1943,19 +2045,24 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		return Response{}, err
 	}
 
-	// Automatic decompression (axios-style) - check Content-Encoding header
-	encoding := resp.Header["Content-Encoding"]
-	content := resp.Header["Content-Type"]
-	if len(encoding) > 0 {
-		// Automatically decompress the body like axios does
-		bodyBytes = DecompressBody(bodyBytes, encoding, content)
+	// Automatic decompression (axios-style). The body goes through the same
+	// decoder the dispatchers stream with, so every Content-Encoding value is
+	// undone ("gzip, br"), and zstd is handled.
+	if decoded, ok := decodeBufferedBody(req.Method, resp.StatusCode, bodyBytes, resp.Header.Values("Content-Encoding")); ok {
+		bodyBytes = decoded
+		// These two described the compressed bytes (net/http drops them too).
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
 	}
 
-	// Convert headers
+	// Convert headers. Headers keeps the first value of each name, as it
+	// always has; HeaderValues carries all of them.
 	headers := make(map[string]string)
+	headerValues := make(map[string][]string, len(resp.Header))
 	for name, values := range resp.Header {
 		if len(values) > 0 {
 			headers[name] = values[0]
+			headerValues[name] = append([]string(nil), values...)
 		}
 	}
 
@@ -1992,5 +2099,32 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		Headers:   headers,
 		Cookies:   netCookies,
 		FinalUrl:  finalUrl,
+
+		HeaderValues: headerValues,
 	}, nil
+}
+
+// decodeBufferedBody removes the content codings from a body that has already
+// been read into memory, using the streaming decoder the dispatchers use. The
+// decoded size is capped at maxDecompressedBody (64 MiB).
+//
+// ok is false, and the caller keeps the body and headers as they were, when
+// there is nothing to decode (HEAD, 204, 304, no Content-Encoding, an unknown
+// coding), when the body does not decode, or when it would pass the cap.
+func decodeBufferedBody(method string, status int, body []byte, contentEncoding []string) (decoded []byte, ok bool) {
+	if method == http.MethodHead || status == http.StatusNoContent || status == http.StatusNotModified {
+		return nil, false
+	}
+	reader, known := newDecodedBody(bytes.NewReader(body), contentEncoding)
+	if !known {
+		return nil, false
+	}
+	defer reader.Close()
+
+	decoded, err := readLimited(reader)
+	if err != nil {
+		debugLogger.Printf("Do: response body left as received: %v", err)
+		return nil, false
+	}
+	return decoded, true
 }
