@@ -63,7 +63,14 @@ describe("legacy client: timeout and readTimeout", () => {
   });
 
   test("timeout: -1 waits for headers that a 1 second timeout gives up on", async () => {
-    await expect(cycleTLS.get(`${base}/slow-headers`, { timeout: 1 })).rejects.toThrow(/Request timeout after 1000ms/);
+    // The Node timer and the Go header timeout are both one second, so either
+    // can win: the request rejects with the client's timeout error, or it
+    // resolves with the 408 the Go side builds. Both mean "gave up".
+    const gaveUp = await cycleTLS.get(`${base}/slow-headers`, { timeout: 1 }).then(
+      (response) => response.status === 408,
+      (error) => /Request timeout after 1000ms/.test(error.message)
+    );
+    expect(gaveUp).toBe(true);
     const response = await cycleTLS.get(`${base}/slow-headers`, { timeout: -1, responseType: "text" });
     expect(response.status).toBe(200);
     expect(response.data).toBe("late");

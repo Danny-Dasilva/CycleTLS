@@ -179,22 +179,18 @@ describe('Issue 4: Windows process termination', () => {
       'utf8'
     );
 
-    // Extract just the close() method (from "async close():" to the next method or end of class)
+    // Extract the start of the close() method. Since 3.0.1 the kill lives in
+    // a local helper at the top of close(), followed by _killServerSync().
     const closeStart = source.indexOf('async close():');
-    // Find the closing brace by looking for the pattern "}\n}" which marks end of the method
+    expect(closeStart).toBeGreaterThan(-1);
     const afterClose = source.substring(closeStart);
-    // The close method ends at "serverProcess = null;" followed by closing braces
-    const closeEnd = afterClose.indexOf('serverProcess = null');
-    const closeSource = afterClose.substring(0, closeEnd + 50);
+    const closeEnd = afterClose.indexOf('this._killServerSync()');
+    expect(closeEnd).toBeGreaterThan(-1);
+    const closeSource = afterClose.substring(0, closeEnd);
 
     // Windows path should use taskkill
     expect(closeSource).toContain('taskkill');
-    // Should NOT have SIGKILL in the Windows branch
-    // The win32 block should only contain taskkill
-    const win32Block = closeSource.substring(
-      closeSource.indexOf('win32'),
-      closeSource.indexOf('} else {')
-    );
+    const win32Block = closeSource.substring(closeSource.indexOf('win32'));
     expect(win32Block).toContain('taskkill');
     // Should NOT call .kill('SIGKILL') in the Windows branch (comments mentioning SIGKILL are OK)
     expect(win32Block).not.toMatch(/\.kill\(['"]SIGKILL['"]\)/);
@@ -237,12 +233,14 @@ describe('Issue 5: Child process spawn error handling', () => {
     );
 
     // Find the spawn call and verify error handler is attached nearby
-    const spawnIdx = source.indexOf('this.serverProcess = spawn(');
+    // Since 3.0.1 the child is held in a local before it is stored.
+    const spawnIdx = source.indexOf('const child = spawn(execPath');
     expect(spawnIdx).toBeGreaterThan(-1);
+    expect(source.substring(spawnIdx, spawnIdx + 120)).toContain('this.serverProcess = child');
 
-    // The error handler should appear within 500 chars after spawn
-    const afterSpawn = source.substring(spawnIdx, spawnIdx + 500);
-    expect(afterSpawn).toMatch(/serverProcess\.on\(["']error["']/);
+    // The error handler should appear within 700 chars after spawn
+    const afterSpawn = source.substring(spawnIdx, spawnIdx + 700);
+    expect(afterSpawn).toMatch(/child\.on\(["']error["']/);
   });
 });
 
