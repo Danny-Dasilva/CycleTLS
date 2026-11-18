@@ -98,7 +98,7 @@ These options work with both Node clients (`initCycleTLS()` and `new CycleTLS()`
 | `proxyHeaders` | `Record<string, string>` | Extra headers sent on the CONNECT request to an HTTP or HTTPS proxy. SOCKS proxies ignore it. |
 | `http2Fingerprint` | `string` | Now accepts the full Akamai form `SETTINGS\|WINDOW_UPDATE\|PRIORITY\|PSEUDO_ORDER`. Settings may be separated by `,` or `;`. The third part is `0`, `1` or a list `streamID:exclusive:dependsOn:weight,...`. The fourth part (for example `m,a,s,p`) sets the pseudo-header order and overrides the default taken from the User-Agent; it must be a permutation of `m,a,s,p` or the request returns an error. |
 
-Fingerprint precedence: `clientHello`, then `tlsProfile`, then `ja3`, then `ja4r`, then the default chosen from the User-Agent. See `docs/3.0.1` for details.
+Fingerprint precedence: `clientHello`, then `tlsProfile`, then `ja3`, then `ja4r`, then the default chosen from the User-Agent. See `docs/3.0.1_IMPLEMENTATION.md` for details.
 
 ```js
 const { initCycleTLS } = require('cycletls');
