@@ -5,13 +5,40 @@ package state
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 )
 
+// DebugEnvVar names the environment variable that turns debug output on.
+const DebugEnvVar = "CYCLETLS_DEBUG"
+
+// DebugEnabled reports whether CYCLETLS_DEBUG asks for debug output. Any value
+// other than empty, "0", "false", "off" and "no" turns it on.
+func DebugEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(DebugEnvVar))) {
+	case "", "0", "false", "off", "no":
+		return false
+	}
+	return true
+}
+
+// debugOutput is where DebugLogger writes: stdout when CYCLETLS_DEBUG is set,
+// nowhere otherwise. The Go process usually runs as a child of a Node client.
+// A parent that does not read the child's stdout lets the pipe fill, and the
+// next debug line then blocks the request that wrote it.
+func debugOutput() io.Writer {
+	if DebugEnabled() {
+		return os.Stdout
+	}
+	return io.Discard
+}
+
 // DebugLogger provides a logger for debug output with timestamp and file info.
-var DebugLogger = log.New(os.Stdout, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+// It is silent unless CYCLETLS_DEBUG is set when the process starts.
+var DebugLogger = log.New(debugOutput(), "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 
 // bufferPool provides reusable bytes.Buffer instances to reduce GC pressure
 var bufferPool = sync.Pool{
