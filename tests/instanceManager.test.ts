@@ -231,8 +231,9 @@ describe("InstanceManager failure cleanup", () => {
       invalidExecutablePath
     );
 
-    // Wait for initialization to fail - should reject with error message, not timeout
-    await expect(initPromise).rejects.toMatch(/Executable not found|not found/i);
+    // Wait for initialization to fail - should reject with an Error, not a string, and not time out
+    await expect(initPromise).rejects.toBeInstanceOf(Error);
+    await expect(initPromise).rejects.toThrow(/Executable not found|not found/i);
 
     // After failure, promise should be removed from initializingPromises
     expect(localInstanceManager._hasInitializingPromise(port)).toBe(false);
@@ -255,7 +256,8 @@ describe("InstanceManager failure cleanup", () => {
     );
 
     // Wait for initialization to fail
-    await expect(initPromise).rejects.toMatch(/Executable not found|not found/i);
+    await expect(initPromise).rejects.toBeInstanceOf(Error);
+    await expect(initPromise).rejects.toThrow(/Executable not found|not found/i);
 
     const elapsed = Date.now() - startTime;
 

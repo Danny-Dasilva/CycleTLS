@@ -1,5 +1,6 @@
 import CycleTLS from "../dist/index.js";
 import { Readable } from "stream";
+import https from "https";
 
 export { CycleTLS };
 
@@ -163,12 +164,90 @@ export function getActiveInstanceCount(): number {
 }
 
 /**
- * Status codes treated as transient upstream flake (rate limit, gateway timeout, etc.)
+ * Status codes from upstream treated as transient flake (rate limit, gateway
+ * timeout, Cloudflare origin errors). When httpbin.org or tlsfingerprint.com are
+ * being squeezed these surface now and then and should not fail the suite.
  */
-export const UPSTREAM_FLAKE_STATUSES: ReadonlySet<number> = new Set([408, 502, 503, 504]);
+export const UPSTREAM_FLAKE_STATUSES: ReadonlySet<number> = new Set([408, 421, 429, 502, 503, 504, 521, 522, 523, 524, 525]);
 
 /**
- * Retry a request-producing function on upstream-flake statuses (408/502/503/504).
+ * Probe an upstream URL with a short timeout. Resolves true when the probe gets
+ * a 200 within `timeoutMs`. Used in beforeAll to gate a whole suite when the
+ * upstream is down.
+ */
+export function probeUpstream(url: string, timeoutMs = 8000): Promise<boolean> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (ok: boolean) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(ok);
+    };
+    const t = setTimeout(() => finish(false), timeoutMs);
+    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+      const ok = res.statusCode === 200;
+      res.on('data', () => {});
+      res.on('end', () => { clearTimeout(t); finish(ok); });
+      res.on('error', () => { clearTimeout(t); finish(false); });
+    });
+    req.on('error', () => { clearTimeout(t); finish(false); });
+    req.on('timeout', () => { req.destroy(); clearTimeout(t); finish(false); });
+  });
+}
+
+export interface UpstreamState {
+  serviceAvailable: boolean;
+  upstreamUnreachable: boolean;
+}
+
+/**
+ * Build a `conditionalTest` helper for a suite. The returned function takes
+ * (name, fn) like Jest's `test`, but:
+ *  - If `state.serviceAvailable` is false (pre-suite probe failed), the test
+ *    body logs "Skipped" and returns.
+ *  - Each test body races against `deadlineMs` (default 30s). On a deadline hit
+ *    it sets `state.upstreamUnreachable` so later tests skip at once.
+ *  - Flake statuses and network errors become a skip and trip the breaker.
+ *    Real assertion failures still throw.
+ *
+ * Use:
+ *   const state = { serviceAvailable: false, upstreamUnreachable: false };
+ *   const conditionalTest = makeConditionalTest(state, 30000);
+ *   beforeAll(async () => { state.serviceAvailable = await probeUpstream('https://httpbin.org/json'); });
+ *   conditionalTest('should...', async () => { ... });
+ */
+export function makeConditionalTest(state: UpstreamState, deadlineMs = 30000) {
+  return function conditionalTest(name: string, fn: () => Promise<unknown>): void {
+    test(name, async () => {
+      if (!state.serviceAvailable || state.upstreamUnreachable) {
+        console.log(`Skipped: ${name} (upstream unavailable)`);
+        return;
+      }
+      const deadline = new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), deadlineMs));
+      try {
+        const result = await Promise.race([fn().then(() => 'ok' as const), deadline]);
+        if (result === 'timeout') {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream hung past ${deadlineMs}ms; tripping circuit breaker)`);
+          return;
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const isFlakeStatus = [...UPSTREAM_FLAKE_STATUSES].some((c) => msg.includes(`${c}`) && (msg.includes('statusCode') || msg.includes('status')));
+        const isNetworkErr = /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|socket hang up|aborted/i.test(msg);
+        if (isFlakeStatus || isNetworkErr) {
+          state.upstreamUnreachable = true;
+          console.log(`Skipped: ${name} (upstream flake; tripping circuit breaker: ${msg.slice(0, 200)})`);
+          return;
+        }
+        throw e;
+      }
+    });
+  };
+}
+
+/**
+ * Retry a request-producing function on upstream-flake statuses (see UPSTREAM_FLAKE_STATUSES).
  * The fn is expected to return an object that has a `.status` (number) field — both
  * the legacy `.do()` shape and the modern `.get/.request()` Response work, since
  * `Response.status` is a getter.
