@@ -1,4 +1,4 @@
-import initCycleTLS, { CycleTLSClient } from "../dist/index.js";
+import { initCycleTLS, CycleTLSClient } from "../dist/index.js";
 
 jest.setTimeout(30000);
 
