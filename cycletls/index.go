@@ -222,6 +222,10 @@ func browserFromOptions(opts Options) Browser {
 		// 3.0.1: HTTP/2, HTTP/3 and proxy options
 		HTTP2Priority: opts.HTTP2Priority,
 		ProxyHeaders:  opts.ProxyHeaders,
+		// 3.0.1: TLS handshake options
+		SessionResumption: opts.SessionResumption,
+		CertPins:          opts.CertPins,
+		CACerts:           opts.CACerts,
 	}
 }
 
@@ -561,6 +565,15 @@ func dispatchWebSocketRequest(request cycleTLSRequest) (result fullRequest) {
 	// Create browser configuration for WebSocket (no HTTP/3 support)
 	browser := browserFromOptions(request.Options)
 	browser.ForceHTTP3 = false
+
+	// 3.0.1: the WebSocket dial does not go through dialTLS, so certPins could
+	// not be checked on it. Fail instead of connecting unpinned.
+	if len(browser.CertPins) > 0 {
+		cancel()
+		result.options = request
+		result.err = errCertPinsWebSocket
+		return result
+	}
 
 	// Get TLS config for WebSocket
 	tlsConfig := &utls.Config{
@@ -1839,6 +1852,10 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		TLSProfile:        options.TLSProfile,
 		ShuffleExtensions: options.ShuffleExtensions,
 		ClientHello:       options.ClientHello,
+		// 3.0.1: TLS handshake options
+		SessionResumption: options.SessionResumption,
+		CertPins:          options.CertPins,
+		CACerts:           options.CACerts,
 	}
 
 	// Note: Don't automatically set HeaderOrder from UserAgent here as it can interfere with connection management

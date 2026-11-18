@@ -88,7 +88,7 @@ type Options struct {
 	EnableConnectionReuse bool `json:"enableConnectionReuse"` // Enable connection reuse across requests (default: true)
 
 	// Certificate pinning (optional)
-	CertPins []string `json:"certPins,omitempty"` // SHA256 certificate fingerprints for pinning (hex-encoded)
+	CertPins []string `json:"certPins,omitempty"` // SHA-256 pins, enforced after every TLS handshake; see the 3.0.1 block below for the accepted forms
 
 	// 3.0.1: TLS spec options
 	TLSProfile        string `json:"tlsProfile,omitempty"`        // Named utls ClientHello, e.g. "chrome_133"; see TLSProfileNames. Wins over ja3 and ja4r.
@@ -105,6 +105,22 @@ type Options struct {
 	// HTTPS proxy. They are not sent to the target site. SOCKS proxies have no
 	// CONNECT request and ignore them.
 	ProxyHeaders map[string]string `json:"proxyHeaders,omitempty"`
+	// 3.0.1: TLS handshake options
+	//
+	// CertPins (declared above) is enforced from 3.0.1 on: after every TLS
+	// handshake at least one certificate the server presented must match one
+	// pin, or the request fails and the connection is closed. A pin is either
+	// 64 hex characters, the SHA-256 of the whole certificate (DER), or
+	// "sha256/<base64>", the SHA-256 of the certificate's SubjectPublicKeyInfo
+	// (the HPKP pin-sha256 value). Any other entry fails the request.
+	//
+	// SessionResumption turns on TLS session resumption (TLS 1.3 PSK and
+	// TLS 1.2 tickets). Off by default: a resumed ClientHello carries the
+	// pre_shared_key extension (41), which changes the JA3/JA4 of that hello.
+	SessionResumption bool `json:"sessionResumption"`
+	// CACerts lists extra root CAs as PEM strings. They are added to the
+	// system roots for server certificate verification.
+	CACerts []string `json:"caCerts,omitempty"`
 }
 
 // UnmarshalJSON accepts both legacy string header values and multi-value arrays.

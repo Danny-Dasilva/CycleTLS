@@ -3,6 +3,7 @@ package cycletls
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	http "github.com/Danny-Dasilva/fhttp"
@@ -101,9 +102,24 @@ type roundTripper struct {
 	cleanupStop           chan struct{}
 
 	dialer proxy.ContextDialer
+
+	// 3.0.1: TLS handshake options (see tls_handshake.go)
+	SessionResumption bool
+	CertPins          []string
+	CACerts           []string
+	sessionCache      utls.ClientSessionCache // nil unless SessionResumption
+	certPins          []certPin               // CertPins, parsed
+	rootCAs           *x509.CertPool          // nil unless CACerts
+	tlsOptionsErr     error                   // invalid CertPins or CACerts; fails every request
 }
 
 func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 3.0.1: fail before anything is dialed when certPins or caCerts are
+	// invalid, or when the pins could not be checked on this request's path.
+	if err := rt.checkTLSHandshakeOptions(req); err != nil {
+		return nil, err
+	}
+
 	// Apply cookies to the request
 	for _, properties := range rt.Cookies {
 		cookie := &http.Cookie{
@@ -374,20 +390,25 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		}
 	}
 
+	// 3.0.1: apply the options that change the hello after the fingerprint is
+	// chosen (forceHTTP1 on a built-in parrot, pre_shared_key for resumption).
+	// A nil spec means the built-in helloID is used unchanged.
+	if spec, err = rt.finishHandshakeSpec(spec, helloID); err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
+
 	// Create TLS client
 	clientHelloID := utls.HelloCustom
-	if helloID.Client != "" {
+	if spec == nil && helloID.Client != "" {
 		clientHelloID = helloID
 	}
-	conn := utls.UClient(rawConn, &utls.Config{
-		ServerName:         serverName,
-		OmitEmptyPsk:       true,
-		InsecureSkipVerify: rt.InsecureSkipVerify,
-	}, clientHelloID)
+	conn := utls.UClient(rawConn, rt.handshakeConfig(serverName), clientHelloID)
 
 	// Apply TLS fingerprint
 	if spec != nil {
 		if err := conn.ApplyPreset(spec); err != nil {
+			_ = conn.Close()
 			return nil, err
 		}
 	}
@@ -400,17 +421,22 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 			// Check if TLS 1.3 retry is enabled
 			if rt.TLS13AutoRetry {
 				// Automatically retry with TLS 1.3 compatible curves
-				return rt.retryWithTLS13CompatibleCurves(ctx, network, addr, host)
+				return rt.retryWithTLS13CompatibleCurves(ctx, network, addr, serverName)
 			}
 			return nil, fmt.Errorf("conn.Handshake() error for TLS 1.3 (retry disabled): %+v", err)
 		}
 
 		// If we proactively upgraded to TLS 1.3 and it failed, try falling back to original TLS 1.2 JA3
 		if proactivelyUpgraded && rt.JA3 != "" {
-			return rt.retryWithOriginalTLS12JA3(ctx, network, addr, host)
+			return rt.retryWithOriginalTLS12JA3(ctx, network, addr, serverName)
 		}
 
 		return nil, fmt.Errorf("uTlsConn.Handshake() error: %+v", err)
+	}
+
+	// Check certPins before the connection can carry a request
+	if err := rt.verifyHandshake(conn, serverName); err != nil {
+		return nil, err
 	}
 
 	// If transport already exists, return connection
@@ -429,39 +455,57 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	return nil, errProtocolNegotiated
 }
 
-// retryWithTLS13CompatibleCurves retries the TLS connection with TLS 1.3 compatible curves
-func (rt *roundTripper) retryWithTLS13CompatibleCurves(ctx context.Context, network, addr, host string) (net.Conn, error) {
+// tls13RetrySpec rebuilds the ClientHello spec for retryWithTLS13CompatibleCurves
+// from the fingerprint the first dial used. It is the one place that decides
+// what the curve retry sends: a fingerprint source added to the spec selection
+// in dialTLS needs a case here, or the retry goes out with a different hello.
+func (rt *roundTripper) tls13RetrySpec() (*utls.ClientHelloSpec, error) {
+	// clientHello and tlsProfile win over the older options on the first dial;
+	// the retry must send the same hello. quicFingerprint never shapes a TCP
+	// ClientHello.
+	if spec, err := rt.optInSpec(); err != nil || spec != nil {
+		return spec, err
+	}
+	switch {
+	case rt.JA3 != "":
+		return StringToTLS13CompatibleSpec(rt.JA3, rt.UserAgent, rt.ForceHTTP1)
+	default:
+		// For JA4r or default, use TLS 1.3 compatible Chrome fingerprint
+		return StringToTLS13CompatibleSpec(DefaultChrome_JA3, rt.UserAgent, rt.ForceHTTP1)
+	}
+}
+
+// retryWithTLS13CompatibleCurves retries the TLS connection with TLS 1.3 compatible curves.
+// serverName is the SNI of the first dial (the custom serverName when one is set).
+func (rt *roundTripper) retryWithTLS13CompatibleCurves(ctx context.Context, network, addr, serverName string) (net.Conn, error) {
 	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use TLS 1.3 compatible spec based on the original fingerprint type
-	var spec *utls.ClientHelloSpec
-	switch {
-	case rt.JA3 != "":
-		spec, err = StringToTLS13CompatibleSpec(rt.JA3, rt.UserAgent, rt.ForceHTTP1)
-	default:
-		// For JA4r or default, use TLS 1.3 compatible Chrome fingerprint
-		spec, err = StringToTLS13CompatibleSpec(DefaultChrome_JA3, rt.UserAgent, rt.ForceHTTP1)
+	spec, err := rt.tls13RetrySpec()
+	if err == nil {
+		spec, err = rt.finishHandshakeSpec(spec, utls.HelloCustom)
 	}
 	if err != nil {
+		_ = rawConn.Close()
 		return nil, fmt.Errorf("failed to create TLS 1.3 compatible spec: %v", err)
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{
-		ServerName:         host,
-		OmitEmptyPsk:       true,
-		InsecureSkipVerify: rt.InsecureSkipVerify,
-	}, utls.HelloCustom)
+	conn := utls.UClient(rawConn, rt.handshakeConfig(serverName), utls.HelloCustom)
 
 	if err := conn.ApplyPreset(spec); err != nil {
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to apply TLS 1.3 compatible preset: %v", err)
 	}
 
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("TLS 1.3 compatible handshake failed: %+v", err)
+	}
+
+	if err := rt.verifyHandshake(conn, serverName); err != nil {
+		return nil, err
 	}
 
 	if err := rt.cacheTransportAndConnection(addr, conn, time.Now()); err != nil {
@@ -471,31 +515,37 @@ func (rt *roundTripper) retryWithTLS13CompatibleCurves(ctx context.Context, netw
 	return nil, errProtocolNegotiated
 }
 
-// retryWithOriginalTLS12JA3 retries the TLS connection with the original TLS 1.2 JA3
-func (rt *roundTripper) retryWithOriginalTLS12JA3(ctx context.Context, network, addr, host string) (net.Conn, error) {
+// retryWithOriginalTLS12JA3 retries the TLS connection with the original TLS 1.2 JA3.
+// serverName is the SNI of the first dial (the custom serverName when one is set).
+func (rt *roundTripper) retryWithOriginalTLS12JA3(ctx context.Context, network, addr, serverName string) (net.Conn, error) {
 	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
 
 	spec, err := StringToSpec(rt.JA3, rt.UserAgent, rt.ForceHTTP1)
+	if err == nil {
+		spec, err = rt.finishHandshakeSpec(spec, utls.HelloCustom)
+	}
 	if err != nil {
+		_ = rawConn.Close()
 		return nil, fmt.Errorf("failed to create original TLS 1.2 JA3 spec: %v", err)
 	}
 
-	conn := utls.UClient(rawConn, &utls.Config{
-		ServerName:         host,
-		OmitEmptyPsk:       true,
-		InsecureSkipVerify: rt.InsecureSkipVerify,
-	}, utls.HelloCustom)
+	conn := utls.UClient(rawConn, rt.handshakeConfig(serverName), utls.HelloCustom)
 
 	if err := conn.ApplyPreset(spec); err != nil {
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to apply original TLS 1.2 preset: %v", err)
 	}
 
 	if err = conn.Handshake(); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("original TLS 1.2 handshake failed: %+v", err)
+	}
+
+	if err := rt.verifyHandshake(conn, serverName); err != nil {
+		return nil, err
 	}
 
 	if err := rt.cacheTransportAndConnection(addr, conn, time.Now()); err != nil {
@@ -979,7 +1029,7 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 
 	logQUICFingerprintNoOp(browser)
 
-	return &roundTripper{
+	rt := &roundTripper{
 		dialer:                contextDialer,
 		HTTP2Priority:         browser.HTTP2Priority,
 		JA3:                   browser.JA3,
@@ -1011,6 +1061,8 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		ShuffleExtensions: browser.ShuffleExtensions,
 		ClientHello:       browser.ClientHello,
 	}
+	rt.initTLSHandshakeOptions(browser)
+	return rt
 }
 
 // makeHTTP3Request performs an HTTP/3 request and caches the transport for reuse

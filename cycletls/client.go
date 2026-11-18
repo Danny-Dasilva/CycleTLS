@@ -69,6 +69,14 @@ type Browser struct {
 	TLSProfile        string // Named utls ClientHello, e.g. "chrome_133"; wins over JA3 and JA4r
 	ShuffleExtensions bool   // Random extension order on the default-Chrome, TLSProfile and JA4r paths
 	ClientHello       string // Hex of a captured ClientHello record to replay; wins over TLSProfile
+	// 3.0.1: TLS handshake options
+	SessionResumption bool     // Resume TLS sessions (TLS 1.3 PSK, TLS 1.2 tickets) on later connections
+	CertPins          []string // SHA-256 pins checked after every TLS handshake: 64 hex chars (whole certificate) or "sha256/<base64>" (SPKI)
+	CACerts           []string // Extra root CAs (PEM), added to the system roots
+	// sessionCache is set by createNewClient so that clients built from the
+	// same configuration share one TLS session cache. Left nil, the
+	// roundTripper makes its own.
+	sessionCache utls.ClientSessionCache
 }
 
 // Protocol represents the HTTP protocol version
@@ -187,7 +195,7 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 	// any one of them must produce a different pooled client. timeout is included
 	// because clients with different timeouts must not share a pool entry.
 	configStr := fmt.Sprintf(
-		"ja3:%s|ja4r:%s|http2:%s|quic:%s|uspec:%v|grease:%t|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|proxyskip:%s|forcehttp1:%t|forcehttp3:%t|tls13retry:%t|headerorder:%s|tlscfg:%s|cookies:%s|h2priority:%s|proxyheaders:%s",
+		"ja3:%s|ja4r:%s|http2:%s|quic:%s|uspec:%v|grease:%t|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|proxyskip:%s|forcehttp1:%t|forcehttp3:%t|tls13retry:%t|headerorder:%s|tlscfg:%s|cookies:%s|h2priority:%s|proxyheaders:%s|"+tlsHandshakeKeyPart(browser), // 3.0.1: TLS handshake options
 		browser.JA3,
 		browser.JA4r,
 		browser.HTTP2Fingerprint,
@@ -300,6 +308,12 @@ func createNewClient(browser Browser, timeout int, disableRedirect bool, userAge
 		setProxyHeaders(dialer, browser.ProxyHeaders)
 	} else {
 		dialer = proxy.Direct
+	}
+
+	// 3.0.1: with connection reuse off every request gets a new roundTripper,
+	// so the TLS session cache has to outlive it for resumption to happen.
+	if browser.SessionResumption && browser.sessionCache == nil {
+		browser.sessionCache = sharedSessionCache(sessionCacheKey(browser, proxyURL...))
 	}
 
 	return clientBuilder(browser, dialer, timeout, disableRedirect), nil
