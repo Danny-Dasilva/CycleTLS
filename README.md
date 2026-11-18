@@ -80,6 +80,61 @@ Golang
 $ go get github.com/Danny-Dasilva/CycleTLS/cycletls 
 ```
 
+# New in 3.0.1
+
+## New request options
+
+These options work with both Node clients (`initCycleTLS()` and `new CycleTLS()`); the JSON names are the same in the Go `Options` struct.
+
+| Option | Type | What it does |
+| --- | --- | --- |
+| `tlsProfile` | `string` | Named TLS ClientHello profile, for example `"chrome_133"`, `"firefox_120"` or `"safari_16_0"`. There are 39 names; Go's `TLSProfileNames()` lists them. Takes precedence over `ja3` and `ja4r`. |
+| `clientHello` | `string` | Hex string of a captured TLS ClientHello record (or of the bare handshake message). The handshake is built from it. Takes precedence over everything else. |
+| `shuffleExtensions` | `boolean` | Shuffle the order of the TLS extensions on each connection, as Chrome does. Applies to the default Chrome handshake, `tlsProfile` and `ja4r`; not with an explicit `ja3` or `clientHello`. |
+| `sessionResumption` | `boolean` | Resume TLS sessions on later connections to the same host. |
+| `caCerts` | `string[]` | Extra CA certificates (PEM) trusted in addition to the system roots. |
+| `certPins` | `string[]` | Certificate pins. The option existed before but was ignored; it is now enforced. A pin is either `sha256/<base64>`, the SHA-256 hash of a certificate's SubjectPublicKeyInfo, or 64 hex characters, the SHA-256 hash of the whole certificate (DER). The request fails unless a certificate in the server's chain matches one. |
+| `http2Priority` | `{ weight?, exclusive?, streamDep? } \| false` | HTTP/2 priority sent with the HEADERS frame. `weight` is 1 to 256 (left out or 0 means 256; anything else is an error). `false` sends none. |
+| `proxyHeaders` | `Record<string, string>` | Extra headers sent on the CONNECT request to an HTTP or HTTPS proxy. SOCKS proxies ignore it. |
+| `http2Fingerprint` | `string` | Now accepts the full Akamai form `SETTINGS\|WINDOW_UPDATE\|PRIORITY\|PSEUDO_ORDER`. Settings may be separated by `,` or `;`. The third part is `0`, `1` or a list `streamID:exclusive:dependsOn:weight,...`. The fourth part (for example `m,a,s,p`) sets the pseudo-header order and overrides the default taken from the User-Agent; it must be a permutation of `m,a,s,p` or the request returns an error. |
+
+Fingerprint precedence: `clientHello`, then `tlsProfile`, then `ja3`, then `ja4r`, then the default chosen from the User-Agent. See `docs/3.0.1` for details.
+
+```js
+const { initCycleTLS } = require('cycletls');
+
+const cycleTLS = await initCycleTLS();
+const response = await cycleTLS.get('https://example.com', {
+  tlsProfile: 'chrome_133',
+  shuffleExtensions: true,
+  http2Fingerprint: '1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p',
+  http2Priority: { weight: 256, exclusive: true, streamDep: 0 },
+  certPins: ['sha256/47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='],
+  proxyHeaders: { 'X-Session': 'abc' },
+});
+```
+
+When `tlsProfile` or `clientHello` is set, `initCycleTLS()` no longer adds its default JA3 to the request.
+
+The `initCycleTLS()` client also gains three options the default client already had:
+
+| Option | Type | What it does |
+| --- | --- | --- |
+| `bodyBytes` | `Uint8Array` | Binary request body, sent as raw bytes. |
+| `tls13AutoRetry` | `boolean` | Retry the handshake with TLS 1.3 compatible curves when the first attempt fails. |
+| `readTimeout` | `number` (ms) | Fail the request when no body data arrives for this long after the headers. Off by default. Note the unit: `timeout` is in seconds on this client, `readTimeout` in milliseconds. |
+
+## Behaviour changes
+
+- **`proxy` with `forceHTTP3` returns an error** (`ErrHTTP3ProxyUnsupported` in Go). HTTP/3 cannot go through the proxy, and before 3.0.1 the request left from your own address without saying so.
+- **`quicFingerprint` has no effect.** It is not applied to QUIC, and it no longer changes the TCP ClientHello as it did before 3.0.1. The option is still accepted.
+- **`enableConnectionReuse` left out now means `true`** in the Go process, as the docs always said. Set it to `false` to get a fresh connection per request. Go struct literals keep their meaning.
+- **`initCycleTLS()` recovers when the Go process dies.** If the process exits or the control socket closes, every request in flight rejects with an `Error` (a `stream` response gets an `error` event on its stream), the process is restarted (at most 3 times in a row, with a growing delay) and the client reconnects. Requests made while it is away reject at once with `CycleTLS is reconnecting to its Go process...`; retry them. If the restarts run out, requests reject with an `Error` that says so, and calling `initCycleTLS()` again starts a new process. Nothing restarts after `exit()`.
+- **`exit()` settles requests that are still in flight.** They reject with an `Error` instead of waiting for their timeout.
+- **Header values are converted to strings.** `headers: { 'x-attempt': 2 }` is sent as `"2"`; arrays are converted element by element and still send one header line per value. A value that is `undefined`, `null` or an object rejects with a `TypeError` before anything is sent. Before 3.0.1 a number here made that request and every later one on the client time out. A `body` that is not a string, `URLSearchParams` or `FormData` rejects the same way.
+- **`timeout: -1` means no timeout** on `initCycleTLS()`, as in Go. Before 3.0.1 it rejected at once. `timeout: 0` still means the default (30 seconds).
+- **Initialization errors are `Error` objects everywhere.** `initCycleTLS()` already threw an `Error`; the internal instance manager used to reject with a string.
+
 # Usage 
 
 ## Example CycleTLS Request for Typescript and Javascript
@@ -691,7 +746,7 @@ await sse.close();
 | `forceHTTP1` | boolean | Force HTTP/1.1 |
 | `forceHTTP3` | boolean | Force HTTP/3 |
 | `http2Fingerprint` | string | HTTP/2 fingerprint |
-| `quicFingerprint` | string | QUIC fingerprint |
+| `quicFingerprint` | string | Has no effect in 3.0.1: it is not applied to QUIC and no longer changes the TCP ClientHello |
 | `disableGrease` | boolean | Disable GREASE for exact JA4 matching |
 | `serverName` | string | Override TLS SNI |
 | `headerOrder` | string[] | Custom header order |
@@ -813,7 +868,7 @@ type Options struct {
     Ja3                   string            // JA3 fingerprint
     Ja4r                  string            // JA4 raw fingerprint
     HTTP2Fingerprint      string            // HTTP/2 fingerprint
-    QUICFingerprint       string            // QUIC fingerprint
+    QUICFingerprint       string            // Accepted but has no effect in 3.0.1
     DisableGrease         bool              // Disable GREASE
 
     // Browser identification
@@ -1059,7 +1114,7 @@ interface Response {
   enableConnectionReuse: true,
   // HTTP/2 fingerprint
   http2Fingerprint: '1:65536;4:131072;5:16384|12517377|3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241|m,p,a,s',
-  // QUIC fingerprint for HTTP/3
+  // QUIC fingerprint: accepted but has no effect in 3.0.1
   quicFingerprint: '16030106f2010006ee03039a2b98d81139db0e128ea09eff...',
   // Disable GREASE for exact JA4 matching
   disableGrease: false,
@@ -2412,7 +2467,7 @@ func main() {
 
 <details>
 
-CycleTLS now supports HTTP/3 over QUIC protocol with custom QUIC fingerprinting.
+CycleTLS supports HTTP/3 over QUIC. Custom QUIC fingerprinting does not work in 3.0.1: `quicFingerprint` is accepted but has no effect, on QUIC or on the TCP ClientHello. HTTP/3 cannot be combined with `proxy`; that request returns an error.
 
 ### Golang HTTP/3 Basic Usage
 
@@ -2444,6 +2499,8 @@ func main() {
 ```
 
 ### Golang QUIC Fingerprinting
+
+> `QUICFingerprint` has no effect in 3.0.1. The request below is sent over HTTP/3 with the default QUIC handshake.
 
 ```go
 package main
