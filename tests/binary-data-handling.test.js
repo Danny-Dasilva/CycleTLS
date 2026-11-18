@@ -1,5 +1,7 @@
 const initCycleTLS = require('../dist/index.js');
 const fs = require('fs');
+const http = require('http');
+const path = require('path');
 const crypto = require('crypto');
 
 jest.setTimeout(60000);
@@ -7,10 +9,61 @@ jest.setTimeout(60000);
 const ja3 = '771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0';
 const userAgent = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0';
 
+const jpegFixture = fs.readFileSync(path.join(__dirname, 'images', 'test.jpeg'));
+const pngFixture = fs.readFileSync(path.join(__dirname, 'images', 'test.png'));
+
+// These tests assert byte-exact behaviour, so they run against a local server
+// that records the request body and echoes it back unchanged. httpbin.org is
+// not usable for this: it re-encodes the body into a JSON `data` field (a
+// UTF-8 string or a base64 data URL, depending on the bytes) and rate-limits
+// CI runners.
 describe('Binary Data Handling - Issue #297 Fix', () => {
   let cycleTLS;
+  let server;
+  let baseUrl;
+  // Body of the most recent POST exactly as it arrived on the wire.
+  let receivedBody;
+
+  beforeAll((done) => {
+    server = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/image/jpeg') {
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': jpegFixture.length });
+        res.end(jpegFixture);
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/image/png') {
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': pngFixture.length });
+        res.end(pngFixture);
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/post') {
+        const chunks = [];
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end', () => {
+          receivedBody = Buffer.concat(chunks);
+          res.writeHead(200, {
+            'Content-Type': req.headers['content-type'] || 'application/octet-stream',
+            'Content-Length': receivedBody.length,
+          });
+          res.end(receivedBody);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    server.listen(0, '127.0.0.1', () => {
+      baseUrl = `http://127.0.0.1:${server.address().port}`;
+      done();
+    });
+  });
+
+  afterAll((done) => {
+    server.close(done);
+  });
 
   beforeEach(async () => {
+    receivedBody = undefined;
     // Use a different port for each test to avoid conflicts
     const port = 9119 + Math.floor(Math.random() * 1000);
     cycleTLS = await initCycleTLS({ port });
@@ -35,8 +88,8 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
 
     const originalHash = crypto.createHash('md5').update(problematicData).digest('hex');
 
-    const response = await cycleTLS('https://httpbin.org/post', {
-      body: problematicData.toString('binary'), // Convert Buffer to binary string
+    const response = await cycleTLS(`${baseUrl}/post`, {
+      body: problematicData, // A Buffer body is sent byte-for-byte
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Length': problematicData.length.toString()
@@ -47,19 +100,19 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
 
     expect(response.status).toBe(200);
 
-    // Parse response to verify server received the data
-    const responseData = JSON.parse(await response.text());
-    expect(responseData.data).toBeDefined();
+    // What the server received on the wire
+    expect(receivedBody.equals(problematicData)).toBe(true);
 
-    // httpbin.org returns data as raw binary string when sent as binary, not base64
-    const receivedData = Buffer.from(responseData.data, 'binary');
-    const receivedHash = crypto.createHash('md5').update(receivedData).digest('hex');
+    // What the server echoed back
+    const echoed = Buffer.from(await response.arrayBuffer());
+    const receivedHash = crypto.createHash('md5').update(echoed).digest('hex');
 
     expect(receivedHash).toBe(originalHash);
+    expect(echoed.equals(problematicData)).toBe(true);
   });
 
   test('Binary download using arrayBuffer() should preserve data integrity', async () => {
-    const response = await cycleTLS('https://httpbin.org/image/jpeg', {
+    const response = await cycleTLS(`${baseUrl}/image/jpeg`, {
       ja3,
       userAgent
     });
@@ -75,31 +128,20 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     expect(dataArray[0]).toBe(0xFF);
     expect(dataArray[1]).toBe(0xD8);
 
-    // Verify we can calculate a consistent hash
+    // The download must match the served file byte-for-byte
     const buffer = Buffer.from(binaryData);
     const hash = crypto.createHash('md5').update(buffer).digest('hex');
-    expect(hash).toBeDefined();
-    expect(hash.length).toBe(32); // MD5 hash length
+    expect(hash).toBe(crypto.createHash('md5').update(jpegFixture).digest('hex'));
+    expect(buffer.length).toBe(jpegFixture.length);
   });
 
   test('Binary image upload and download round-trip should preserve data', async () => {
-    // Try to use test image, fallback to created binary data
-    let testImageData;
-    try {
-      testImageData = fs.readFileSync('./tests/images/test.jpeg');
-    } catch (err) {
-      // Create fake JPEG data if test image doesn't exist
-      testImageData = Buffer.from([
-        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-        0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xD9
-      ]);
-    }
-
+    const testImageData = jpegFixture;
     const originalHash = crypto.createHash('sha256').update(testImageData).digest('hex');
 
     // Upload the image
-    const uploadResponse = await cycleTLS('https://httpbin.org/post', {
-      body: testImageData.toString('binary'), // Convert Buffer to binary string
+    const uploadResponse = await cycleTLS(`${baseUrl}/post`, {
+      body: testImageData,
       headers: {
         'Content-Type': 'image/jpeg'
       },
@@ -108,9 +150,10 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     }, 'POST');
 
     expect(uploadResponse.status).toBe(200);
+    expect(crypto.createHash('sha256').update(receivedBody).digest('hex')).toBe(originalHash);
 
-    // Download a reference image for comparison  
-    const downloadResponse = await cycleTLS('https://httpbin.org/image/jpeg', {
+    // Download the same image
+    const downloadResponse = await cycleTLS(`${baseUrl}/image/jpeg`, {
       ja3,
       userAgent
     });
@@ -125,10 +168,9 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     expect(downloadedBuffer[0]).toBe(0xFF);
     expect(downloadedBuffer[1]).toBe(0xD8);
 
-    // Verify we can process the data without corruption
+    // Upload and download must both match the original file
     const downloadedHash = crypto.createHash('sha256').update(downloadedBuffer).digest('hex');
-    expect(downloadedHash).toBeDefined();
-    expect(downloadedHash.length).toBe(64); // SHA256 hash length
+    expect(downloadedHash).toBe(originalHash);
   });
 
   test('Mixed binary and text data should both work correctly', async () => {
@@ -136,17 +178,18 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     const textData = JSON.stringify({ message: 'Hello, world!', binary: true });
 
     // Upload binary data
-    const binaryResponse = await cycleTLS('https://httpbin.org/post', {
-      body: binaryData.toString('binary'), // Convert Buffer to binary string
+    const binaryResponse = await cycleTLS(`${baseUrl}/post`, {
+      body: binaryData,
       headers: { 'Content-Type': 'application/octet-stream' },
       ja3,
       userAgent
     }, 'POST');
 
     expect(binaryResponse.status).toBe(200);
+    expect(receivedBody.equals(binaryData)).toBe(true);
 
-    // Upload text data  
-    const textResponse = await cycleTLS('https://httpbin.org/post', {
+    // Upload text data
+    const textResponse = await cycleTLS(`${baseUrl}/post`, {
       body: textData,
       headers: { 'Content-Type': 'application/json' },
       ja3,
@@ -154,15 +197,16 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     }, 'POST');
 
     expect(textResponse.status).toBe(200);
+    expect(receivedBody.toString('utf8')).toBe(textData);
 
-    // Verify text response can be parsed as JSON
+    // Verify the echoed text can be parsed as JSON
     const textResponseData = JSON.parse(await textResponse.text());
-    expect(textResponseData.json.message).toBe('Hello, world!');
-    expect(textResponseData.json.binary).toBe(true);
+    expect(textResponseData.message).toBe('Hello, world!');
+    expect(textResponseData.binary).toBe(true);
 
-    // Verify binary response has data
-    const binaryResponseData = JSON.parse(await binaryResponse.text());
-    expect(binaryResponseData.data).toBeDefined();
+    // Verify the echoed binary body is intact
+    const echoedBinary = Buffer.from(await binaryResponse.arrayBuffer());
+    expect(echoedBinary.equals(binaryData)).toBe(true);
   });
 
   test('Large binary file upload should not corrupt data', async () => {
@@ -173,8 +217,8 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
 
     const originalHash = crypto.createHash('md5').update(largeData).digest('hex');
 
-    const response = await cycleTLS('https://httpbin.org/post', {
-      body: largeData.toString('binary'), // Convert Buffer to binary string
+    const response = await cycleTLS(`${baseUrl}/post`, {
+      body: largeData,
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Length': largeData.length.toString()
@@ -184,9 +228,9 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     }, 'POST');
 
     expect(response.status).toBe(200);
+    expect(receivedBody.equals(largeData)).toBe(true);
 
-    const responseData = JSON.parse(await response.text());
-    const receivedData = Buffer.from(responseData.data, 'binary');
+    const receivedData = Buffer.from(await response.arrayBuffer());
     const receivedHash = crypto.createHash('md5').update(receivedData).digest('hex');
 
     expect(receivedHash).toBe(originalHash);
@@ -198,17 +242,17 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     const allBytesData = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
     const originalHash = crypto.createHash('sha256').update(allBytesData).digest('hex');
 
-    const response = await cycleTLS('https://httpbin.org/post', {
-      body: allBytesData.toString('binary'), // Convert Buffer to binary string
+    const response = await cycleTLS(`${baseUrl}/post`, {
+      body: allBytesData,
       headers: { 'Content-Type': 'application/octet-stream' },
       ja3,
       userAgent
     }, 'POST');
 
     expect(response.status).toBe(200);
+    expect(receivedBody.equals(allBytesData)).toBe(true);
 
-    const responseData = JSON.parse(await response.text());
-    const receivedData = Buffer.from(responseData.data, 'binary');
+    const receivedData = Buffer.from(await response.arrayBuffer());
     const receivedHash = crypto.createHash('sha256').update(receivedData).digest('hex');
 
     expect(receivedHash).toBe(originalHash);
@@ -220,8 +264,27 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
     }
   });
 
+  test('String body is sent as UTF-8 text, not as raw bytes', async () => {
+    // A string is text: each character above 0x7F becomes a multi-byte UTF-8
+    // sequence on the wire. A latin1 "binary string" therefore does not carry
+    // raw bytes; binary payloads must be passed as Buffer/Uint8Array.
+    const bytes = Buffer.from([0x41, 0x80, 0xFF, 0x42]);
+    const binaryString = bytes.toString('binary');
+
+    const response = await cycleTLS(`${baseUrl}/post`, {
+      body: binaryString,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      ja3,
+      userAgent
+    }, 'POST');
+
+    expect(response.status).toBe(200);
+    expect(receivedBody.equals(Buffer.from(binaryString, 'utf8'))).toBe(true);
+    expect(receivedBody.toString('utf8')).toBe(binaryString);
+  });
+
   test('arrayBuffer() provides clean binary data access', async () => {
-    const response = await cycleTLS('https://httpbin.org/image/png', {
+    const response = await cycleTLS(`${baseUrl}/image/png`, {
       ja3,
       userAgent
     });
@@ -238,18 +301,17 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
 
     // Verify we got substantial binary data
     expect(bufferFromArray.length).toBeGreaterThan(1000); // PNG should be reasonably large
-    
-    // Verify we can process binary data without corruption
+
+    // The download must match the served file byte-for-byte
     const hash = crypto.createHash('md5').update(bufferFromArray).digest('hex');
-    expect(hash).toBeDefined();
-    expect(hash.length).toBe(32);
+    expect(hash).toBe(crypto.createHash('md5').update(pngFixture).digest('hex'));
   });
 
   test('Empty binary data should be handled correctly', async () => {
     const emptyData = Buffer.alloc(0);
 
-    const response = await cycleTLS('https://httpbin.org/post', {
-      body: emptyData.toString('binary'), // Convert Buffer to binary string (empty string)
+    const response = await cycleTLS(`${baseUrl}/post`, {
+      body: emptyData,
       headers: { 'Content-Type': 'application/octet-stream' },
       ja3,
       userAgent
@@ -257,8 +319,8 @@ describe('Binary Data Handling - Issue #297 Fix', () => {
 
     expect(response.status).toBe(200);
 
-    const responseData = JSON.parse(await response.text());
-    // httpbin should return empty string for empty data
-    expect(responseData.data).toBe('');
+    // The server receives an empty body and echoes an empty body
+    expect(receivedBody.length).toBe(0);
+    expect((await response.arrayBuffer()).byteLength).toBe(0);
   });
 });
