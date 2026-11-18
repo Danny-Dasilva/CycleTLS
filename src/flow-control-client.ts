@@ -135,6 +135,32 @@ export interface RequestOptions {
    * If not specified, no SSE stream timeout is applied.
    */
   sseTimeout?: number;
+
+  // ---- Options new in 3.0.1 (types only; added by the legacy-client change) ----
+  /**
+   * Named TLS ClientHello profile, for example "chrome_133". Takes precedence
+   * over `ja3` and `ja4r`; `clientHello` takes precedence over it.
+   */
+  tlsProfile?: string;
+  /** Hex string of a captured TLS ClientHello record (or bare handshake message); the handshake is built from it */
+  clientHello?: string;
+  /** Shuffle the TLS extension order on each connection; not applied with an explicit `ja3` or `clientHello` */
+  shuffleExtensions?: boolean;
+  /** Resume TLS sessions (session tickets / PSK) on later connections to the same host */
+  sessionResumption?: boolean;
+  /** Extra CA certificates, PEM encoded, trusted in addition to the system roots */
+  caCerts?: string[];
+  /**
+   * Certificate pins: `sha256/<base64>` (SHA-256 of a certificate's
+   * SubjectPublicKeyInfo) or 64 hex characters (SHA-256 of the certificate DER).
+   * The request fails unless a certificate in the server's chain matches one.
+   */
+  certPins?: string[];
+  /** HTTP/2 priority for the HEADERS frame (weight 1 to 256); `false` sends no priority */
+  http2Priority?: { weight?: number; exclusive?: boolean; streamDep?: number } | false;
+  /** Extra headers sent on the CONNECT request to an HTTP or HTTPS proxy; SOCKS ignores it */
+  proxyHeaders?: Record<string, string>;
+  // ---- end of 3.0.1 options ----
 }
 
 /**

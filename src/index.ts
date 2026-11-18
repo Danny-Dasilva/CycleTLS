@@ -159,6 +159,60 @@ function forceKillProcess(
  */
 export type HttpHeaders = Record<string, string | string[]>;
 
+/** A request header value. Numbers and booleans are sent as their string form. */
+export type RequestHeaderValue = string | number | boolean;
+
+/**
+ * Request headers. A value may be a string, number or boolean, or an array of
+ * those for a header that is sent more than once.
+ */
+export type RequestHeaders = Record<string, RequestHeaderValue | RequestHeaderValue[]>;
+
+/** HTTP/2 priority sent with the HEADERS frame of a request. */
+export interface HTTP2Priority {
+  /** Stream weight, 1 to 256. Left out or 0 means 256; any other value is an error */
+  weight?: number;
+  /** Mark the dependency as exclusive */
+  exclusive?: boolean;
+  /** Id of the stream this request depends on */
+  streamDep?: number;
+}
+
+function headerValueToString(name: string, value: unknown): string {
+  switch (typeof value) {
+    case 'string':
+      return value;
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+      return String(value);
+  }
+  const got = value === null ? 'null' : Array.isArray(value) ? 'a nested array' : typeof value;
+  throw new TypeError(
+    `Invalid value for header "${name}": expected a string, number, boolean or an array of those, got ${got}`
+  );
+}
+
+/**
+ * Turn user-supplied request headers into what the Go process accepts: a string
+ * or a string array per header. Throws a TypeError for a value that has no
+ * sensible string form (undefined, null, an object) so the request fails before
+ * anything is sent.
+ */
+function normalizeRequestHeaders(headers: unknown): HttpHeaders | undefined {
+  if (headers === undefined || headers === null) return undefined;
+  if (typeof headers !== 'object' || Array.isArray(headers)) {
+    throw new TypeError('Invalid headers: expected an object of header names to values');
+  }
+  const normalized: HttpHeaders = {};
+  for (const [name, value] of Object.entries(headers)) {
+    normalized[name] = Array.isArray(value)
+      ? value.map((item) => headerValueToString(name, item))
+      : headerValueToString(name, value);
+  }
+  return normalized;
+}
+
 /**
  * Simple cookie object for basic name/value pairs.
  * For more control, use the full Cookie interface.
@@ -249,9 +303,11 @@ interface BodyReadError {
 }
 
 // Request options for internal sendRequest
-interface InternalRequestOptions extends CycleTLSRequestOptions {
+interface InternalRequestOptions extends Omit<CycleTLSRequestOptions, 'bodyBytes'> {
   url: string;
   method: string;
+  // Raw bytes from the caller; sendRequest turns them into base64 for the wire
+  bodyBytes?: Uint8Array | string;
   _connectionReuse?: string;
   _hostKey?: string;
 }
@@ -352,13 +408,18 @@ export interface CycleTLSRequestOptions {
    * as repeated headers (multiple entries for the same field), and the exact
    * key casing you provide is preserved on the wire instead of being canonicalized.
    *
+   * Numbers and booleans are converted with `String()`. A value that is
+   * `undefined`, `null` or an object makes the request reject with a TypeError
+   * before anything is sent.
+   *
    * @example
    * headers: {
    *   "x-CUSTOM-case": ["one", "two"], // sent twice, casing preserved
    *   "Accept": "text/plain",
+   *   "x-attempt": 2,                  // sent as "2"
    * }
    */
-  headers?: HttpHeaders;
+  headers?: RequestHeaders;
   /**
    * Cookies to send with the request.
    * Can be an array of Cookie objects or a simple key-value object.
@@ -370,6 +431,11 @@ export interface CycleTLSRequestOptions {
   };
   /** Request body for POST, PUT, PATCH requests */
   body?: string | URLSearchParams | FormData;
+  /**
+   * Binary request body. Sent to the Go process as base64 and written to the
+   * wire as raw bytes. When set and not empty it is used instead of `body`.
+   */
+  bodyBytes?: Uint8Array;
 
   /**
    * Response type (like Axios).
@@ -391,9 +457,44 @@ export interface CycleTLSRequestOptions {
    * Pass raw JA4 (JA4R) values. The JA4 hash is not accepted for configuration.
    */
   ja4r?: string;
-  /** HTTP/2 fingerprint for protocol-level fingerprinting */
+  /**
+   * Named TLS ClientHello profile, for example "chrome_133", "firefox_120" or
+   * "safari_16_0". Takes precedence over `ja3` and `ja4r`; `clientHello` takes
+   * precedence over it. When it is set the client does not add its default JA3.
+   */
+  tlsProfile?: string;
+  /**
+   * Hex string of a captured TLS ClientHello record (or of the bare handshake
+   * message). The handshake is built from it. Takes precedence over
+   * `tlsProfile`, `ja3` and `ja4r`. When it is set the client does not add its
+   * default JA3.
+   */
+  clientHello?: string;
+  /**
+   * Shuffle the order of the TLS extensions on each connection, as Chrome does.
+   * Applies to the default Chrome handshake, `tlsProfile` and `ja4r`; not with
+   * an explicit `ja3` or `clientHello`.
+   */
+  shuffleExtensions?: boolean;
+  /** Resume TLS sessions (session tickets / PSK) on later connections to the same host */
+  sessionResumption?: boolean;
+  /** Retry the handshake with TLS 1.3 compatible curves when the first attempt fails */
+  tls13AutoRetry?: boolean;
+  /**
+   * HTTP/2 fingerprint. Accepts the full Akamai form
+   * `SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_ORDER`,
+   * for example `1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p`.
+   * Settings may be separated by `,` or `;`. PRIORITY is `0`, `1` or a list
+   * `streamID:exclusive:dependsOn:weight,...`. PSEUDO_ORDER sets the
+   * pseudo-header order and must be a permutation of `m,a,s,p`.
+   */
   http2Fingerprint?: string;
-  /** QUIC/HTTP3 fingerprint for protocol-level fingerprinting */
+  /**
+   * HTTP/2 priority for the request's HEADERS frame.
+   * Pass `false` to send no priority at all.
+   */
+  http2Priority?: HTTP2Priority | false;
+  /** Accepted but has no effect in 3.0.1: not applied to QUIC, and it no longer changes the TCP ClientHello */
   quicFingerprint?: string;
   /** Disable GREASE (Generate Random Extensions And Sustain Extensibility) for exact JA4 matching */
   disableGrease?: boolean;
@@ -408,8 +509,19 @@ export interface CycleTLSRequestOptions {
    * Supports HTTP, HTTPS, SOCKS4, and SOCKS5 proxies
    */
   proxy?: string;
-  /** Request timeout in seconds (default: 30) */
+  /** Extra headers sent on the CONNECT request to an HTTP or HTTPS proxy. SOCKS proxies ignore it */
+  proxyHeaders?: Record<string, string>;
+  /**
+   * Request timeout in seconds: the time allowed until the response headers
+   * arrive (default: 30). A negative value means no timeout.
+   */
   timeout?: number;
+  /**
+   * Read timeout in milliseconds. After the response headers arrive, the request
+   * fails when no body data arrives for this long. Not set by default: without
+   * it a server that stalls mid-body keeps the request open for good.
+   */
+  readTimeout?: number;
   /** Disable automatic following of redirects */
   disableRedirect?: boolean;
   /** Order in which headers should be sent (for fingerprinting) */
@@ -418,6 +530,15 @@ export interface CycleTLSRequestOptions {
   orderAsProvided?: boolean;
   /** Skip TLS certificate verification (use with caution) */
   insecureSkipVerify?: boolean;
+  /** Extra CA certificates, PEM encoded, trusted for this request in addition to the system roots */
+  caCerts?: string[];
+  /**
+   * Certificate pins. An entry is either `sha256/<base64>`, the SHA-256 hash
+   * of a certificate's SubjectPublicKeyInfo, or 64 hex characters, the SHA-256
+   * hash of the whole certificate (DER). The request fails unless a certificate
+   * in the server's chain matches one of them.
+   */
+  certPins?: string[];
   /**
    * Skip TLS certificate verification for proxy connections.
    * Defaults to true for backward compatibility since proxies commonly use self-signed certs.
@@ -429,7 +550,7 @@ export interface CycleTLSRequestOptions {
 
   /** Force use of HTTP/1.1 instead of HTTP/2 */
   forceHTTP1?: boolean;
-  /** Force use of HTTP/3 (QUIC) */
+  /** Force use of HTTP/3 (QUIC). Cannot be combined with `proxy`: the request returns an error */
   forceHTTP3?: boolean;
   /** Protocol to use: "http1", "http2", "http3", "websocket", "sse" */
   protocol?: string;
@@ -566,8 +687,13 @@ class InstanceManager {
   ): Promise<SharedInstance> {
     // Check if already initialized
     const existing = this.sharedInstances.get(port);
-    if (existing) {
+    if (existing && !existing.hasGivenUp()) {
       return existing;
+    }
+    if (existing) {
+      // It lost its Go process and could not get it back. Drop it and start over.
+      this.sharedInstances.delete(port);
+      await existing.cleanup();
     }
 
     // Check if initialization is in progress
@@ -601,8 +727,10 @@ class InstanceManager {
     return initPromise;
   }
 
-  async removeSharedInstance(port: number): Promise<void> {
+  async removeSharedInstance(port: number, onlyIf?: SharedInstance): Promise<void> {
     const sharedInstance = this.sharedInstances.get(port);
+    // A caller that names its instance must not remove a newer one on the same port
+    if (onlyIf && sharedInstance !== onlyIf) return;
     if (sharedInstance) {
       await sharedInstance.cleanup();
       this.sharedInstances.delete(port);
@@ -660,7 +788,11 @@ class SharedInstance extends EventEmitter {
   private failedInitialization: boolean = false;
   private isShuttingDown: boolean = false;
   private httpServer: http.Server | null = null;
-  private initializationReject: ((reason: string) => void) | null = null;
+  private initializationReject: ((reason: Error) => void) | null = null;
+  // Set while the control socket is being re-established after it dropped
+  private reconnecting: boolean = false;
+  // Set once a reconnect has failed for good; every later request rejects with it
+  private connectionError: Error | null = null;
   private authToken: string = ''; // Issue #4: WebSocket auth token
   // Respawn bookkeeping: restarts in a row, the pending restart, when the
   // current child started, and whether the Go process failed to bind the port.
@@ -677,7 +809,9 @@ class SharedInstance extends EventEmitter {
     this.executablePath = executablePath;
   }
 
-  private rejectInitialization(reason: string): void {
+  private rejectInitialization(reason: Error | string): void {
+    // Callers always get an Error, never a bare string
+    if (typeof reason === 'string') reason = new Error(reason);
     this.failedInitialization = true;
 
     // Clear connection timeout to prevent it from firing on an already-rejected promise
@@ -698,6 +832,11 @@ class SharedInstance extends EventEmitter {
     }
   }
 
+  /** True once the Go process was lost and could not be restarted or reached again. */
+  hasGivenUp(): boolean {
+    return this.connectionError !== null;
+  }
+
   async initialize(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.initializationReject = reject;
@@ -705,7 +844,7 @@ class SharedInstance extends EventEmitter {
     });
   }
 
-  private checkSpawnedInstance(resolve: () => void, reject: (reason: string) => void): void {
+  private checkSpawnedInstance(resolve: () => void, reject: (reason: Error) => void): void {
     this.httpServer = http.createServer();
 
     const onListening = () => {
@@ -861,6 +1000,17 @@ class SharedInstance extends EventEmitter {
         }
       });
 
+      // The Go process can stop without a fatal line on stderr (SIGKILL, the OOM
+      // killer, log.Fatal). 'close' fires after stderr has been read, so a fatal
+      // line is always handled first; the timer covers a child whose pipes stay
+      // open after it exits. handleChildExit ignores the second call.
+      const onGone = (code: number | null, signal: NodeJS.Signals | null) =>
+        this.handleChildExit(child, fileName, code, signal);
+      child.once('close', onGone);
+      child.once('exit', (code, signal) => {
+        setTimeout(() => onGone(code, signal), 250).unref();
+      });
+
       // Add error handler for spawn errors
       this.child.on('error', (error: NodeJS.ErrnoException) => {
         console.error(`Failed to start subprocess: ${error.message}`);
@@ -878,9 +1028,24 @@ class SharedInstance extends EventEmitter {
     }
   }
 
-  // Called when the Go process writes a fatal error to stderr. Restarts it a
-  // bounded number of times with a growing delay, and never after shutdown or
-  // a failed initialization.
+  // Called when the Go process exits. An exit we asked for (shutdown, a fatal
+  // error already handled, a failed initialization) is ignored; any other exit
+  // goes through the same bounded restart as a fatal error on stderr.
+  private handleChildExit(
+    child: ChildProcessWithoutNullStreams,
+    fileName: string,
+    code: number | null,
+    signal: NodeJS.Signals | null
+  ): void {
+    if (child !== this.child) return;
+    if (this.isShuttingDown || this.failedInitialization) return;
+    const how = signal ? `signal ${signal}` : `code ${code}`;
+    this.handleFatalError(child, fileName, `Go process exited unexpectedly (${how})`);
+  }
+
+  // Called when the Go process writes a fatal error to stderr or exits on its
+  // own. Restarts it a bounded number of times with a growing delay, and never
+  // after shutdown or a failed initialization.
   private handleFatalError(child: ChildProcessWithoutNullStreams, fileName: string, errorMessage: string): void {
     // One crash can write to stderr several times; handle each child once.
     if (child !== this.child) return;
@@ -889,6 +1054,14 @@ class SharedInstance extends EventEmitter {
     this.child = null;
 
     if (this.isShuttingDown || this.failedInitialization) return;
+
+    // After initialization the process took the control socket with it: fail
+    // what was in flight and start reconnecting. This also sets
+    // initializationReject, so the give-up paths below reach the reconnect.
+    if (!this.initializationReject) {
+      const firstLine = errorMessage.trim().split('\n')[0].slice(0, 200);
+      this.handleConnectionLost(new Error(`CycleTLS Go process stopped before the request finished: ${firstLine}`));
+    }
 
     if (/address already in use/i.test(errorMessage)) {
       // Something else took the port after our probe. Spawning again on the same
@@ -935,14 +1108,91 @@ class SharedInstance extends EventEmitter {
     }, delay);
   }
 
-  private createClient(resolve: () => void, reject: (reason: string) => void): void {
+  private failInFlight(error: Error, quietStreams: boolean = false): void {
+    for (const client of Array.from(this.clients.values())) {
+      client._failPending(error, quietStreams);
+    }
+  }
+
+  private notConnectedError(): Error {
+    if (this.connectionError) return this.connectionError;
+    if (this.reconnecting) {
+      return new Error('CycleTLS is reconnecting to its Go process after it stopped; retry the request shortly');
+    }
+    return new Error('CycleTLS is not connected to its Go process');
+  }
+
+  // The control socket closed, or the Go process behind it stopped, after
+  // initialization. Rejects every in-flight request, then reconnects through the
+  // same steps as initialization: the host waits for its restarted child (see
+  // handleFatalError), a non-host probes the port again and becomes the host
+  // when the port is free. Bounded by the init timeout and the respawn limit.
+  private handleConnectionLost(reason: Error): void {
+    const old = this.server;
+    this.server = null;
+    if (old) {
+      old.removeAllListeners();
+      old.on('error', () => { /* socket is being dropped */ });
+      try { old.terminate(); } catch { /* already closed */ }
+    }
+
+    this.failInFlight(reason);
+
+    if (this.isShuttingDown || this.failedInitialization || this.reconnecting) return;
+    this.reconnecting = true;
+
+    new Promise<void>((resolve, reject) => {
+      this.initializationReject = reject;
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+      if (this.isHost) {
+        this.createClient(resolve, reject);
+      } else {
+        this.checkSpawnedInstance(resolve, reject);
+      }
+    }).then(
+      () => {
+        this.reconnecting = false;
+        if (this.debug) console.log(`[DEBUG] Reconnected to the CycleTLS Go process on port ${this.port}`);
+      },
+      (error: Error) => {
+        this.reconnecting = false;
+        this.failedInitialization = true;
+        if (this.respawnTimer) {
+          clearTimeout(this.respawnTimer);
+          this.respawnTimer = null;
+        }
+        if (this.isHost && this.child) {
+          forceKillProcess(this.child, true);
+          this.child = null;
+        }
+        this.connectionError = new Error(
+          `CycleTLS lost its Go process and could not reconnect (${error.message}). Call exit() and initCycleTLS() again.`
+        );
+        console.error(this.connectionError.message);
+      }
+    );
+  }
+
+  private createClient(resolve: () => void, reject: (reason: Error) => void): void {
     const attemptConnection = () => {
+      if (this.isShuttingDown) return;
+      let opened = false;
       // Use ?v=1 to request legacy JSON protocol (V2 flow-control is now default)
       // Issue #4: Include auth token in WebSocket connection for authentication
       const tokenParam = this.authToken ? `&token=${this.authToken}` : '';
       const server = new WebSocket(`ws://localhost:${this.port}?v=1${tokenParam}`);
 
       server.on("open", () => {
+        if (this.isShuttingDown || this.failedInitialization) {
+          server.removeAllListeners();
+          server.on('error', () => { /* socket is being dropped */ });
+          server.terminate();
+          return;
+        }
+        opened = true;
         // When connected, clear the connection timeout if it exists.
         if (this.connectionTimeout) {
           clearTimeout(this.connectionTimeout);
@@ -1058,14 +1308,22 @@ class SharedInstance extends EventEmitter {
           }
         });
 
+        // The socket closes when the Go process stops or drops the connection.
+        server.on("close", () => {
+          if (this.server !== server) return;
+          this.handleConnectionLost(new Error('CycleTLS lost the connection to its Go process before the request finished'));
+        });
+
         resolve();
       });
 
       server.on("error", (err) => {
+        // After the socket has opened, 'close' follows and starts the reconnect.
+        if (opened) return;
         // On error, remove the listeners and try again after a short delay.
         server.removeAllListeners();
         setTimeout(() => {
-          if (this.failedInitialization) {
+          if (this.failedInitialization || this.isShuttingDown) {
             return;
           }
           attemptConnection();
@@ -1079,11 +1337,11 @@ class SharedInstance extends EventEmitter {
     this.connectionTimeout = setTimeout(() => {
       this.failedInitialization = true;
       this.initializationReject = null;
-      reject(
+      reject(new Error(
         this.portInUse
           ? `Port ${this.port} is already in use and no CycleTLS instance answered on it within ${this.timeout}ms`
           : `Could not connect to the CycleTLS instance within ${this.timeout}ms`
-      );
+      ));
     }, this.timeout);
   }
 
@@ -1105,12 +1363,17 @@ class SharedInstance extends EventEmitter {
     if (this.clients.size === 0) {
       const manager = InstanceManager.getInstance();
       if (!manager._hasInitializingPromise(this.port)) {
-        manager.removeSharedInstance(this.port);
+        manager.removeSharedInstance(this.port, this);
       }
     }
   }
 
   async sendRequest(requestId: string, options: InternalRequestOptions): Promise<void> {
+    // Fail fast while the Go process is away instead of writing into a dead socket
+    if (!this.server || this.server.readyState !== WebSocket.OPEN) {
+      throw this.notConnectedError();
+    }
+
     // Check if options.body is URLSearchParams and convert to string
     if (options.body instanceof URLSearchParams) {
       options.body = options.body.toString();
@@ -1174,28 +1437,45 @@ class SharedInstance extends EventEmitter {
       options.body = formDataString;
     }
 
-    if (this.server) {
-      this.server.send(JSON.stringify({ requestId, options }));
-    } else {
-      throw new Error('WebSocket server not connected');
+    // The Go process decodes body as a string. Anything else fails its JSON
+    // decoding, so reject it here with a message the caller can act on.
+    if (options.body !== undefined && options.body !== null && typeof options.body !== 'string') {
+      throw new TypeError(
+        'Invalid body: expected a string, URLSearchParams or FormData. Send binary data with bodyBytes.'
+      );
     }
+
+    // Go reads bodyBytes ([]byte) from a base64 string
+    if (options.bodyBytes !== undefined && options.bodyBytes !== null && typeof options.bodyBytes !== 'string') {
+      if (!(options.bodyBytes instanceof Uint8Array)) {
+        throw new TypeError('Invalid bodyBytes: expected a Uint8Array or Buffer');
+      }
+      const bytes = options.bodyBytes;
+      options.bodyBytes = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+    }
+
+    // The FormData conversion above is asynchronous; check the socket again
+    if (!this.server || this.server.readyState !== WebSocket.OPEN) {
+      throw this.notConnectedError();
+    }
+    this.server.send(JSON.stringify({ requestId, options }));
   }
 
   async cancelRequest(requestId: string): Promise<void> {
-    if (this.server) {
+    if (this.server && this.server.readyState === WebSocket.OPEN) {
       this.server.send(JSON.stringify({ action: "cancel", requestId }));
     }
   }
 
   async sendWebSocketCommand(requestId: string, action: string, data?: Record<string, unknown>): Promise<void> {
-    if (this.server) {
+    if (this.server && this.server.readyState === WebSocket.OPEN) {
       this.server.send(JSON.stringify({
         action,
         requestId,
         ...data
       }));
     } else {
-      throw new Error('WebSocket server not connected');
+      throw this.notConnectedError();
     }
   }
 
@@ -1251,6 +1531,10 @@ class SharedInstance extends EventEmitter {
         console.error("Error closing WebSocket:", error);
       }
     }
+
+    // Requests still in flight can never finish now; settle them instead of
+    // leaving them to their timeout.
+    this.failInFlight(new Error('CycleTLS was closed before the request finished'), true);
 
     // Notify all clients that the shared instance is shutting down
     for (const client of this.clients.values()) {
@@ -1532,8 +1816,14 @@ const DEFAULT_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (
 
 // Apply default fingerprinting options to request options
 function applyDefaultOptions(options: CycleTLSRequestOptions): void {
-  // Set default fingerprinting options - prefer JA3 if multiple options are provided
-  if (!options.ja3 && !options.ja4r && !options.http2Fingerprint && !options.quicFingerprint) {
+  // Coerce header values to strings, or throw before anything is sent
+  const headers = normalizeRequestHeaders(options.headers);
+  if (headers) options.headers = headers;
+
+  // Set default fingerprinting options - prefer JA3 if multiple options are provided.
+  // tlsProfile and clientHello describe the whole handshake, so no default JA3 with them.
+  if (!options.ja3 && !options.ja4r && !options.http2Fingerprint && !options.quicFingerprint
+    && !options.tlsProfile && !options.clientHello) {
     options.ja3 = DEFAULT_JA3;
   }
 
@@ -1558,6 +1848,8 @@ class CycleTLSClientImpl extends EventEmitter {
   private sharedInstance: SharedInstance;
   private clientId: string;
   private connectionsByHost: Map<string, boolean> = new Map();
+  // How to fail each request or WebSocket that is still waiting on the Go process
+  private pending: Map<string, (error: Error, quietStream?: boolean) => void> = new Map();
 
   constructor(sharedInstance: SharedInstance) {
     super();
@@ -1571,6 +1863,22 @@ class CycleTLSClientImpl extends EventEmitter {
     this.on('sharedInstanceClosed', () => {
       this.removeAllListeners();
     });
+  }
+
+  /**
+   * @internal Fail everything still in flight on this client. With quietStream,
+   * a body stream already handed to the caller is closed without an error event.
+   */
+  _failPending(error: Error, quietStream: boolean = false): void {
+    const fails = Array.from(this.pending.values());
+    this.pending.clear();
+    for (const fail of fails) {
+      try {
+        fail(error, quietStream);
+      } catch {
+        // One failing handler must not keep the others from being told
+      }
+    }
   }
 
   async request(
@@ -1606,10 +1914,14 @@ class CycleTLSClientImpl extends EventEmitter {
     // Set the connection as tracked for this host
     this.connectionsByHost.set(hostKey, true);
     
+    // readTimeout is enforced here; the Go process does not know it
+    const { readTimeout, ...wireOptions } = options;
+    const readTimeoutMs = typeof readTimeout === 'number' && readTimeout > 0 ? readTimeout : 0;
+
     // Send request through shared instance
     await this.sharedInstance.sendRequest(requestId, {
       url,
-      ...options,
+      ...wireOptions,
       method,
       // Add metadata about connection reuse (will be ignored by Go if not implemented)
       _connectionReuse: hasExistingConnection ? "reuse" : "new",
@@ -1619,9 +1931,13 @@ class CycleTLSClientImpl extends EventEmitter {
     return new Promise((resolveRequest, rejectRequest) => {
       let responseMetadata: ResponseMetadata | null = null;
       let timeoutId: NodeJS.Timeout | null = null;
+      let readTimeoutId: NodeJS.Timeout | null = null;
+      // The body stream, once the first body message has arrived
+      let activeStream: Readable | null = null;
 
-      // Default timeout of 30 seconds, configurable via options.timeout (in seconds)
-      const timeoutMs = options.timeout ? options.timeout * 1000 : 30000;
+      // Default timeout of 30 seconds, configurable via options.timeout (in seconds).
+      // A negative value means no timeout, as in the Go process; 0 means the default.
+      const timeoutMs = !options.timeout ? 30000 : options.timeout < 0 ? 0 : options.timeout * 1000;
 
       const cleanupTimeout = () => {
         if (timeoutId) {
@@ -1630,19 +1946,59 @@ class CycleTLSClientImpl extends EventEmitter {
         }
       };
 
-      // Set up client-side timeout to prevent hanging promises
-      timeoutId = setTimeout(() => {
+      const clearReadTimeout = () => {
+        if (readTimeoutId) {
+          clearTimeout(readTimeoutId);
+          readTimeoutId = null;
+        }
+      };
+
+      // Restarted on every body chunk, so it measures idle time, not total time
+      const armReadTimeout = () => {
+        if (!readTimeoutMs) return;
+        clearReadTimeout();
+        readTimeoutId = setTimeout(() => {
+          fail(new Error(`Read timeout: no response data for ${readTimeoutMs}ms`), false, true);
+        }, readTimeoutMs);
+      };
+
+      // The request is over, one way or the other
+      const finish = () => {
         cleanupTimeout();
+        clearReadTimeout();
+        this.pending.delete(requestId);
+      };
+
+      // Ends the request with an error wherever it is: before the headers the
+      // promise rejects; once the body is streaming the stream is destroyed,
+      // which rejects a buffered request and emits 'error' on a live stream.
+      const fail = (error: Error, quietStream: boolean = false, cancel: boolean = false) => {
+        finish();
         this.off(requestId, handleMessage);
-        rejectRequest(new Error(`Request timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
+        if (activeStream) {
+          // The stream's close handler cancels the request in the Go process
+          const quiet = quietStream && options.responseType === 'stream';
+          activeStream.destroy(quiet ? undefined : error);
+        } else {
+          if (cancel) void this.sharedInstance.cancelRequest(requestId);
+          rejectRequest(error);
+        }
+      };
+      this.pending.set(requestId, fail);
+
+      // Set up client-side timeout to prevent hanging promises
+      if (timeoutMs > 0) {
+        timeoutId = setTimeout(() => {
+          fail(new Error(`Request timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }
 
       const handleMessage = async (response: GoMessage) => {
         if (response.method === "error") {
           // Handle error before or during body read
           // If we already have response metadata (headers sent successfully but body read failed),
           // return the error with empty headers
-          cleanupTimeout();
+          finish();
           const errorResponse = {
             status: response.data.statusCode,
             headers: responseMetadata ? responseMetadata.headers : {},
@@ -1660,6 +2016,7 @@ class CycleTLSClientImpl extends EventEmitter {
           // Clear timeout when we receive response headers (server is responding)
           cleanupTimeout();
           responseMetadata = response.data;
+          armReadTimeout();
         } else if (response.method === "data" || response.method === "end") {
           // Now we have response metadata, set up stream handling
           if (!responseMetadata) return;
@@ -1668,6 +2025,7 @@ class CycleTLSClientImpl extends EventEmitter {
           this.off(requestId, handleMessage);
 
           const stream = new Readable({ read() { } });
+          activeStream = stream;
 
           let bodyReadError: BodyReadError | null = null;
 
@@ -1684,8 +2042,10 @@ class CycleTLSClientImpl extends EventEmitter {
 
           const handleData = (dataResponse: GoDataMessage | GoErrorMessage | GoEndMessage) => {
             if (dataResponse.method === "data") {
+              armReadTimeout();
               stream.push(Buffer.from(dataResponse.data));
             } else if (dataResponse.method === "error") {
+              finish();
               // Handle error that occurred during body read - store it and close the stream
               bodyReadError = {
                 statusCode: dataResponse.data.statusCode,
@@ -1694,6 +2054,7 @@ class CycleTLSClientImpl extends EventEmitter {
               stream.push(null); // Close stream gracefully
               cleanupStreamListeners();
             } else if (dataResponse.method === "end") {
+              finish();
               stream.push(null);
               cleanupStreamListeners();
             }
@@ -1785,6 +2146,7 @@ class CycleTLSClientImpl extends EventEmitter {
             }
           } catch (error) {
             cleanupTimeout();
+            finish();
             rejectRequest(error);
           }
         }
@@ -1851,8 +2213,16 @@ class CycleTLSClientImpl extends EventEmitter {
 
     this.on(requestId, handleMessage);
 
+    // If the Go process goes away, the caller's socket must hear about it
+    this.pending.set(requestId, (error: Error) => {
+      if (ws.readyState !== 3) {
+        ws._handleMessage('ws_close', { code: 1006, reason: error.message });
+      }
+    });
+
     // Clean up handler when connection closes or errors
     const cleanupWsHandler = () => {
+      this.pending.delete(requestId);
       this.off(requestId, handleMessage);
       ws.off('close', cleanupWsHandler);
       ws.off('error', cleanupWsHandler);
@@ -1861,11 +2231,17 @@ class CycleTLSClientImpl extends EventEmitter {
     ws.once('error', cleanupWsHandler);
 
     // Send WebSocket request
-    await this.sharedInstance.sendRequest(requestId, {
-      url,
-      ...options,
-      method: "get",
-    });
+    try {
+      await this.sharedInstance.sendRequest(requestId, {
+        url,
+        ...options,
+        method: "get",
+      });
+    } catch (error) {
+      this.pending.delete(requestId);
+      this.off(requestId, handleMessage);
+      throw error;
+    }
 
     // Return WebSocket immediately (it will emit 'open' when connected)
     return ws;
@@ -1887,6 +2263,9 @@ class CycleTLSClientImpl extends EventEmitter {
   }
 
   async exit(): Promise<undefined> {
+    // Settle what is still in flight; it cannot finish once the listeners are gone
+    this._failPending(new Error('CycleTLS client exited before the request finished'), true);
+
     // Remove this client from the shared instance
     this.sharedInstance.removeClient(this.clientId);
     
@@ -2292,8 +2671,10 @@ const initCycleTLS = async (
 
     return publicInterface;
   } catch (error) {
-    // SharedInstance rejects with a plain string; error.message would be undefined
-    throw new Error(`Failed to initialize CycleTLS: ${error instanceof Error ? error.message : error}`);
+    throw new Error(
+      `Failed to initialize CycleTLS: ${error instanceof Error ? error.message : error}`,
+      { cause: error }
+    );
   }
 };
 
