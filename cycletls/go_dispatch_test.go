@@ -528,6 +528,10 @@ func TestWebSocketUsesProxy(t *testing.T) {
 					mu.Lock()
 					handshake = r.Header.Clone()
 					mu.Unlock()
+					// Wait before the first message, so the tunnel has to outlive
+					// the handshake. A tunnel tied to the handshake's context (an
+					// HTTP/2 proxy stream was) is gone by the time this is sent.
+					time.Sleep(200 * time.Millisecond)
 					_ = conn.WriteMessage(websocket.TextMessage, []byte("hello-through-proxy"))
 					closeNormally(conn)
 				})

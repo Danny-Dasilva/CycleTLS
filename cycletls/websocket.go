@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -72,15 +73,42 @@ func NewWebSocketClient(tlsConfig *utls.Config, headers http.Header) *WebSocketC
 func (wsc *WebSocketClient) UseProxyDialer(dialer proxy.ContextDialer) {
 	wsc.Dialer.Proxy = nil
 	wsc.Dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, err := dialer.DialContext(ctx, network, addr)
+		// gorilla cancels ctx as soon as the WebSocket handshake is done. A
+		// tunnel through an HTTP/2 proxy is one stream of the proxy connection,
+		// opened with the dial context, so it would be reset at that moment
+		// and the WebSocket would die right after it opened. Dial on a context
+		// that ctx can cancel only while the dial is still running.
+		dialCtx, cancelDial := context.WithCancel(context.WithoutCancel(ctx))
+		stopWatching := context.AfterFunc(ctx, cancelDial)
+		conn, err := dialer.DialContext(dialCtx, network, addr)
+		stopWatching()
 		if err != nil {
+			cancelDial()
 			return nil, err
 		}
 		if _, ok := conn.(*http2Conn); ok {
-			return noDeadlineConn{conn}, nil
+			// The stream lives until the connection is closed.
+			return &tunnelConn{Conn: noDeadlineConn{conn}, release: cancelDial}, nil
 		}
+		// A plain connection does not depend on the dial context once it is
+		// established.
+		cancelDial()
 		return conn, nil
 	}
+}
+
+// tunnelConn releases the context an HTTP/2 tunnel was opened with when the
+// connection is closed.
+type tunnelConn struct {
+	net.Conn
+	once    sync.Once
+	release context.CancelFunc
+}
+
+func (c *tunnelConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.release)
+	return err
 }
 
 // noDeadlineConn wraps a tunnel that runs as one stream of an HTTP/2
