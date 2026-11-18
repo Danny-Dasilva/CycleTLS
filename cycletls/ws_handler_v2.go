@@ -291,7 +291,9 @@ func handleWSRequestV2(ws *websocket.Conn) {
 	}
 
 	// Process the request with parent context
-	res := processRequestV2(req, ctx)
+	res := safeProcessRequest(req, func(r cycleTLSRequest) fullRequest {
+		return processRequestV2(r, ctx)
+	})
 
 	limiter = newCreditWindow(int64(initialWindow))
 	res.limiter = limiter
@@ -463,20 +465,30 @@ func processRequestV2(request cycleTLSRequest, parentCtx context.Context) fullRe
 	debugLogger.Printf("[V2] processRequestV2: protocol=%s, url=%s", request.Options.Protocol, request.Options.URL)
 
 	// Handle protocol-specific clients
+	var res fullRequest
 	switch request.Options.Protocol {
 	case "websocket":
 		debugLogger.Printf("[V2] Routing to dispatchWebSocketRequest")
-		return dispatchWebSocketRequest(request)
+		res = dispatchWebSocketRequest(request)
 	case "sse":
-		return dispatchSSERequest(request)
+		res = dispatchSSERequest(request)
 	case "http3":
-		return dispatchHTTP3Request(request)
+		res = dispatchHTTP3Request(request)
 	default:
 		if request.Options.ForceHTTP3 {
-			return dispatchHTTP3Request(request)
+			res = dispatchHTTP3Request(request)
+		} else {
+			return dispatchHTTPRequestV2(request, parentCtx)
 		}
-		return dispatchHTTPRequestV2(request, parentCtx)
 	}
+
+	// These three build their context from scratch. Tie it to the client's
+	// socket, so a stream whose client has gone is cancelled even while it is
+	// blocked reading a quiet upstream.
+	if res.cancel != nil && parentCtx != nil {
+		context.AfterFunc(parentCtx, res.cancel)
+	}
+	return res
 }
 
 // dispatchHTTPRequestV2 creates a request for v2 flow control mode.
@@ -499,6 +511,7 @@ func dispatchHTTPRequestV2(request cycleTLSRequest, parentCtx context.Context) f
 		request.Options.Proxy,
 	)
 	if err != nil {
+		cancel()
 		log.Printf("dispatchHTTPRequestV2: client creation failed: %v", err)
 		return fullRequest{
 			options: request,
@@ -509,6 +522,7 @@ func dispatchHTTPRequestV2(request cycleTLSRequest, parentCtx context.Context) f
 	// Build the HTTP request using the context-aware approach from the existing code
 	req, err := buildHTTPRequest(request, ctx)
 	if err != nil {
+		cancel()
 		return fullRequest{
 			options: request,
 			err:     err,
@@ -534,14 +548,24 @@ func dispatcherAsyncV2(res fullRequest, sender *frameSender) {
 		return
 	}
 
+	// SSE, HTTP/3 and WebSocket requests are registered when they are built.
+	// Drop the entry when the request ends, or the tracker only ever grows.
+	defer state.UnregisterRequest(res.options.RequestID)
+
 	// Handle SSE connections
 	if res.sseClient != nil {
+		if res.cancel != nil {
+			defer res.cancel()
+		}
 		dispatchSSEAsyncV2(res, sender)
 		return
 	}
 
 	// Handle WebSocket connections
 	if res.wsClient != nil {
+		if res.cancel != nil {
+			defer res.cancel()
+		}
 		dispatchWebSocketAsyncV2(res, sender)
 		return
 	}
@@ -729,7 +753,7 @@ func dispatchWebSocketAsyncV2(res fullRequest, sender *frameSender) {
 	}()
 
 	// Connect to WebSocket endpoint
-	conn, resp, err := res.wsClient.Connect(res.options.Options.URL)
+	conn, resp, err := res.wsClient.ConnectContext(res.reqContext(), res.options.Options.URL)
 	if err != nil {
 		statusCode := 0
 		if resp != nil {
@@ -790,8 +814,11 @@ func dispatchWebSocketAsyncV2(res fullRequest, sender *frameSender) {
 		ctx = res.req.Context()
 	}
 
-	// Read deadline timeout
-	const wsReadDeadline = 30 * time.Second
+	// Reads carry no deadline: a server may stay quiet for as long as it
+	// likes. The watch pings a quiet connection and closes one that has gone
+	// silent for the whole idle window, which wakes the reader below.
+	watch := watchUpstream(conn)
+	defer watch.Stop()
 
 	// Issue #2: Use context with cancel to ensure reader goroutine exits
 	readerCtx, readerCancel := context.WithCancel(ctx)
@@ -814,12 +841,14 @@ func dispatchWebSocketAsyncV2(res fullRequest, sender *frameSender) {
 	go func() {
 		defer close(readCh) // Signal main loop that reader has exited
 		for {
-			_ = conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
 			messageType, message, err := conn.ReadMessage()
 
 			// Check context before attempting send to exit promptly
 			if readerCtx.Err() != nil {
 				return
+			}
+			if err == nil {
+				watch.touch()
 			}
 
 			select {
@@ -861,8 +890,15 @@ func dispatchWebSocketAsyncV2(res fullRequest, sender *frameSender) {
 				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 				err := conn.WriteMessage(msgType, cmd.Data)
 				if err != nil {
+					// A failed write is final for a WebSocket. Report it and
+					// close, so the client stops sending into a dead connection.
 					debugLogger.Printf("WebSocket send error: %s", err.Error())
 					sender.send(buildWebSocketErrorFrame(requestID, 0, err.Error()))
+					if closeFrame, cerr := buildWebSocketCloseFrame(requestID, websocket.CloseAbnormalClosure, err.Error()); cerr == nil {
+						sender.send(closeFrame)
+					}
+					sender.send(buildEndFrame(requestID))
+					return
 				}
 
 			case "close":
@@ -891,18 +927,13 @@ func dispatchWebSocketAsyncV2(res fullRequest, sender *frameSender) {
 				return
 			}
 			if msg.err != nil {
-				// Check if timeout - continue the loop
-				if netErr, ok := msg.err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-					continue
-				}
-
-				if websocket.IsCloseError(msg.err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					if closeFrame, err := buildWebSocketCloseFrame(requestID, websocket.CloseNormalClosure, "Connection closed normally"); err == nil {
-						sender.send(closeFrame)
-					}
-				} else {
-					debugLogger.Printf("WebSocket read error: %s", msg.err.Error())
-					sender.send(buildWebSocketErrorFrame(requestID, 0, msg.err.Error()))
+				// A read error is final: the upstream closed, broke, or went
+				// silent past the idle window. Tell the client with a close
+				// frame, then end the request.
+				code, reason := watch.closeInfo(msg.err)
+				debugLogger.Printf("WebSocket read ended: %s", msg.err.Error())
+				if closeFrame, err := buildWebSocketCloseFrame(requestID, code, reason); err == nil {
+					sender.send(closeFrame)
 				}
 				sender.send(buildEndFrame(requestID))
 				return
