@@ -30,7 +30,7 @@ func TestUrlEncodedFormDataUpload(t *testing.T) {
 	form.Add("key1", "value1")
 	form.Add("key2", "value2")
 
-	response, err := client.Do("http://httpbin.org/post", cycletls.Options{
+	response, err := doUpstream(t, client, "http://httpbin.org/post", cycletls.Options{
 		Body: form.Encode(),
 		Headers: map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
