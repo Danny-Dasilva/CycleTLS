@@ -10,7 +10,10 @@ jest.mock("child_process", () => ({
 }));
 
 const { spawn } = require("child_process");
-const initCycleTLS = require("../dist/index.js");
+// Load the built client by absolute path. jest.config.js maps "../dist/index.js"
+// to a test wrapper that moves each Jest worker onto its own ports; these tests
+// assert on the exact port, so they need the unwrapped client.
+const initCycleTLS = require(require("path").join(__dirname, "..", "dist", "index.js"));
 
 jest.setTimeout(30000);
 
