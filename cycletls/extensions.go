@@ -362,6 +362,8 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 		return &utls.SCTExtension{}
 	case 0x0017: // Extended Master Secret
 		return &utls.ExtendedMasterSecretExtension{}
+	case extensionTrustAnchors: // Trust Anchor Identifiers - 51764
+		return newTrustAnchorsExtension()
 	case 0x001b: // Compress Certificate
 		return NewCustomCompressCertificateExtension(extID, []utls.CertCompressionAlgo{
 			utls.CertCompressionBrotli,
