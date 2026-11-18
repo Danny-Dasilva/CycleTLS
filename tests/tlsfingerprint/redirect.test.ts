@@ -77,7 +77,9 @@ describe("TLS Fingerprint - Redirects", () => {
   beforeEach(() => {
     if (!serviceAvailable) return;
     client = new CycleTLS({
-      port: 9119,
+      // 0 = a free port per suite. The suites run in parallel workers; on one
+      // shared port the first suite to finish killed the server under the others.
+      port: 0,
       debug: false,
       timeout: 30000,
       autoSpawn: true,

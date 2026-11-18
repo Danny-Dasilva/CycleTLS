@@ -6,17 +6,20 @@
  * flow control for memory-efficient large file downloads.
  */
 
-import { spawn, ChildProcess, SpawnOptionsWithoutStdio } from "child_process";
+import { spawn, ChildProcess, SpawnOptions } from "child_process";
 import WebSocket from "ws";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import net from "net";
 import { Readable } from "stream";
 import { EventEmitter } from "events";
 import { Blob } from "buffer";
 
 import {
   buildInitPacket,
+  InitPacketTooLargeError,
+  MAX_INIT_OPTIONS_BYTES,
   buildCreditPacket,
   parseFrame,
   parseResponsePayload,
@@ -34,16 +37,27 @@ import { CreditManager } from "./credit-manager";
  * Options for CycleTLS client configuration.
  */
 export interface CycleTLSOptions {
-  /** Port for the Go server (default: 9119) */
+  /**
+   * Port for the Go server (default: 9119). 0 picks a free port when the
+   * server is started, so clients in different processes never share one.
+   */
   port?: number;
   /** Enable debug logging */
   debug?: boolean;
-  /** Request timeout in milliseconds */
+  /**
+   * Request timeout in milliseconds (default: 30000). A negative value means
+   * no timeout; 0 means the default.
+   */
   timeout?: number;
   /** Path to CycleTLS executable */
   executablePath?: string;
   /** Auto-spawn server if not running (default: true) */
   autoSpawn?: boolean;
+  /**
+   * How long to wait, in milliseconds, for a spawned server to accept
+   * connections (default: 20000). Raise it on slow or heavily loaded machines.
+   */
+  startupTimeout?: number;
   /** Initial credit window in bytes (default: 65536) */
   initialWindow?: number;
   /** Credit replenishment threshold in bytes (default: initialWindow/2) */
@@ -94,7 +108,11 @@ export interface RequestOptions {
   userAgent?: string;
   /** Proxy URL */
   proxy?: string;
-  /** Request timeout in milliseconds (time until headers arrive) */
+  /**
+   * Request timeout in milliseconds (time until headers arrive). A negative
+   * value means no timeout, as it does in the Go server; 0 means the default
+   * (30000).
+   */
   timeout?: number;
   /**
    * Read timeout in milliseconds (time for body streaming after headers arrive).
@@ -106,10 +124,17 @@ export interface RequestOptions {
   disableRedirect?: boolean;
   /** Skip TLS certificate verification */
   insecureSkipVerify?: boolean;
+  /** Skip TLS certificate verification for the connection to an HTTPS proxy */
+  proxyInsecureSkipVerify?: boolean;
   /** Force HTTP/1.1 instead of HTTP/2 */
   forceHTTP1?: boolean;
   /** Force HTTP/3 (QUIC) */
   forceHTTP3?: boolean;
+  /**
+   * Protocol to use. `ws()` and `sse()` set this themselves; on `request()`
+   * the useful value is "http3".
+   */
+  protocol?: "http1" | "http2" | "http3" | "websocket" | "sse";
   /** HTTP/2 fingerprint string (SETTINGS frame order, priorities, etc.) */
   http2Fingerprint?: string;
   /** QUIC fingerprint string */
@@ -128,6 +153,27 @@ export interface RequestOptions {
   tls13AutoRetry?: boolean;
   /** Enable connection reuse for subsequent requests (default: true) */
   enableConnectionReuse?: boolean;
+  /** Named TLS profile to imitate */
+  tlsProfile?: string;
+  /** Shuffle the order of TLS extensions in the ClientHello */
+  shuffleExtensions?: boolean;
+  /** Raw ClientHello to replay, hex encoded */
+  clientHello?: string;
+  /** Resume TLS sessions */
+  sessionResumption?: boolean;
+  /** Extra CA certificates to trust, PEM encoded */
+  caCerts?: string[];
+  /**
+   * Certificate pins. Each entry is the 64-character hex SHA-256 of the
+   * certificate DER, or `sha256/<base64>` of the SubjectPublicKeyInfo.
+   */
+  certPins?: string[];
+  /** HTTP/2 priority sent with the request headers, or false to send none */
+  http2Priority?:
+    | { weight?: number; exclusive?: boolean; streamDep?: number }
+    | false;
+  /** Headers sent to the proxy on CONNECT */
+  proxyHeaders?: Record<string, string>;
   /**
    * SSE stream timeout in milliseconds. If no data is received within this
    * period, the SSE connection is closed. Prevents hanging indefinitely
@@ -135,32 +181,6 @@ export interface RequestOptions {
    * If not specified, no SSE stream timeout is applied.
    */
   sseTimeout?: number;
-
-  // ---- Options new in 3.0.1 (types only; added by the legacy-client change) ----
-  /**
-   * Named TLS ClientHello profile, for example "chrome_133". Takes precedence
-   * over `ja3` and `ja4r`; `clientHello` takes precedence over it.
-   */
-  tlsProfile?: string;
-  /** Hex string of a captured TLS ClientHello record (or bare handshake message); the handshake is built from it */
-  clientHello?: string;
-  /** Shuffle the TLS extension order on each connection; not applied with an explicit `ja3` or `clientHello` */
-  shuffleExtensions?: boolean;
-  /** Resume TLS sessions (session tickets / PSK) on later connections to the same host */
-  sessionResumption?: boolean;
-  /** Extra CA certificates, PEM encoded, trusted in addition to the system roots */
-  caCerts?: string[];
-  /**
-   * Certificate pins: `sha256/<base64>` (SHA-256 of a certificate's
-   * SubjectPublicKeyInfo) or 64 hex characters (SHA-256 of the certificate DER).
-   * The request fails unless a certificate in the server's chain matches one.
-   */
-  certPins?: string[];
-  /** HTTP/2 priority for the HEADERS frame (weight 1 to 256); `false` sends no priority */
-  http2Priority?: { weight?: number; exclusive?: boolean; streamDep?: number } | false;
-  /** Extra headers sent on the CONNECT request to an HTTP or HTTPS proxy; SOCKS ignores it */
-  proxyHeaders?: Record<string, string>;
-  // ---- end of 3.0.1 options ----
 }
 
 /**
@@ -547,6 +567,222 @@ export interface SSEResponse extends Response {
 }
 
 /**
+ * Request options that are sent to the Go server, under the same name.
+ *
+ * Every key of RequestOptions has to be in this list or in
+ * CLIENT_ONLY_REQUEST_OPTIONS: the type check below fails the build
+ * otherwise, so a new option cannot be dropped on the way to Go by accident.
+ */
+export const FORWARDED_REQUEST_OPTIONS = [
+  "url",
+  "method",
+  "headers",
+  "body",
+  "bodyBytes",
+  "ja3",
+  "ja4r",
+  "userAgent",
+  "proxy",
+  "timeout",
+  "disableRedirect",
+  "insecureSkipVerify",
+  "proxyInsecureSkipVerify",
+  "forceHTTP1",
+  "forceHTTP3",
+  "protocol",
+  "http2Fingerprint",
+  "quicFingerprint",
+  "disableGrease",
+  "serverName",
+  "headerOrder",
+  "orderAsProvided",
+  "cookies",
+  "tls13AutoRetry",
+  "enableConnectionReuse",
+  "tlsProfile",
+  "shuffleExtensions",
+  "clientHello",
+  "sessionResumption",
+  "caCerts",
+  "certPins",
+  "http2Priority",
+  "proxyHeaders",
+] as const satisfies readonly (keyof RequestOptions)[];
+
+/** Request options that the Node client acts on itself and does not send. */
+export const CLIENT_ONLY_REQUEST_OPTIONS = [
+  "readTimeout",
+  "sseTimeout",
+] as const satisfies readonly (keyof RequestOptions)[];
+
+type UnlistedRequestOption = Exclude<
+  keyof RequestOptions,
+  | (typeof FORWARDED_REQUEST_OPTIONS)[number]
+  | (typeof CLIENT_ONLY_REQUEST_OPTIONS)[number]
+>;
+// Fails to compile when RequestOptions has a key that is in neither list.
+const _everyRequestOptionIsListed: [UnlistedRequestOption] extends [never]
+  ? true
+  : { unlistedRequestOption: UnlistedRequestOption } = true;
+void _everyRequestOptionIsListed;
+
+/** Default request timeout, the same value the Go server uses for 0. */
+const DEFAULT_TIMEOUT_MS = 30000;
+/** Default time allowed for a spawned server to accept connections. */
+const DEFAULT_STARTUP_TIMEOUT_MS = 20000;
+/** Largest delay a Node timer can hold; anything above fires at once. */
+const MAX_TIMER_MS = 2147483647;
+
+/**
+ * Ask the OS for a free TCP port: listen on port 0, read the port, close.
+ * Another process could take the port before the server binds it; the
+ * server then fails to start and the startup error says so.
+ */
+function pickFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.once("error", reject);
+    probe.listen(0, () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      probe.close(() => {
+        if (port > 0) {
+          resolve(port);
+        } else {
+          reject(new Error("Could not find a free port"));
+        }
+      });
+    });
+  });
+}
+
+/**
+ * Turn a user timeout into the delay for the client timer.
+ *
+ * Follows the Go server (cycletls/request_timeout.go): negative means no
+ * timeout, 0 means the default. A value too large for a Node timer also means
+ * no timeout. Returns null for "no timeout".
+ */
+export function normalizeTimeout(
+  value: number | undefined | null,
+  fallback: number | null
+): number | null {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return fallback;
+  }
+  if (value < 0 || value > MAX_TIMER_MS) {
+    return null;
+  }
+  if (value === 0) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return value;
+}
+
+/**
+ * Build the options object sent to the Go server in the init packet.
+ *
+ * Copies every option named in FORWARDED_REQUEST_OPTIONS that is set, then
+ * applies the encodings Go expects: bodyBytes as base64, timeout as whole
+ * milliseconds with -1 for "no timeout". `overrides` wins over everything.
+ */
+export function buildWireOptions(
+  options: RequestOptions,
+  timeoutMs: number | null,
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const wire: Record<string, unknown> = {};
+  for (const key of FORWARDED_REQUEST_OPTIONS) {
+    const value = options[key];
+    if (value !== undefined) {
+      wire[key] = value;
+    }
+  }
+
+  wire.method = options.method ?? "GET";
+  wire.headers = options.headers ?? {};
+  wire.body = options.body ?? "";
+  if (options.bodyBytes) {
+    const bytes = options.bodyBytes;
+    wire.bodyBytes = Buffer.from(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength
+    ).toString("base64");
+  }
+  wire.timeout = timeoutMs === null ? -1 : Math.ceil(timeoutMs);
+
+  return Object.assign(wire, overrides);
+}
+
+// -----------------------------------------------------------------------------
+// Process exit cleanup
+// -----------------------------------------------------------------------------
+//
+// A spawned Go server is detached, so it outlives Node unless it is killed.
+// While at least one client owns a live server, these handlers kill the
+// servers when the process exits or is sent SIGINT or SIGTERM. They are
+// removed again when the last server is gone, so importing the module
+// installs nothing.
+
+const CLEANUP_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+const clientsWithServer = new Set<CycleTLS>();
+let exitHandlersInstalled = false;
+
+function killAllServers(): void {
+  for (const client of Array.from(clientsWithServer)) {
+    client._killServerSync();
+  }
+}
+
+function onSignal(signal: NodeJS.Signals): void {
+  killAllServers();
+  removeExitHandlers();
+  // Listening for a signal turns off Node's default action for it. If nobody
+  // else is listening, send the signal again so the process ends the way it
+  // would have without this module. Another listener (the application's own,
+  // for example) keeps the decision.
+  if (process.listenerCount(signal) === 0) {
+    process.kill(process.pid, signal);
+  }
+}
+
+function installExitHandlers(): void {
+  if (exitHandlersInstalled) {
+    return;
+  }
+  exitHandlersInstalled = true;
+  process.on("exit", killAllServers);
+  for (const signal of CLEANUP_SIGNALS) {
+    process.on(signal, onSignal);
+  }
+}
+
+function removeExitHandlers(): void {
+  if (!exitHandlersInstalled) {
+    return;
+  }
+  exitHandlersInstalled = false;
+  process.off("exit", killAllServers);
+  for (const signal of CLEANUP_SIGNALS) {
+    process.off(signal, onSignal);
+  }
+}
+
+function trackServer(client: CycleTLS): void {
+  clientsWithServer.add(client);
+  installExitHandlers();
+}
+
+function untrackServer(client: CycleTLS): void {
+  clientsWithServer.delete(client);
+  if (clientsWithServer.size === 0) {
+    removeExitHandlers();
+  }
+}
+
+/**
  * CycleTLS - Modern HTTP client with streaming and backpressure support.
  *
  * @example
@@ -566,20 +802,47 @@ export interface SSEResponse extends Response {
 export class CycleTLS extends EventEmitter {
   private port: number;
   private debug: boolean;
-  private timeout: number;
+  /** Default request timeout in milliseconds, or null for none. */
+  private timeout: number | null;
+  private startupTimeout: number;
   private executablePath?: string;
   private autoSpawn: boolean;
   private initialWindow: number;
   private creditThreshold: number;
 
   private serverProcess: ChildProcess | null = null;
+  /** True once a server is known to answer on the port. */
+  private serverReady: boolean = false;
+  /** The startup in flight, shared by every request that arrives meanwhile. */
+  private startPromise: Promise<void> | null = null;
+  /** Last stderr output of the spawned server, kept for startup errors. */
+  private serverStderrTail: string = "";
   private requestCounter: number = 0;
 
   constructor(options: CycleTLSOptions = {}) {
     super();
-    this.port = options.port ?? 9119;
+    this.port = Number(options.port ?? 9119);
+    if (
+      !Number.isInteger(this.port) ||
+      this.port < 0 ||
+      this.port > 65535
+    ) {
+      throw new RangeError(
+        `Invalid port ${String(options.port)}: expected an integer from 0 to 65535`
+      );
+    }
+    if (this.port === 0 && options.autoSpawn === false) {
+      throw new RangeError(
+        "port: 0 picks a free port for a server the client starts, so it cannot be used with autoSpawn: false"
+      );
+    }
     this.debug = options.debug ?? false;
-    this.timeout = options.timeout ?? 30000;
+    this.timeout = normalizeTimeout(options.timeout, DEFAULT_TIMEOUT_MS);
+    const startupTimeout = options.startupTimeout;
+    this.startupTimeout =
+      typeof startupTimeout === "number" && startupTimeout > 0
+        ? startupTimeout
+        : DEFAULT_STARTUP_TIMEOUT_MS;
     this.executablePath = options.executablePath;
     this.autoSpawn = options.autoSpawn ?? true;
     this.initialWindow = options.initialWindow ?? 65536;
@@ -602,14 +865,54 @@ export class CycleTLS extends EventEmitter {
   }
 
   /**
-   * Start the Go server if autoSpawn is enabled.
+   * The timeout for one request: its own value, else the client's.
+   * Returns null for "no timeout".
+   */
+  private resolveTimeout(requestTimeout: number | undefined): number | null {
+    return normalizeTimeout(requestTimeout, this.timeout);
+  }
+
+  /**
+   * Make sure a server answers on the port, starting one if autoSpawn is
+   * enabled and none does.
+   *
+   * The check runs once, not per request: after a server has answered, later
+   * calls return at once until the server is seen to be gone. Calls that
+   * arrive while a startup is in flight share it, so concurrent first
+   * requests spawn one server.
    */
   async ensureServerRunning(): Promise<void> {
-    if (!this.autoSpawn) {
+    if (!this.autoSpawn || this.serverReady) {
       return;
     }
 
-    // Try to connect first
+    if (!this.startPromise) {
+      this.startPromise = this.connectOrStart().then(
+        () => {
+          this.serverReady = true;
+          this.startPromise = null;
+        },
+        (err) => {
+          this.startPromise = null;
+          throw err;
+        }
+      );
+    }
+    return this.startPromise;
+  }
+
+  /**
+   * Use a server that already answers on the port, else start one.
+   */
+  private async connectOrStart(): Promise<void> {
+    if (this.port === 0) {
+      // No port chosen yet, so there is nothing to probe. Pick one here; the
+      // server would otherwise bind a random port the client never learns.
+      this.port = await pickFreePort();
+      await this.startServer();
+      return;
+    }
+
     try {
       await this.testConnection();
       return; // Server is already running
@@ -627,7 +930,7 @@ export class CycleTLS extends EventEmitter {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`ws://localhost:${this.port}?v=2`);
       const timeout = setTimeout(() => {
-        ws.close();
+        ws.terminate();
         reject(new Error("Connection timeout"));
       }, 1000);
 
@@ -642,6 +945,121 @@ export class CycleTLS extends EventEmitter {
         reject(err);
       });
     });
+  }
+
+  /**
+   * Open the WebSocket for one request, starting the server first if needed.
+   *
+   * If the connection fails although a server was known to be up, the server
+   * has gone away since the last check (it crashed, or another process that
+   * owned it exited). The check is then repeated, which starts a new server,
+   * and the connection is tried once more.
+   */
+  private async openSocket(requestId: string): Promise<WebSocket> {
+    await this.ensureServerRunning();
+    try {
+      return await this.dial(requestId);
+    } catch (err) {
+      if (!this.autoSpawn) {
+        throw err;
+      }
+      this.serverReady = false;
+      await this.ensureServerRunning();
+      return this.dial(requestId);
+    }
+  }
+
+  /**
+   * Connect to the server. Resolves with an open socket that has no
+   * listeners; the caller attaches its own before returning to the event loop.
+   */
+  private dial(requestId: string): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://localhost:${this.port}?v=2`);
+      const onOpen = (): void => {
+        ws.removeListener("error", onError);
+        if (this.debug) {
+          console.log(`[CycleTLS] WebSocket connected for ${requestId}`);
+        }
+        resolve(ws);
+      };
+      const onError = (err: Error): void => {
+        ws.removeListener("open", onOpen);
+        // Keep a listener in place: ws may emit a second error while closing.
+        ws.on("error", () => {});
+        ws.terminate();
+        reject(new CycleTLSError(err.message, 0, requestId));
+      };
+      ws.once("open", onOpen);
+      ws.once("error", onError);
+    });
+  }
+
+  /**
+   * Encode the init packet for a request.
+   *
+   * Runs before any connection is made, inside the async method, so a request
+   * that cannot be encoded rejects its promise and nothing is thrown outside it.
+   */
+  private encodeInit(
+    requestId: string,
+    options: RequestOptions,
+    timeoutMs: number | null,
+    overrides: Record<string, unknown> = {}
+  ): Buffer {
+    // Cheap lower bound first, so an oversized body is refused before it is
+    // copied into a JSON string. UTF-8 is never shorter than the UTF-16 length.
+    const bodyChars = typeof options.body === "string" ? options.body.length : 0;
+    const bodyBytesBase64 = options.bodyBytes
+      ? Math.ceil(options.bodyBytes.byteLength / 3) * 4
+      : 0;
+    if (bodyChars + bodyBytesBase64 > MAX_INIT_OPTIONS_BYTES) {
+      throw new CycleTLSError(
+        new InitPacketTooLargeError(bodyChars + bodyBytesBase64).message,
+        413,
+        requestId
+      );
+    }
+
+    try {
+      return buildInitPacket(
+        requestId,
+        buildWireOptions(options, timeoutMs, overrides),
+        this.initialWindow
+      );
+    } catch (err) {
+      if (err instanceof InitPacketTooLargeError) {
+        throw new CycleTLSError(err.message, 413, requestId);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      throw new CycleTLSError(
+        `Failed to encode request: ${message}`,
+        400,
+        requestId
+      );
+    }
+  }
+
+  /**
+   * Send the init packet. A send failure is reported through the socket's
+   * "error" event, which the caller already turns into a rejection.
+   */
+  private sendInit(ws: WebSocket, initPacket: Buffer): void {
+    const fail = (err: unknown): void => {
+      if (ws.listenerCount("error") > 0) {
+        ws.emit("error", err instanceof Error ? err : new Error(String(err)));
+      }
+      ws.close();
+    };
+    try {
+      ws.send(initPacket, (err?: Error) => {
+        if (err) {
+          fail(err);
+        }
+      });
+    } catch (err) {
+      fail(err);
+    }
   }
 
   /**
@@ -671,7 +1089,7 @@ export class CycleTLS extends EventEmitter {
   }
 
   /**
-   * Start the Go server process.
+   * Start the Go server process and wait until it accepts connections.
    */
   private async startServer(): Promise<void> {
     const execPath = this.resolveExecutablePath();
@@ -685,48 +1103,172 @@ export class CycleTLS extends EventEmitter {
       throw new Error(`Executable not found: ${execPath}`);
     }
 
-    const spawnOptions: SpawnOptionsWithoutStdio = {
+    const spawnOptions: SpawnOptions = {
       env: { ...process.env, WS_PORT: this.port.toString() },
-      shell: process.platform !== "win32",
+      // No shell: the path is passed to the OS as one argument, so a path
+      // with spaces or shell characters works, and the child is the server
+      // itself rather than a shell around it.
+      shell: false,
       windowsHide: true,
       detached: process.platform !== "win32",
       cwd: path.dirname(execPath),
+      stdio: ["ignore", "pipe", "pipe"],
     };
 
-    this.serverProcess = spawn(execPath, [], spawnOptions);
+    const child = spawn(execPath, [], spawnOptions);
+    this.serverProcess = child;
+    this.serverStderrTail = "";
+
+    let spawnError: Error | null = null;
+    let exited: { code: number | null; signal: NodeJS.Signals | null } | null =
+      null;
 
     // Attach error handler immediately to catch spawn failures (e.g., ENOENT)
     // Without this, a failed spawn emits an uncaught 'error' event that crashes Node.js
-    this.serverProcess.on('error', (err) => {
+    child.on("error", (err) => {
+      spawnError = err;
       if (this.debug) {
         console.error(`[CycleTLS] Server process error: ${err.message}`);
       }
-      this.serverProcess = null;
+      this.forgetServer(child);
+    });
+    child.once("exit", (code, signal) => {
+      exited = { code, signal };
+      if (this.debug) {
+        console.log(
+          `[CycleTLS] Server process exited (code ${code}, signal ${signal})`
+        );
+      }
+      this.forgetServer(child);
     });
 
+    // The server writes log lines to stdout and stderr. Both pipes must be
+    // read: once a pipe buffer is full the server blocks on its next write
+    // and stops answering.
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (this.debug) {
+        process.stdout.write(`[CycleTLS server] ${chunk.toString("utf8")}`);
+      }
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      this.serverStderrTail = (this.serverStderrTail + text).slice(-2000);
+      if (this.debug) {
+        process.stderr.write(`[CycleTLS server] ${text}`);
+      }
+    });
+    // A pipe error (the child died mid-write) must not become an unhandled
+    // 'error' event.
+    child.stdout?.on("error", () => {});
+    child.stderr?.on("error", () => {});
+
+    trackServer(this);
+
+    const describeStderr = (): string => {
+      const tail = this.serverStderrTail.trim();
+      return tail ? `; server output: ${tail}` : "";
+    };
+
     // Wait for server to be ready
-    for (let i = 0; i < 50; i++) {
+    const deadline = Date.now() + this.startupTimeout;
+    let delay = 20;
+    for (;;) {
       try {
         await this.testConnection();
         return;
       } catch {
-        await new Promise((r) => setTimeout(r, 100));
+        // Not up yet
       }
+
+      // Read through a function: TypeScript cannot see the handlers above
+      // assign these while the loop awaits.
+      const failure = ((): Error | null => spawnError)();
+      if (failure) {
+        throw new CycleTLSError(
+          `Failed to start CycleTLS server (${execPath}): ${failure.message}`
+        );
+      }
+
+      const exit = ((): typeof exited => exited)();
+      if (exit) {
+        // Another process may have taken the port first and be serving it;
+        // in that case our server failed to bind and theirs will do.
+        try {
+          await this.testConnection();
+          return;
+        } catch {
+          // Nothing is serving the port
+        }
+        throw new CycleTLSError(
+          `CycleTLS server exited during startup (code ${exit.code}, signal ${exit.signal}, port ${this.port})${describeStderr()}`
+        );
+      }
+
+      if (Date.now() >= deadline) {
+        this._killServerSync();
+        throw new CycleTLSError(
+          `CycleTLS server did not accept connections on port ${this.port} within ${this.startupTimeout}ms (startupTimeout)${describeStderr()}`
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, 100);
+    }
+  }
+
+  /**
+   * Record that a spawned server is gone, so the next request starts another.
+   */
+  private forgetServer(child: ChildProcess): void {
+    if (this.serverProcess !== child) {
+      return;
+    }
+    this.serverProcess = null;
+    this.serverReady = false;
+    untrackServer(this);
+  }
+
+  /**
+   * Kill the spawned server without waiting for it. Safe to call from a
+   * process 'exit' handler, where nothing asynchronous runs.
+   * @internal
+   */
+  _killServerSync(): void {
+    const child = this.serverProcess;
+    if (!child) {
+      return;
+    }
+    this.forgetServer(child);
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
+      return;
     }
 
-    throw new Error("Server failed to start");
+    if (process.platform !== "win32") {
+      // The server was spawned detached, so it leads its own process group.
+      try {
+        process.kill(-child.pid, "SIGKILL");
+        return;
+      } catch {
+        // Fall through to a direct kill
+      }
+    }
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // Process already dead
+    }
   }
 
   /**
    * Make an HTTP request with flow control.
    */
   async request(options: RequestOptions): Promise<Response> {
-    await this.ensureServerRunning();
-
     const requestId = this.generateRequestId();
+    const timeoutMs = this.resolveTimeout(options.timeout);
+    const initPacket = this.encodeInit(requestId, options, timeoutMs);
+    const ws = await this.openSocket(requestId);
 
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://localhost:${this.port}?v=2`);
       let resolved = false;
 
       // Create the response body stream
@@ -756,14 +1298,17 @@ export class CycleTLS extends EventEmitter {
       // Timeout handling:
       // - Use per-request timeout if provided, otherwise fall back to client-level timeout
       // - This timeout fires if headers don't arrive in time (initial connection timeout)
-      const effectiveTimeout = options.timeout ?? this.timeout;
-      let timeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-        if (!resolved) {
-          clearReadTimeout(); // Ensure read timeout is also cleared
-          ws.close();
-          reject(new CycleTLSError("Request timeout", 408, requestId));
-        }
-      }, effectiveTimeout);
+      // - A negative timeout means none: no timer is set, as in the Go server
+      let timeoutId: ReturnType<typeof setTimeout> | null =
+        timeoutMs === null
+          ? null
+          : setTimeout(() => {
+              if (!resolved) {
+                clearReadTimeout(); // Ensure read timeout is also cleared
+                ws.close();
+                reject(new CycleTLSError("Request timeout", 408, requestId));
+              }
+            }, timeoutMs);
 
       // Read timeout handling:
       // - If readTimeout is specified, start a new timer after headers arrive
@@ -806,51 +1351,6 @@ export class CycleTLS extends EventEmitter {
           }
         }
       };
-
-      ws.on("open", () => {
-        if (this.debug) {
-          console.log(`[CycleTLS] WebSocket connected for ${requestId}`);
-        }
-
-        // Build and send init packet
-        // Convert bodyBytes to base64 if provided (for binary data transmission)
-        const bodyBytesBase64 = options.bodyBytes
-          ? Buffer.from(options.bodyBytes).toString("base64")
-          : undefined;
-
-        const requestOptions = {
-          url: options.url,
-          method: options.method ?? "GET",
-          headers: options.headers ?? {},
-          body: options.body ?? "",
-          bodyBytes: bodyBytesBase64,
-          ja3: options.ja3,
-          ja4r: options.ja4r,
-          userAgent: options.userAgent,
-          proxy: options.proxy,
-          timeout: effectiveTimeout,
-          disableRedirect: options.disableRedirect,
-          insecureSkipVerify: options.insecureSkipVerify,
-          forceHTTP1: options.forceHTTP1,
-          forceHTTP3: options.forceHTTP3,
-          http2Fingerprint: options.http2Fingerprint,
-          quicFingerprint: options.quicFingerprint,
-          disableGrease: options.disableGrease,
-          serverName: options.serverName,
-          headerOrder: options.headerOrder,
-          orderAsProvided: options.orderAsProvided,
-          cookies: options.cookies,
-          tls13AutoRetry: options.tls13AutoRetry,
-          enableConnectionReuse: options.enableConnectionReuse,
-        };
-
-        const initPacket = buildInitPacket(
-          requestId,
-          requestOptions,
-          this.initialWindow
-        );
-        ws.send(initPacket);
-      });
 
       ws.on("message", (data: Buffer) => {
         try {
@@ -1007,6 +1507,9 @@ export class CycleTLS extends EventEmitter {
         // Clean up all WebSocket listeners to prevent memory leaks
         ws.removeAllListeners();
       });
+
+      // Every listener is attached; start the request.
+      this.sendInit(ws, initPacket);
     });
   }
 
@@ -1119,10 +1622,20 @@ export class CycleTLS extends EventEmitter {
     url: string,
     options: Omit<RequestOptions, "url"> = {}
   ): Promise<CycleTLSWebSocketV2> {
-    await this.ensureServerRunning();
-
     const requestId = this.generateRequestId();
-    const wsClient = new WebSocket(`ws://localhost:${this.port}?v=2`);
+    const timeoutMs = this.resolveTimeout(options.timeout);
+    const initPacket = this.encodeInit(
+      requestId,
+      { ...options, url },
+      timeoutMs,
+      {
+        method: "GET",
+        body: "",
+        bodyBytes: undefined,
+        protocol: "websocket",
+      }
+    );
+    const wsClient = await this.openSocket(requestId);
 
     const cycleTLSWs = new CycleTLSWebSocketV2(
       url,
@@ -1135,44 +1648,15 @@ export class CycleTLS extends EventEmitter {
       let connected = false;
 
       // Use per-request timeout if provided, otherwise fall back to client-level timeout
-      const effectiveTimeout = options.timeout ?? this.timeout;
-      const timeoutId = setTimeout(() => {
-        if (!connected) {
-          wsClient.close();
-          reject(new CycleTLSError("WebSocket connection timeout", 408, requestId));
-        }
-      }, effectiveTimeout);
-
-      wsClient.on("open", () => {
-        if (this.debug) {
-          console.log(`[CycleTLS] WebSocket control connected for ${requestId}`);
-        }
-
-        // Build and send init packet with websocket protocol
-        const requestOptions = {
-          url,
-          method: "GET",
-          headers: options.headers ?? {},
-          body: "",
-          ja3: options.ja3,
-          ja4r: options.ja4r,
-          userAgent: options.userAgent,
-          proxy: options.proxy,
-          timeout: effectiveTimeout,
-          disableRedirect: options.disableRedirect,
-          insecureSkipVerify: options.insecureSkipVerify,
-          forceHTTP1: options.forceHTTP1,
-          forceHTTP3: options.forceHTTP3,
-          protocol: "websocket",
-        };
-
-        const initPacket = buildInitPacket(
-          requestId,
-          requestOptions,
-          this.initialWindow
-        );
-        wsClient.send(initPacket);
-      });
+      const timeoutId =
+        timeoutMs === null
+          ? undefined
+          : setTimeout(() => {
+              if (!connected) {
+                wsClient.close();
+                reject(new CycleTLSError("WebSocket connection timeout", 408, requestId));
+              }
+            }, timeoutMs);
 
       wsClient.on("message", (data: Buffer) => {
         try {
@@ -1280,6 +1764,9 @@ export class CycleTLS extends EventEmitter {
         // Clean up all WebSocket listeners to prevent memory leaks
         wsClient.removeAllListeners();
       });
+
+      // Every listener is attached; start the request.
+      this.sendInit(wsClient, initPacket);
     });
   }
 
@@ -1308,12 +1795,24 @@ export class CycleTLS extends EventEmitter {
     url: string,
     options: Omit<RequestOptions, "url"> = {}
   ): Promise<SSEResponse> {
-    await this.ensureServerRunning();
-
     const requestId = this.generateRequestId();
+    const timeoutMs = this.resolveTimeout(options.timeout);
+    const initPacket = this.encodeInit(
+      requestId,
+      { ...options, url },
+      timeoutMs,
+      {
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+          ...options.headers,
+        },
+        protocol: "sse",
+      }
+    );
+    const ws = await this.openSocket(requestId);
 
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://localhost:${this.port}?v=2`);
       let resolved = false;
 
       const bodyStream = new Readable({
@@ -1453,43 +1952,15 @@ export class CycleTLS extends EventEmitter {
       );
 
       // Use per-request timeout if provided, otherwise fall back to client-level timeout
-      const effectiveTimeout = options.timeout ?? this.timeout;
-      const timeoutId = setTimeout(() => {
-        if (!resolved) {
-          ws.close();
-          reject(new CycleTLSError("SSE connection timeout", 408, requestId));
-        }
-      }, effectiveTimeout);
-
-      ws.on("open", () => {
-        const requestOptions = {
-          url,
-          method: "GET",
-          headers: {
-            Accept: "text/event-stream",
-            "Cache-Control": "no-cache",
-            ...options.headers,
-          },
-          body: "",
-          ja3: options.ja3,
-          ja4r: options.ja4r,
-          userAgent: options.userAgent,
-          proxy: options.proxy,
-          timeout: effectiveTimeout,
-          disableRedirect: options.disableRedirect,
-          insecureSkipVerify: options.insecureSkipVerify,
-          forceHTTP1: options.forceHTTP1,
-          forceHTTP3: options.forceHTTP3,
-          protocol: "sse",
-        };
-
-        const initPacket = buildInitPacket(
-          requestId,
-          requestOptions,
-          this.initialWindow
-        );
-        ws.send(initPacket);
-      });
+      const timeoutId =
+        timeoutMs === null
+          ? undefined
+          : setTimeout(() => {
+              if (!resolved) {
+                ws.close();
+                reject(new CycleTLSError("SSE connection timeout", 408, requestId));
+              }
+            }, timeoutMs);
 
       ws.on("message", (data: Buffer) => {
         try {
@@ -1691,6 +2162,9 @@ export class CycleTLS extends EventEmitter {
         // Clean up all WebSocket listeners to prevent memory leaks
         ws.removeAllListeners();
       });
+
+      // Every listener is attached; start the request.
+      this.sendInit(ws, initPacket);
     });
   }
 
@@ -1705,36 +2179,56 @@ export class CycleTLS extends EventEmitter {
   }
 
   /**
-   * Stop the server if we spawned it.
+   * Stop the server if we spawned it, and wait until it has exited.
+   *
+   * A server this client did not spawn (one that was already listening on the
+   * port) is left running. The client can be used again afterwards; the next
+   * request starts a new server.
    */
   async close(): Promise<void> {
-    if (this.serverProcess && this.serverProcess.pid) {
-      if (process.platform === "win32") {
-        // Windows: SIGKILL is not supported. Use taskkill for forceful termination
-        // /f = force, /t = kill child processes, /pid = target process ID
+    const kill = (): ChildProcess | null => {
+      const child = this.serverProcess;
+      if (!child) {
+        return null;
+      }
+      if (process.platform === "win32" && child.pid) {
+        // Windows: /t also ends anything the server started.
         try {
-          spawn("taskkill", ["/pid", String(this.serverProcess.pid), "/f", "/t"]);
+          spawn("taskkill", ["/pid", String(child.pid), "/f", "/t"], {
+            stdio: "ignore",
+            windowsHide: true,
+          }).on("error", () => {});
         } catch {
-          // Fallback: try direct kill (Node translates to TerminateProcess on Windows)
-          try {
-            this.serverProcess.kill();
-          } catch {
-            // Process already dead
-          }
-        }
-      } else {
-        // Unix: kill the process group (negative PID) since it was spawned with detached: true
-        try {
-          process.kill(-this.serverProcess.pid, "SIGKILL");
-        } catch (error) {
-          // ESRCH means process already exited - that's fine
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-            console.error("Error killing process group:", error);
-          }
+          // Fall back to the direct kill below
         }
       }
-      this.serverProcess = null;
+      this._killServerSync();
+      return child;
+    };
+
+    const children = [kill()];
+    // A startup still in flight may spawn after the kill above. Let it
+    // settle (it fails fast once its server is gone), then kill again.
+    if (this.startPromise) {
+      await this.startPromise.catch(() => {});
+      children.push(kill());
     }
+    this.serverReady = false;
+
+    await Promise.all(
+      children.map((child) => {
+        if (!child || child.exitCode !== null || child.signalCode !== null) {
+          return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 2000);
+          child.once("exit", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+      })
+    );
   }
 }
 

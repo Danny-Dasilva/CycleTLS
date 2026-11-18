@@ -11,11 +11,31 @@ import (
 // MaxStringLen defines the maximum allowed length for a string.
 // This protects against malformed or malicious packets.
 // Set to max uint16 value (65535) since the protocol uses 2-byte length encoding.
-// For bodies larger than ~48KB (before base64), consider chunking or streaming.
+// Request options that do not fit are sent in an "init2" packet, whose options
+// field has a 4-byte length (see parseInitMessage and MaxInitOptionsLen).
 const MaxStringLen = 65535
 
 // ErrStringTooLarge is returned when a string length exceeds MaxStringLen.
 var ErrStringTooLarge = errors.New("packet: string length exceeds limit")
+
+// Init packet method names. Both carry the same fields; they differ only in
+// the width of the length prefix of the options JSON.
+const (
+	// initMethod is the original init packet: options JSON with a uint16 length.
+	initMethod = "init"
+	// initMethodLong is the large init packet: options JSON with a uint32 length.
+	initMethodLong = "init2"
+)
+
+// MaxInitOptionsLen is the largest options JSON accepted in an "init2" packet
+// (32 MiB). The options JSON holds the whole request, body included, so this
+// bounds the request body: about 32 MiB of text, or about 24 MiB of binary
+// data, which travels base64 encoded.
+const MaxInitOptionsLen = 32 * 1024 * 1024
+
+// ErrInitOptionsTooLarge is returned when the options JSON of an "init2"
+// packet is longer than MaxInitOptionsLen.
+var ErrInitOptionsTooLarge = errors.New("packet: init options exceed 32MB limit")
 
 // ErrNegativeLength is returned when a negative length is encountered.
 var ErrNegativeLength = errors.New("packet: negative length")
@@ -130,6 +150,38 @@ func (r *Reader) ReadString() (string, error) {
 	return s, nil
 }
 
+// readLongBytes reads a field encoded as:
+//
+//	uint32 length (big-endian)
+//	followed by <length> bytes
+//
+// and returns a slice that ALIASES the Reader's buffer (no copy). max bounds
+// the declared length; a larger one fails with tooLarge before anything is read.
+//
+// Possible errors:
+//   - io.ErrUnexpectedEOF
+//   - tooLarge
+func (r *Reader) readLongBytes(max int, tooLarge error) ([]byte, error) {
+	length, err := r.ReadU32()
+	if err != nil {
+		return nil, err
+	}
+
+	if uint64(length) > uint64(max) {
+		return nil, tooLarge
+	}
+
+	n := int(length)
+
+	if n > r.Remaining() {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	out := r.data[r.pos : r.pos+n]
+	r.pos += n
+	return out, nil
+}
+
 // ReadBytes reads n bytes and returns a COPY of the buffer.
 //
 // This method avoids unnecessary conversions to string.
@@ -160,7 +212,18 @@ func (r *Reader) ReadBytes(n int) ([]byte, error) {
 // Message parsing
 // -----------------------------------------------------------------------------
 
-// parseInitMessage parses an "init" packet from the client.
+// parseInitMessage parses the first packet of a request. Two layouts are
+// accepted, told apart by the method name:
+//
+//	"init":  requestID (u16 len + bytes), "init"  (u16 len + bytes),
+//	         initialWindow (u32), options JSON (u16 len + bytes)
+//	"init2": requestID (u16 len + bytes), "init2" (u16 len + bytes),
+//	         initialWindow (u32), options JSON (u32 len + bytes)
+//
+// "init" caps the options JSON, and with it the request body, at 65535 bytes.
+// "init2" raises the cap to MaxInitOptionsLen. Clients older than 3.0.1 only
+// send "init", so it has to keep parsing.
+//
 // Returns the request, initial window size, and any error.
 func parseInitMessage(data []byte) (cycleTLSRequest, uint32, error) {
 	r := NewReader(data)
@@ -174,7 +237,7 @@ func parseInitMessage(data []byte) (cycleTLSRequest, uint32, error) {
 	if err != nil {
 		return cycleTLSRequest{}, 0, err
 	}
-	if method != "init" {
+	if method != initMethod && method != initMethodLong {
 		return cycleTLSRequest{}, 0, fmt.Errorf("unexpected method %q", method)
 	}
 
@@ -191,7 +254,15 @@ func parseInitMessage(data []byte) (cycleTLSRequest, uint32, error) {
 		return cycleTLSRequest{}, 0, ErrWindowTooLarge
 	}
 
-	optionsJSON, err := r.ReadString()
+	// "init" carries the options JSON with a uint16 length, "init2" with a uint32.
+	var optionsJSON []byte
+	if method == initMethodLong {
+		optionsJSON, err = r.readLongBytes(MaxInitOptionsLen, ErrInitOptionsTooLarge)
+	} else {
+		var s string
+		s, err = r.ReadString()
+		optionsJSON = []byte(s)
+	}
 	if err != nil {
 		return cycleTLSRequest{}, 0, err
 	}
@@ -202,7 +273,7 @@ func parseInitMessage(data []byte) (cycleTLSRequest, uint32, error) {
 	}
 
 	var opts Options
-	if err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {
+	if err := json.Unmarshal(optionsJSON, &opts); err != nil {
 		return cycleTLSRequest{}, 0, err
 	}
 

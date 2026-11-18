@@ -11,6 +11,28 @@
 const MAX_STRING_LEN = 65535;
 
 /**
+ * Largest options JSON, in bytes, that an init packet may carry (32 MiB).
+ * The options JSON holds the whole request, body included, so this bounds the
+ * request body: about 32 MiB of text, or about 24 MiB of binary data, which
+ * travels base64 encoded. The Go reader enforces the same limit
+ * (MaxInitOptionsLen in cycletls/packet_reader.go).
+ */
+export const MAX_INIT_OPTIONS_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Thrown by buildInitPacket when the encoded request is over
+ * MAX_INIT_OPTIONS_BYTES.
+ */
+export class InitPacketTooLargeError extends RangeError {
+  constructor(public readonly byteLength: number) {
+    super(
+      `Request too large: the encoded request is ${byteLength} bytes, the limit is ${MAX_INIT_OPTIONS_BYTES} bytes (32 MiB) including the body`
+    );
+    this.name = "InitPacketTooLargeError";
+  }
+}
+
+/**
  * BufferWriter simplifies building binary packets.
  * Issue #2: All write methods include range validation to prevent overflows.
  */
@@ -28,6 +50,12 @@ class BufferWriter {
     len.writeUInt16BE(strBuf.length, 0);
     this.parts.push(len);
     this.parts.push(strBuf);
+  }
+
+  /** Write bytes with a 4-byte big-endian length prefix. */
+  writeLongBytes(bytes: Buffer): void {
+    this.writeU32(bytes.length);
+    this.parts.push(bytes);
   }
 
   writeU16(v: number): void {
@@ -54,18 +82,41 @@ class BufferWriter {
 }
 
 /**
- * Build an "init" packet to initialize a request.
+ * Build the packet that starts a request. Two layouts exist; they differ only
+ * in the width of the length in front of the options JSON:
+ *
+ *   "init":  requestId (u16 len + bytes), "init"  (u16 len + bytes),
+ *            initialWindow (u32), options JSON (u16 len + bytes)
+ *   "init2": requestId (u16 len + bytes), "init2" (u16 len + bytes),
+ *            initialWindow (u32), options JSON (u32 len + bytes)
+ *
+ * "init" is used whenever the options JSON fits in 65535 bytes, so small
+ * requests stay readable by a Go binary older than 3.0.1. Larger requests use
+ * "init2", up to MAX_INIT_OPTIONS_BYTES.
+ *
+ * @throws InitPacketTooLargeError when the options JSON is over the limit.
  */
 export function buildInitPacket(
   requestId: string,
   options: Record<string, unknown>,
   initialWindow: number
 ): Buffer {
+  const json = Buffer.from(JSON.stringify(options), "utf8");
+  if (json.length > MAX_INIT_OPTIONS_BYTES) {
+    throw new InitPacketTooLargeError(json.length);
+  }
+
   const w = new BufferWriter();
   w.writeString(requestId);
-  w.writeString("init");
+  if (json.length <= MAX_STRING_LEN) {
+    w.writeString("init");
+    w.writeU32(initialWindow);
+    w.writeU16(json.length);
+    return Buffer.concat([w.toBuffer(), json]);
+  }
+  w.writeString("init2");
   w.writeU32(initialWindow);
-  w.writeString(JSON.stringify(options));
+  w.writeLongBytes(json);
   return w.toBuffer();
 }
 

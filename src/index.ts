@@ -2694,7 +2694,9 @@ export * as Protocol from "./protocol";
 
 // Default export: CycleTLS
 import CycleTLS from "./flow-control-client";
-import { CycleTLSWebSocketV2 } from "./flow-control-client";
+import { CycleTLSWebSocketV2, CycleTLSError as CycleTLSErrorV2 } from "./flow-control-client";
+import { CreditManager } from "./credit-manager";
+import * as Protocol from "./protocol";
 export default CycleTLS;
 
 // Legacy WebSocket class (from legacy API)
@@ -2718,6 +2720,9 @@ module.exports.CycleTLS = CycleTLS;
 module.exports.CycleTLSWebSocket = CycleTLSWebSocket;
 module.exports.CycleTLSWebSocketV2 = CycleTLSWebSocketV2;
 module.exports.StreamingWebSocket = CycleTLSWebSocketV2;
+module.exports.CycleTLSError = CycleTLSErrorV2;
+module.exports.CreditManager = CreditManager;
+module.exports.Protocol = Protocol;
 module.exports.initCycleTLS = initCycleTLS;
 module.exports._InstanceManager = InstanceManager;
 module.exports._registerGlobalCleanupHandlers = registerGlobalCleanupHandlers;
