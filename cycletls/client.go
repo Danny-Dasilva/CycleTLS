@@ -60,6 +60,11 @@ type Browser struct {
 
 	// HTTP client
 	client *fhttp.Client
+
+	// 3.0.1: TLS spec options
+	TLSProfile        string // Named utls ClientHello, e.g. "chrome_133"; wins over JA3 and JA4r
+	ShuffleExtensions bool   // Random extension order on the default-Chrome, TLSProfile and JA4r paths
+	ClientHello       string // Hex of a captured ClientHello record to replay; wins over TLSProfile
 }
 
 // Protocol represents the HTTP protocol version
@@ -199,6 +204,10 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 		tlsCfg,
 		strings.Join(cookieSigs, ","),
 	)
+	// 3.0.1: TLS spec options. Each one changes the ClientHello, so clients
+	// that differ in any of them must not share a pool entry.
+	configStr += fmt.Sprintf("|tlsprofile:%s|shuffle:%t|clienthello:%s",
+		normalizeTLSProfileName(browser.TLSProfile), browser.ShuffleExtensions, browser.ClientHello)
 
 	// FNV-1a 64-bit hash of the canonical config string. Fixed-size hex key.
 	h := fnv.New64a()

@@ -80,6 +80,11 @@ type roundTripper struct {
 	// TLS 1.3 specific options
 	TLS13AutoRetry bool
 
+	// 3.0.1: TLS spec options
+	TLSProfile        string
+	ShuffleExtensions bool
+	ClientHello       string
+
 	// Caching with LRU eviction
 	cachedConnections     map[string]*cachedConn
 	cachedTransports      map[string]*cachedTransport
@@ -302,8 +307,17 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	var helloID utls.ClientHelloID
 	var proactivelyUpgraded bool // Track if we proactively upgraded TLS 1.2 to 1.3
 
-	// Determine which fingerprint to use
-	if rt.QUICFingerprint != "" {
+	// Determine which fingerprint to use.
+	// 3.0.1: clientHello and tlsProfile are opt-in and win over the older
+	// options; optInSpec returns nil when neither is set.
+	spec, err = rt.optInSpec()
+	if err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
+	if spec != nil {
+		// chosen by clientHello or tlsProfile
+	} else if rt.QUICFingerprint != "" {
 		// Use QUIC fingerprint
 		spec, err = QUICStringToSpec(rt.QUICFingerprint, rt.UserAgent, rt.ForceHTTP1)
 		if err != nil {
@@ -328,11 +342,17 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		if err != nil {
 			return nil, err
 		}
+		if rt.ShuffleExtensions {
+			shuffleSpecExtensions(spec)
+		}
 	} else {
 		parsedUserAgent := parseUserAgent(rt.UserAgent)
 		switch parsedUserAgent.UserAgent {
 		case chrome:
 			spec = ModernChromeSpec(rt.ForceHTTP1)
+			if rt.ShuffleExtensions {
+				shuffleSpecExtensions(spec)
+			}
 		case firefox:
 			helloID = utls.HelloFirefox_Auto
 		default:
@@ -977,6 +997,11 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 
 		// TLS 1.3 specific options
 		TLS13AutoRetry: browser.TLS13AutoRetry,
+
+		// 3.0.1: TLS spec options
+		TLSProfile:        browser.TLSProfile,
+		ShuffleExtensions: browser.ShuffleExtensions,
+		ClientHello:       browser.ClientHello,
 	}
 }
 
