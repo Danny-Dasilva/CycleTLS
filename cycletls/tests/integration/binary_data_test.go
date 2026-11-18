@@ -16,6 +16,7 @@ import (
 func TestBinaryImageUpload(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Read a test image file
 	imageData, err := os.ReadFile("../../../tests/images/test.jpeg")
@@ -25,7 +26,7 @@ func TestBinaryImageUpload(t *testing.T) {
 	}
 
 	// Upload using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: imageData,
 		Headers: map[string]string{
 			"Content-Type": "image/jpeg",
@@ -46,7 +47,7 @@ func TestBinaryImageUpload(t *testing.T) {
 		t.Fatal("Failed to parse response: ", err)
 	}
 
-	// httpbin.org returns the data as base64 in the "data" field
+	// The echo server returns the body as a base64 data URL in the "data" field
 	if data, ok := respData["data"].(string); !ok || data == "" {
 		t.Fatal("Expected non-empty data field in response")
 	}
@@ -56,9 +57,10 @@ func TestBinaryImageUpload(t *testing.T) {
 func TestBinaryImageDownload(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Download an image
-	response, err := client.Do("https://httpbin.org/image/jpeg", cycletls.Options{
+	response, err := client.Do(server.URL+"/image/jpeg", cycletls.Options{
 		Headers: map[string]string{
 			"Accept": "image/jpeg",
 		},
@@ -96,6 +98,7 @@ func TestBinaryImageDownload(t *testing.T) {
 func TestMixedMultipartWithBinary(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create a simple test binary data
 	binaryData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10} // JPEG header
@@ -122,7 +125,7 @@ func TestMixedMultipartWithBinary(t *testing.T) {
 	writer.Write([]byte("------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n"))
 
 	// Send using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: body.Bytes(),
 		Headers: map[string]string{
 			"Content-Type": "multipart/form-data; boundary=" + boundary,
@@ -166,6 +169,7 @@ func TestMixedMultipartWithBinary(t *testing.T) {
 func TestBinaryDataPreservation(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create test binary data with various byte values
 	testData := make([]byte, 256)
@@ -174,7 +178,7 @@ func TestBinaryDataPreservation(t *testing.T) {
 	}
 
 	// Upload the binary data
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: testData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
@@ -188,7 +192,7 @@ func TestBinaryDataPreservation(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", 200, response.Status)
 	}
 
-	// httpbin.org should echo back our data
+	// The echo server returns our data
 	var respData map[string]interface{}
 	err = json.Unmarshal([]byte(response.Body), &respData)
 	if err != nil {
@@ -206,6 +210,7 @@ func TestBinaryDataPreservation(t *testing.T) {
 func TestIssue297BinaryCorruptionFix(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create binary data with sequences that would corrupt in UTF-8 encoding
 	// These are the exact problematic scenarios mentioned in issue #297
@@ -219,7 +224,7 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 	}
 
 	// Upload using BodyBytes field (the fix for issue #297)
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: problematicData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
@@ -241,7 +246,7 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 		t.Fatal("Failed to parse response: ", err)
 	}
 
-	// httpbin.org returns data as data URI format, extract base64 and decode
+	// The echo server returns data as a data URI, extract base64 and decode
 	if dataField, ok := respData["data"].(string); ok && dataField != "" {
 		// Extract base64 data from data URI format: "data:application/octet-stream;base64,AAH/gH8="
 		base64Data := dataField
@@ -268,6 +273,7 @@ func TestIssue297BinaryCorruptionFix(t *testing.T) {
 func TestAllPossibleByteValues(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create data with all possible byte values
 	allBytesData := make([]byte, 256)
@@ -276,7 +282,7 @@ func TestAllPossibleByteValues(t *testing.T) {
 	}
 
 	// Upload using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: allBytesData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
@@ -329,9 +335,10 @@ func TestAllPossibleByteValues(t *testing.T) {
 func TestBinaryResponseIntegrity(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Download a binary image
-	response, err := client.Do("https://httpbin.org/image/png", cycletls.Options{}, "GET")
+	response, err := client.Do(server.URL+"/image/png", cycletls.Options{}, "GET")
 	if err != nil {
 		t.Fatal("Request Failed: ", err)
 	}
@@ -366,6 +373,7 @@ func TestBinaryResponseIntegrity(t *testing.T) {
 func TestLargeBinaryDataHandling(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create a large binary file with repeating problematic UTF-8 sequences
 	pattern := []byte{0xFF, 0x00, 0x80, 0x81, 0xC0, 0xC1, 0xFE, 0xFF}
@@ -373,7 +381,7 @@ func TestLargeBinaryDataHandling(t *testing.T) {
 	largeData := bytes.Repeat(pattern, repetitions)
 
 	// Upload using BodyBytes
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: largeData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
@@ -420,12 +428,13 @@ func TestLargeBinaryDataHandling(t *testing.T) {
 func TestDebugBinaryResponse(t *testing.T) {
 	client := cycletls.Init()
 	defer client.Close()
+	server := newEchoServer(t)
 
 	// Create some test binary data with problematic UTF-8 sequences
 	testData := []byte{0x00, 0x01, 0xFF, 0x80, 0x7F, 0xFE, 0xC0, 0xC1}
 
 	// Upload using BodyBytes field
-	response, err := client.Do("https://httpbin.org/post", cycletls.Options{
+	response, err := client.Do(server.URL+"/post", cycletls.Options{
 		BodyBytes: testData,
 		Headers: map[string]string{
 			"Content-Type": "application/octet-stream",
@@ -450,7 +459,7 @@ func TestDebugBinaryResponse(t *testing.T) {
 	// Verify that binary data was properly handled
 	if data, ok := respData["data"].(string); ok && data != "" {
 
-		// httpbin.org returns binary data in data URI format or as base64
+		// The echo server returns binary data in data URI format
 		var decodedData []byte
 		var err error
 

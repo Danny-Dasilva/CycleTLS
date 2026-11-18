@@ -675,6 +675,22 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 		finalUrl = resp.Request.URL.String()
 	}
 
+	// Decode the body as it streams, so the client receives the payload and
+	// not the compressed bytes. fhttp does no decompression of its own. The
+	// Content-Encoding and Content-Length headers describe the compressed
+	// body, so drop them once we decode (net/http does the same).
+	var body io.Reader = resp.Body
+	if res.req.Method != "HEAD" && resp.StatusCode != 204 && resp.StatusCode != 304 {
+		if decoded, ok := newDecodedBody(resp.Body, resp.Header.Values("Content-Encoding")); ok {
+			defer decoded.Close()
+			body = decoded
+			resp.Header.Del("Content-Encoding")
+			resp.Header.Del("Content-Length")
+			resp.ContentLength = -1
+			resp.Uncompressed = true
+		}
+	}
+
 	{
 		var b bytes.Buffer
 		var headerLength = len(resp.Header)
@@ -733,7 +749,7 @@ func dispatcherAsync(res fullRequest, chanWrite chan []byte) {
 				break loop
 
 			default:
-				n, err := resp.Body.Read(chunkBuffer)
+				n, err := body.Read(chunkBuffer)
 
 				if res.req.Context().Err() != nil {
 					debugLogger.Printf("Request %s was canceled during body read", res.options.RequestID)

@@ -79,10 +79,12 @@ const myRequests: Request[] = [
   },
 ];
 
-test("Response data contains raw compressed data (Axios-style)", async () => {
+test("Compressed responses are decoded before they reach the client", async () => {
   await withCycleTLS({ port: 9115 }, async (cycleTLS) => {
     for (let request of myRequests) {
-      // Test with default responseType (json) - should return raw buffer for compressed data
+      const flag = Object.keys(request.response!).find((key) => request.response![key] === true)!;
+
+      // Default responseType (json): data is the parsed, decompressed body
       const response = await cycleTLS(request.url, {
         ja3: ja3,
         userAgent: userAgent,
@@ -90,12 +92,10 @@ test("Response data contains raw compressed data (Axios-style)", async () => {
       });
 
       expect(response.status).toBe(200);
+      expect(response.data[flag]).toBe(true);
+      expect((await response.json())[flag]).toBe(true);
 
-      // Default (json) should return raw compressed Buffer when JSON parsing fails
-      expect(response.data).toBeInstanceOf(Buffer);
-      expect(response.data.length).toBeGreaterThan(0);
-
-      // Test with explicit arraybuffer responseType
+      // arraybuffer responseType holds the decompressed bytes
       const arrayBufferResponse = await cycleTLS(request.url, {
         ja3: ja3,
         userAgent: userAgent,
@@ -104,7 +104,8 @@ test("Response data contains raw compressed data (Axios-style)", async () => {
       });
 
       expect(arrayBufferResponse.data).toBeInstanceOf(ArrayBuffer);
-      expect(arrayBufferResponse.data.byteLength).toBeGreaterThan(0);
+      const decoded = JSON.parse(Buffer.from(arrayBufferResponse.data).toString('utf8'));
+      expect(decoded[flag]).toBe(true);
     }
   });
 });
