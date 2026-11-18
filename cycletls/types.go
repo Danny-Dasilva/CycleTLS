@@ -94,6 +94,17 @@ type Options struct {
 	TLSProfile        string `json:"tlsProfile,omitempty"`        // Named utls ClientHello, e.g. "chrome_133"; see TLSProfileNames. Wins over ja3 and ja4r.
 	ShuffleExtensions bool   `json:"shuffleExtensions,omitempty"` // Random extension order per connection on the default-Chrome, tlsProfile and ja4r paths. Ignored with ja3.
 	ClientHello       string `json:"clientHello,omitempty"`       // Hex of a captured ClientHello TLS record to replay; see ClientHelloToSpec. Wins over tlsProfile, ja3 and ja4r.
+	// 3.0.1: HTTP/2, HTTP/3 and proxy options
+	//
+	// HTTP2Priority sets the priority fields of the HTTP/2 HEADERS frame:
+	// {"weight":256,"exclusive":true,"streamDep":0}, or false to send none.
+	// Unset keeps the default (weight 256 when http2Fingerprint is set, no
+	// priority fields otherwise).
+	HTTP2Priority *HTTP2PriorityOptions `json:"http2Priority,omitempty"`
+	// ProxyHeaders are extra headers for the CONNECT request sent to an HTTP or
+	// HTTPS proxy. They are not sent to the target site. SOCKS proxies have no
+	// CONNECT request and ignore them.
+	ProxyHeaders map[string]string `json:"proxyHeaders,omitempty"`
 }
 
 // UnmarshalJSON accepts both legacy string header values and multi-value arrays.

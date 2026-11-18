@@ -84,6 +84,12 @@ type roundTripper struct {
 	TLSProfile        string
 	ShuffleExtensions bool
 	ClientHello       string
+	// 3.0.1: HTTP/2 HEADERS priority, and the parsed http2Fingerprint
+	// (see http2.go).
+	HTTP2Priority     *HTTP2PriorityOptions
+	h2FingerprintOnce sync.Once
+	h2Fingerprint     *HTTP2Fingerprint
+	h2FingerprintErr  error
 
 	// Caching with LRU eviction
 	cachedConnections     map[string]*cachedConn
@@ -152,8 +158,17 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		go rt.startCacheCleanup()
 	})
 
+	// http2Fingerprint's fourth part overrides the User-Agent pseudo-header order.
+	rt.applyPseudoHeaderOrder(req)
+
 	// Check if we need HTTP/3 - matches reference implementation pattern
 	if rt.ForceHTTP3 {
+		// HTTP/3 cannot go through the proxy dialer. Refuse before any UDP
+		// socket is opened instead of connecting directly from the real IP.
+		if rt.usesProxy() {
+			return nil, ErrHTTP3ProxyUnsupported
+		}
+
 		// Extract host and port from request
 		host := req.URL.Hostname()
 		port := req.URL.Port()
@@ -310,6 +325,8 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	// Determine which fingerprint to use.
 	// 3.0.1: clientHello and tlsProfile are opt-in and win over the older
 	// options; optInSpec returns nil when neither is set.
+	// quicFingerprint is not consulted here: it must never shape the TCP
+	// ClientHello (see logQUICFingerprintNoOp in http3.go).
 	spec, err = rt.optInSpec()
 	if err != nil {
 		_ = rawConn.Close()
@@ -317,12 +334,6 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 	if spec != nil {
 		// chosen by clientHello or tlsProfile
-	} else if rt.QUICFingerprint != "" {
-		// Use QUIC fingerprint
-		spec, err = QUICStringToSpec(rt.QUICFingerprint, rt.UserAgent, rt.ForceHTTP1)
-		if err != nil {
-			return nil, err
-		}
 	} else if rt.JA3 != "" {
 		// Check if we should proactively upgrade TLS 1.2 to TLS 1.3
 		if rt.TLS13AutoRetry && strings.HasPrefix(rt.JA3, "771,") {
@@ -428,8 +439,6 @@ func (rt *roundTripper) retryWithTLS13CompatibleCurves(ctx context.Context, netw
 	// Use TLS 1.3 compatible spec based on the original fingerprint type
 	var spec *utls.ClientHelloSpec
 	switch {
-	case rt.QUICFingerprint != "":
-		spec, err = QUICStringToSpec(rt.QUICFingerprint, rt.UserAgent, rt.ForceHTTP1)
 	case rt.JA3 != "":
 		spec, err = StringToTLS13CompatibleSpec(rt.JA3, rt.UserAgent, rt.ForceHTTP1)
 	default:
@@ -515,13 +524,9 @@ func (rt *roundTripper) cacheTransportAndConnection(addr string, conn *utls.UCon
 			Navigator:   parsedUserAgent.UserAgent,
 		}
 
-		// Apply HTTP/2 fingerprint if specified
-		if rt.HTTP2Fingerprint != "" {
-			h2Fingerprint, err := NewHTTP2Fingerprint(rt.HTTP2Fingerprint)
-			if err != nil {
-				return fmt.Errorf("failed to parse HTTP/2 fingerprint: %v", err)
-			}
-			h2Fingerprint.Apply(&http2Transport)
+		// Apply http2Fingerprint and http2Priority if specified
+		if err := rt.configureHTTP2Transport(&http2Transport); err != nil {
+			return err
 		}
 
 		rt.cacheMu.Lock()
@@ -972,8 +977,11 @@ func newRoundTripper(browser Browser, dialer ...proxy.ContextDialer) http.RoundT
 		contextDialer = proxy.Direct
 	}
 
+	logQUICFingerprintNoOp(browser)
+
 	return &roundTripper{
 		dialer:                contextDialer,
+		HTTP2Priority:         browser.HTTP2Priority,
 		JA3:                   browser.JA3,
 		JA4r:                  browser.JA4r,
 		HTTP2Fingerprint:      browser.HTTP2Fingerprint,
@@ -1015,6 +1023,9 @@ func (rt *roundTripper) makeHTTP3Request(req *http.Request, conn *HTTP3Connectio
 	// Apply custom SNI if provided
 	if rt.ServerName != "" {
 		tlsConfig.ServerName = rt.ServerName
+	}
+	if rt.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	quicConfig := &quic.Config{
@@ -1114,7 +1125,7 @@ func (rt *roundTripper) makeHTTP3RequestWithTransport(req *http.Request, h3Trans
 		Proto:            req.Proto,
 		ProtoMajor:       req.ProtoMajor,
 		ProtoMinor:       req.ProtoMinor,
-		Header:           ConvertFhttpHeader(req.Header),
+		Header:           http3RequestHeader(req.Header),
 		Body:             req.Body,
 		GetBody:          req.GetBody,
 		ContentLength:    req.ContentLength,

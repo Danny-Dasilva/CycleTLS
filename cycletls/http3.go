@@ -3,6 +3,7 @@ package cycletls
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	stdhttp "net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	uquic "github.com/refraction-networking/uquic"
+	"golang.org/x/net/proxy"
 )
 
 // HTTP3Transport represents an HTTP/3 transport with customizable settings
@@ -392,6 +394,47 @@ func (rt *HTTP3RoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	}, nil
 }
 
+// ErrHTTP3ProxyUnsupported is returned when a request asks for HTTP/3 and a
+// proxy together. HTTP/3 runs over UDP and none of the supported proxy types
+// (HTTP CONNECT, SOCKS4, SOCKS5 over TCP) can carry it, so the request is
+// refused before any packet is sent. It never falls back to a direct
+// connection, which would expose the real IP, nor to TCP.
+var ErrHTTP3ProxyUnsupported = errors.New("cycletls: HTTP/3 cannot be sent through a proxy; remove the proxy or drop forceHTTP3/protocol \"http3\"")
+
+// usesProxy reports whether this roundTripper dials through anything other than
+// a direct connection.
+func (rt *roundTripper) usesProxy() bool {
+	return rt.dialer != nil && rt.dialer != proxy.ContextDialer(proxy.Direct)
+}
+
+// http3RequestHeader copies the request headers for quic-go without fhttp's
+// ordering keys. "Header-Order:" and "PHeader-Order:" are instructions to
+// fhttp's HTTP/1.1 and HTTP/2 writers, not headers; quic-go refuses them as
+// invalid header names and has no header-order option to map them to.
+func http3RequestHeader(h http.Header) stdhttp.Header {
+	out := make(stdhttp.Header, len(h))
+	for k, v := range h {
+		if k == http.HeaderOrderKey || k == http.PHeaderOrderKey {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// logQUICFingerprintNoOp notes in the debug log that quicFingerprint does
+// nothing. The option is accepted so existing callers keep working, but no
+// code path can honour it yet: quic-go builds its own Initial packet, and the
+// uquic dial in uhttp3Dial cannot be handed to quic-go's http3.Transport. In
+// 3.0.0 the option instead replaced the TCP ClientHello with one offering ALPN
+// "h3"; that is gone.
+func logQUICFingerprintNoOp(browser Browser) {
+	if browser.QUICFingerprint == "" {
+		return
+	}
+	debugLogger.Printf("quicFingerprint is set but has no effect: HTTP/3 requests use quic-go's own QUIC Initial, and TCP requests ignore it")
+}
+
 // HTTP3Connection represents an HTTP/3 connection with associated metadata
 type HTTP3Connection struct {
 	QuicConn interface{} // Can be *quic.Conn or uquic.EarlyConnection
@@ -443,6 +486,9 @@ func (rt *roundTripper) ghttp3Dial(ctx context.Context, remoteAddr, port string,
 		tlsConfig.ServerName = rt.ServerName
 	} else {
 		tlsConfig.ServerName = remoteAddr
+	}
+	if rt.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	// Resolve remote address
@@ -529,6 +575,9 @@ func (rt *roundTripper) uhttp3Dial(ctx context.Context, spec *uquic.QUICSpec, re
 		tlsConfig.ServerName = rt.ServerName
 	} else {
 		tlsConfig.ServerName = remoteAddr
+	}
+	if rt.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	// Resolve remote address
