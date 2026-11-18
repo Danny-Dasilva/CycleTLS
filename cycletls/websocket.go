@@ -1,13 +1,15 @@
 package cycletls
 
 import (
-	utls "github.com/refraction-networking/utls"
+	"context"
 	"net"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
+	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/proxy"
 )
 
 // WebSocketClient represents a client for WebSocket connections
@@ -62,8 +64,47 @@ func NewWebSocketClient(tlsConfig *utls.Config, headers http.Header) *WebSocketC
 	}
 }
 
+// UseProxyDialer sends the WebSocket connection through dialer in place of the
+// proxy named by the environment. dialer is the same proxy dialer the HTTP
+// path uses (HTTP CONNECT, HTTPS CONNECT or SOCKS), so the upstream server
+// sees the proxy's address. The TLS handshake with the server still runs here,
+// over the tunnel.
+func (wsc *WebSocketClient) UseProxyDialer(dialer proxy.ContextDialer) {
+	wsc.Dialer.Proxy = nil
+	wsc.Dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := conn.(*http2Conn); ok {
+			return noDeadlineConn{conn}, nil
+		}
+		return conn, nil
+	}
+}
+
+// noDeadlineConn wraps a tunnel that runs as one stream of an HTTP/2
+// connection to the proxy. A deadline set on it would land on that whole
+// HTTP/2 connection, and a write deadline left behind by one WebSocket control
+// frame would fail the proxy connection's own later writes. Deadlines are
+// dropped here; closing the connection is what ends a blocked read or write.
+type noDeadlineConn struct {
+	net.Conn
+}
+
+func (noDeadlineConn) SetDeadline(time.Time) error      { return nil }
+func (noDeadlineConn) SetReadDeadline(time.Time) error  { return nil }
+func (noDeadlineConn) SetWriteDeadline(time.Time) error { return nil }
+
 // Connect establishes a WebSocket connection
 func (wsc *WebSocketClient) Connect(urlStr string) (*websocket.Conn, *http.Response, error) {
+	return wsc.ConnectContext(context.Background(), urlStr)
+}
+
+// ConnectContext establishes a WebSocket connection. Cancelling ctx stops a
+// handshake that is still in progress; it does not close a connection that
+// has been returned.
+func (wsc *WebSocketClient) ConnectContext(ctx context.Context, urlStr string) (*websocket.Conn, *http.Response, error) {
 	// Parse the URL
 	u, err := url.Parse(urlStr)
 	if err != nil {
@@ -93,7 +134,7 @@ func (wsc *WebSocketClient) Connect(urlStr string) (*websocket.Conn, *http.Respo
 	}
 
 	// Connect to the WebSocket server
-	conn, resp, err := wsc.Dialer.Dial(wsURL.String(), wsc.Headers)
+	conn, resp, err := wsc.Dialer.DialContext(ctx, wsURL.String(), wsc.Headers)
 	if err != nil {
 		return nil, resp, err
 	}
