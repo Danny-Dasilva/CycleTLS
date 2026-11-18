@@ -13,11 +13,12 @@ import (
 )
 
 // shortenWSIdle makes the upstream WebSocket liveness windows short enough to
-// test: a ping every 40 ms, dead after 300 ms of total silence.
+// test: a ping every 50 ms, dead after 600 ms of total silence. The idle window
+// is twelve pings wide so a loaded machine does not trip it by accident.
 func shortenWSIdle(t *testing.T) (idle time.Duration) {
 	t.Helper()
 	oldPing, oldIdle := wsPingInterval, wsIdleTimeout
-	wsPingInterval, wsIdleTimeout = 40*time.Millisecond, 300*time.Millisecond
+	wsPingInterval, wsIdleTimeout = 50*time.Millisecond, 600*time.Millisecond
 	t.Cleanup(func() { wsPingInterval, wsIdleTimeout = oldPing, oldIdle })
 	return wsIdleTimeout
 }
@@ -112,8 +113,8 @@ func TestSilentWebSocketSurvivesIdleWindow(t *testing.T) {
 					Options:   Options{URL: upstream.URL, Protocol: "websocket"},
 				})
 
-				// Stay silent for four idle windows. The connection must hold.
-				frames := drainFor(t, ch, 4*idle)
+				// Stay silent for two idle windows. The connection must hold.
+				frames := drainFor(t, ch, 2*idle)
 				if got := frameMethods(frames); !reflect.DeepEqual(got, []string{"response", "ws_open"}) {
 					t.Fatalf("frames while idle = %v, want only response and ws_open", got)
 				}

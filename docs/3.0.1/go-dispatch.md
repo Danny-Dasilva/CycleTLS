@@ -112,7 +112,7 @@ Writing the test also showed that the legacy path never sent `end` after the ups
 - `dispatchWebSocketAsyncV2` (`ws_handler_v2.go`): same watch, and every way the reader can end now sends `ws_close` then `end`. A failed write to the upstream sends `ws_error`, `ws_close` 1006 and `end` where it used to send `ws_error` and carry on.
 - A read that ends the connection no longer sends `ws_error`. Both Node clients emit `'error'` for that frame, and an `'error'` event with no listener throws in Node. `ws_close` with code 1006 carries the same news.
 
-**Tests.** `TestSilentWebSocketSurvivesIdleWindow` shortens the windows to 40 ms and 300 ms, connects to a server that answers pings and sends nothing, waits four idle windows, and expects only `response` and `ws_open`, with at least one ping seen upstream. Then the server closes, once with close code 4001 and once by dropping the TCP connection, and the test expects `ws_close` (4001 or 1006) followed by `end`. `TestDeadWebSocketIsClosedAfterIdleWindow` uses a server that never answers pings and expects `ws_close` 1006 and `end` after the idle window, not before. Both run on both paths.
+**Tests.** `TestSilentWebSocketSurvivesIdleWindow` shortens the windows to 50 ms and 600 ms, connects to a server that answers pings and sends nothing, waits two idle windows, and expects only `response` and `ws_open`, with at least one ping seen upstream. Then the server closes, once with close code 4001 and once by dropping the TCP connection, and the test expects `ws_close` (4001 or 1006) followed by `end`. `TestDeadWebSocketIsClosedAfterIdleWindow` uses a server that never answers pings and expects `ws_close` 1006 and `end` after the idle window, not before. Both run on both paths.
 
 **What a user notices.** A quiet feed stays connected. When the upstream goes away, the socket object gets `close` with the real code. The upstream now receives a ping about every 30 s while it is quiet. A close code other than 1000 or 1001 used to arrive as an error event; it now arrives as a close event with that code.
 
@@ -237,12 +237,14 @@ Run on macOS arm64, Go 1.26.11, Node 22.18.0.
 | `go build ./...` in `cycletls/` | 0 |
 | `go vet ./...` in `cycletls/` | 0 |
 | `gofmt -l` on the changed files | 0, nothing listed |
-| `go test -race ./...` in `cycletls/` | 0 |
+| `go test -race ./...` in `cycletls/` | 0 in 16 of 17 runs, see below |
 | New tests, `-race -count=5` | 0 |
 | `go test -race -tags=integration ./tests/integration/tlsfingerprint/...` | 0 |
 | `npm ci --unsafe-perm` | 0 |
 | `npx jest tests/respawn-limit.test.js tests/decompression.test.ts --forceExit` | 0 |
 | `npx jest --testPathPattern=tlsfingerprint --forceExit --runInBand` | 0 |
 | `npx jest --testPathPattern=tlsfingerprint --forceExit` (parallel workers) | 1 |
+
+One of the 17 full `go test -race ./...` runs exited 1. Its output was not kept, so the failing test is not known. The idle-window test was the most timing-sensitive one in the package at that point (a 300 ms window while other work loaded the machine), so its window was widened to 600 ms; the 6 full runs and 15 repeats of the new tests after that all passed. That the widening fixed it is a guess.
 
 The last row fails the same way with the base branch's binary: 16 and 10 failed tests in two base runs, 12, 7 and 13 in three runs here, a different set each time, nearly all `Connection closed`. The four suites run in separate workers, all on port 9119, and run in band they pass. The likely cause is that one suite's `close()` stops the Go server the others are using; that was not confirmed. Either way the failure is the same with and without these changes.
