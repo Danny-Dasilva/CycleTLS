@@ -940,6 +940,11 @@ func JA4RStringToSpec(ja4r string, userAgent string, forceHTTP1 bool, disableGre
 		extensions = append(extensions, alpnExt)
 	}
 
+	// pre_shared_key (0x0029) has to be the last extension. JA4_r lists
+	// extensions sorted by ID, which puts it mid-list. utls leaves the extension
+	// out when there is no session to resume (Config.OmitEmptyPsk).
+	extensions = movePreSharedKeyLast(extensions)
+
 	return &utls.ClientHelloSpec{
 		TLSVersMin:         tlsMinVersion,
 		TLSVersMax:         tlsMaxVersion,
@@ -1107,7 +1112,8 @@ func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 		"16": &utls.ALPNExtension{
 			AlpnProtocols: []string{"h2", "http/1.1"},
 		},
-		"17": &utls.GenericExtension{Id: 17}, // status_request_v2
+		"15": &utls.GenericExtension{Id: 15, Data: []byte{0x01}}, // heartbeat: peer_allowed_to_send
+		"17": &utls.StatusRequestV2Extension{},
 		"18": &utls.SCTExtension{},
 		"21": &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 		"22": &utls.GenericExtension{Id: 22}, // encrypt_then_mac
@@ -1173,12 +1179,16 @@ func genMap(disableGrease bool) (extMap map[string]utls.TLSExtension) {
 				"h2",
 			},
 		},
+		// 17613 stays a GenericExtension: tests/unit/issue427_test.go asserts
+		// the type, and utls.ApplicationSettingsExtensionNew writes the same
+		// five bytes.
 		"17613": &utls.GenericExtension{
 			Id:   17613,
 			Data: []byte{0x00, 0x03, 0x02, 0x68, 0x32},
 		},
-		"30032": &utls.GenericExtension{Id: 0x7550, Data: []byte{0}}, // Channel ID extension
-		"51764": newTrustAnchorsExtension(),                          // trust_anchors
+		"30031": &utls.FakeChannelIDExtension{OldExtensionID: true}, // channel_id, old codepoint
+		"30032": &utls.FakeChannelIDExtension{},                     // channel_id
+		"51764": newTrustAnchorsExtension(),                         // trust_anchors
 		"65281": &utls.RenegotiationInfoExtension{
 			Renegotiation: utls.RenegotiateOnceAsClient,
 		},

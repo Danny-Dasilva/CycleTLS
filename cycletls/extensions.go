@@ -2,59 +2,10 @@ package cycletls
 
 import (
 	"encoding/binary"
-	"fmt"
+	"strconv"
+
 	utls "github.com/refraction-networking/utls"
 )
-
-var supportedSignatureAlgorithmsExtensions = map[string]utls.SignatureScheme{
-	"PKCS1WithSHA256":                     utls.PKCS1WithSHA256,
-	"PKCS1WithSHA384":                     utls.PKCS1WithSHA384,
-	"PKCS1WithSHA512":                     utls.PKCS1WithSHA512,
-	"PSSWithSHA256":                       utls.PSSWithSHA256,
-	"PSSWithSHA384":                       utls.PSSWithSHA384,
-	"PSSWithSHA512":                       utls.PSSWithSHA512,
-	"ECDSAWithP256AndSHA256":              utls.ECDSAWithP256AndSHA256,
-	"ECDSAWithP384AndSHA384":              utls.ECDSAWithP384AndSHA384,
-	"ECDSAWithP521AndSHA512":              utls.ECDSAWithP521AndSHA512,
-	"Ed25519":                             utls.Ed25519,
-	"PKCS1WithSHA1":                       utls.PKCS1WithSHA1,
-	"ECDSAWithSHA1":                       utls.ECDSAWithSHA1,
-	"rsa_pkcs1_sha1":                      utls.SignatureScheme(0x0201),
-	"Reserved for backward compatibility": utls.SignatureScheme(0x0202),
-	"ecdsa_sha1":                          utls.SignatureScheme(0x0203),
-	"rsa_pkcs1_sha256":                    utls.SignatureScheme(0x0401),
-	"ecdsa_secp256r1_sha256":              utls.SignatureScheme(0x0403),
-	"rsa_pkcs1_sha256_legacy":             utls.SignatureScheme(0x0420),
-	"rsa_pkcs1_sha384":                    utls.SignatureScheme(0x0501),
-	"ecdsa_secp384r1_sha384":              utls.SignatureScheme(0x0503),
-	"rsa_pkcs1_sha384_legacy":             utls.SignatureScheme(0x0520),
-	"rsa_pkcs1_sha512":                    utls.SignatureScheme(0x0601),
-	"ecdsa_secp521r1_sha512":              utls.SignatureScheme(0x0603),
-	"rsa_pkcs1_sha512_legacy":             utls.SignatureScheme(0x0620),
-	"eccsi_sha256":                        utls.SignatureScheme(0x0704),
-	"iso_ibs1":                            utls.SignatureScheme(0x0705),
-	"iso_ibs2":                            utls.SignatureScheme(0x0706),
-	"iso_chinese_ibs":                     utls.SignatureScheme(0x0707),
-	"sm2sig_sm3":                          utls.SignatureScheme(0x0708),
-	"gostr34102012_256a":                  utls.SignatureScheme(0x0709),
-	"gostr34102012_256b":                  utls.SignatureScheme(0x070A),
-	"gostr34102012_256c":                  utls.SignatureScheme(0x070B),
-	"gostr34102012_256d":                  utls.SignatureScheme(0x070C),
-	"gostr34102012_512a":                  utls.SignatureScheme(0x070D),
-	"gostr34102012_512b":                  utls.SignatureScheme(0x070E),
-	"gostr34102012_512c":                  utls.SignatureScheme(0x070F),
-	"rsa_pss_rsae_sha256":                 utls.SignatureScheme(0x0804),
-	"rsa_pss_rsae_sha384":                 utls.SignatureScheme(0x0805),
-	"rsa_pss_rsae_sha512":                 utls.SignatureScheme(0x0806),
-	"ed25519":                             utls.SignatureScheme(0x0807),
-	"ed448":                               utls.SignatureScheme(0x0808),
-	"rsa_pss_pss_sha256":                  utls.SignatureScheme(0x0809),
-	"rsa_pss_pss_sha384":                  utls.SignatureScheme(0x080A),
-	"rsa_pss_pss_sha512":                  utls.SignatureScheme(0x080B),
-	"ecdsa_brainpoolP256r1tls13_sha256":   utls.SignatureScheme(0x081A),
-	"ecdsa_brainpoolP384r1tls13_sha384":   utls.SignatureScheme(0x081B),
-	"ecdsa_brainpoolP512r1tls13_sha512":   utls.SignatureScheme(0x081C),
-}
 
 // PreserveIDExtension is an interface for extensions that preserve their original extension ID
 type PreserveIDExtension interface {
@@ -283,12 +234,7 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 		sigSchemes := []utls.SignatureScheme{}
 		if components != nil {
 			for _, rawSig := range components.SignatureSchemes {
-				if mappedSig, exists := supportedSignatureAlgorithmsExtensions[fmt.Sprintf("0x%04x", rawSig)]; exists {
-					sigSchemes = append(sigSchemes, mappedSig)
-				} else {
-					// Use the raw value as a signature scheme
-					sigSchemes = append(sigSchemes, utls.SignatureScheme(rawSig))
-				}
+				sigSchemes = append(sigSchemes, utls.SignatureScheme(rawSig))
 			}
 		}
 		if len(sigSchemes) == 0 {
@@ -327,6 +273,8 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 		}
 	case 0x0012: // Signed Certificate Timestamp
 		return &utls.SCTExtension{}
+	case 0x0015: // Padding
+		return &utls.UtlsPaddingExtension{GetPaddingLen: ja4rPaddingStyle}
 	case 0x0017: // Extended Master Secret
 		return &utls.ExtendedMasterSecretExtension{}
 	case extensionTrustAnchors: // Trust Anchor Identifiers - 51764
@@ -398,10 +346,45 @@ func CreateExtensionFromID(extID uint16, tlsVersion uint16, components *JA4RComp
 		if IsGREASEValue(extID) && !disableGrease {
 			return NewCustomGREASEExtension(extID)
 		}
+		// IDs the JA3 path knows a valid body for (status_request_v2,
+		// token_binding, pre_shared_key, cookie, signature_algorithms_cert,
+		// channel_id, ...) use that body. A zero-length body is not a valid
+		// encoding for them.
+		if ext, ok := genMap(disableGrease)[strconv.Itoa(int(extID))]; ok {
+			return ext
+		}
 		// Unknown extensions: preserve as generic with original ID
 		return &utls.GenericExtension{
 			Id:   extID,
 			Data: []byte{}, // Empty data for unknown extensions
 		}
 	}
+}
+
+// ja4rPaddingStyle is the padding rule for a JA4_r string that lists the
+// padding extension (0x0015). BoringSSL pads only when the unpadded hello is
+// 256 to 511 bytes long and sends no padding extension otherwise. A JA4_r that
+// lists 0x0015 counts it and hashes it, so the extension is always sent: with
+// the BoringSSL length when that rule applies, and with one zero byte when it
+// does not.
+func ja4rPaddingStyle(unpaddedLen int) (int, bool) {
+	if n, ok := utls.BoringPaddingStyle(unpaddedLen); ok && n > 0 {
+		return n, true
+	}
+	return 1, true
+}
+
+// movePreSharedKeyLast moves the pre_shared_key extension to the end of the
+// list, where RFC 8446 section 4.2.11 requires it.
+func movePreSharedKeyLast(exts []utls.TLSExtension) []utls.TLSExtension {
+	out := make([]utls.TLSExtension, 0, len(exts))
+	var psk []utls.TLSExtension
+	for _, e := range exts {
+		if _, ok := e.(utls.PreSharedKeyExtension); ok {
+			psk = append(psk, e)
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, psk...)
 }
