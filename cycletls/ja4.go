@@ -12,30 +12,31 @@ import (
 	http2 "github.com/Danny-Dasilva/fhttp/http2"
 )
 
-// JA4 is a TLS client fingerprinting technique that captures both TLS and HTTP fingerprints
-// Format: <TLS version><TLS ciphers hash>_<TLS extensions hash>_<HTTP headers hash>_<User-Agent hash>
-// Example: t13d_cd89_1952_bb99
-
-// GenerateJA4 generates a JA4 fingerprint from the TLS handshake and HTTP headers
+// GenerateJA4 returns a JA4 fingerprint in the FoxIO format
+// (for example "t13d1516h2_8daaf6152771_e5627efa2ab1") from a TLS version, a
+// cipher suite list and an extension list.
+//
+// The arguments do not carry the ALPN list or the signature algorithms, so the
+// ALPN part is always "00" and the last hash covers the extension IDs only.
+// headers and userAgent are not part of JA4 and are ignored; they stay in the
+// signature so existing callers keep compiling. Before 3.0.1 this function
+// returned a string that was not JA4 (no counts, no ALPN, hashes cut to 1 and 4
+// characters, HTTP headers mixed in).
+//
+// Deprecated: use JA4FromClientHello, which reads every JA4 input from the
+// ClientHello bytes.
 func GenerateJA4(tlsVersion uint16, cipherSuites []uint16, extensions []uint16, headers http.Header, userAgent string) string {
-	// Step 1: TLS version
-	tlsVersionStr := getTLSVersionString(tlsVersion)
-
-	// Step 2: Cipher suites hash (first 1 character)
-	cipherHash := hashCipherSuites(cipherSuites)
-
-	// Step 3: Extensions hash (first 4 characters)
-	extensionsHash := hashExtensions(extensions)
-
-	// Step 4: HTTP headers hash (first 4 characters)
-	headersHash := hashHeaders(headers)
-
-	// Step 5: User Agent hash (first 4 characters)
-	uaHash := hashUserAgent(userAgent)
-
-	// Format: <TLS version><Cipher hash>_<Extensions hash>_<Headers hash>_<UA hash>
-	// JA4 format: t13d_cd89_1952_bb99 (19 chars total)
-	return fmt.Sprintf("%s%s_%s_%s_%s", tlsVersionStr, cipherHash[:1], extensionsHash[:4], headersHash[:4], uaHash[:4])
+	info := &ClientHelloInfo{
+		Version:      tlsVersion,
+		CipherSuites: cipherSuites,
+		Extensions:   extensions,
+	}
+	for _, e := range extensions {
+		if e == extensionIDServerName {
+			info.HasSNI = true
+		}
+	}
+	return info.JA4()
 }
 
 // GenerateJA4HTTP generates a JA4 HTTP fingerprint from HTTP headers only
@@ -75,49 +76,6 @@ func GenerateJA4H2(settings []http2.Setting, streamDependency uint32, exclusive 
 }
 
 // Helper functions
-
-func getTLSVersionString(version uint16) string {
-	switch version {
-	case 0x0301:
-		return "t10"
-	case 0x0302:
-		return "t11"
-	case 0x0303:
-		return "t12"
-	case 0x0304:
-		return "t13"
-	default:
-		return "t??"
-	}
-}
-
-func hashCipherSuites(ciphers []uint16) string {
-	// Sort and join cipher suites
-	cipherStrings := make([]string, len(ciphers))
-	for i, cipher := range ciphers {
-		cipherStrings[i] = fmt.Sprintf("%04x", cipher)
-	}
-	sort.Strings(cipherStrings)
-
-	// Hash the joined string
-	h := sha256.New()
-	h.Write([]byte(strings.Join(cipherStrings, "")))
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func hashExtensions(extensions []uint16) string {
-	// Sort and join extensions
-	extStrings := make([]string, len(extensions))
-	for i, ext := range extensions {
-		extStrings[i] = fmt.Sprintf("%04x", ext)
-	}
-	sort.Strings(extStrings)
-
-	// Hash the joined string
-	h := sha256.New()
-	h.Write([]byte(strings.Join(extStrings, "")))
-	return hex.EncodeToString(h.Sum(nil))
-}
 
 func hashHeaders(headers http.Header) string {
 	// Get header names and sort them
