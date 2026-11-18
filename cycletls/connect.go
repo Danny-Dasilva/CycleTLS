@@ -297,6 +297,20 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 	}
 }
 
+// closeCachedH2 closes the HTTP/2 connection to the proxy that DialContext
+// keeps for later CONNECT requests. Safe to call when nothing is cached.
+func (c *connectDialer) closeCachedH2() {
+	c.cacheH2Mu.Lock()
+	rawConn := c.cachedH2RawConn
+	c.cachedH2ClientConn = nil
+	c.cachedH2RawConn = nil
+	c.cacheH2Mu.Unlock()
+
+	if rawConn != nil {
+		_ = rawConn.Close()
+	}
+}
+
 func newHTTP2Conn(c net.Conn, pipedReqBody *io.PipeWriter, respBody io.ReadCloser) net.Conn {
 	return &http2Conn{Conn: c, in: pipedReqBody, out: respBody}
 }
