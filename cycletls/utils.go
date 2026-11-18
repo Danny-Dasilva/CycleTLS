@@ -194,22 +194,9 @@ func ModernChromeSpec(forceHTTP1 bool) *utls.ClientHelloSpec {
 	}
 
 	if forceHTTP1 {
-		// Find ALPN by type-assertion and downgrade to http/1.1 only.
-		// Drop ALPS (ApplicationSettingsExtensionNew) since it is HTTP/2 only.
-		// Iterating-by-type avoids index drift if the extension list changes
-		// (e.g. ECH at slot 9 was previously corrupted by hard-coded indices).
-		filtered := extensions[:0]
-		for _, ext := range extensions {
-			switch ext.(type) {
-			case *utls.ALPNExtension:
-				filtered = append(filtered, &utls.ALPNExtension{AlpnProtocols: []string{"http/1.1"}})
-			case *utls.ApplicationSettingsExtensionNew, *utls.ApplicationSettingsExtension:
-				// ALPS is HTTP/2-only; drop it for HTTP/1.1
-			default:
-				filtered = append(filtered, ext)
-			}
-		}
-		extensions = filtered
+		// Downgrade ALPN to http/1.1 only and drop ALPS, by type rather than
+		// by index, so the result does not depend on the extension order.
+		extensions = applyForceHTTP1(extensions)
 	}
 
 	return &utls.ClientHelloSpec{

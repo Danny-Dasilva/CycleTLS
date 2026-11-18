@@ -215,6 +215,10 @@ func browserFromOptions(opts Options) Browser {
 		ForceHTTP3:              opts.ForceHTTP3,
 		TLS13AutoRetry:          opts.TLS13AutoRetry,
 		HeaderOrder:             opts.HeaderOrder,
+		// 3.0.1: TLS spec options
+		TLSProfile:        opts.TLSProfile,
+		ShuffleExtensions: opts.ShuffleExtensions,
+		ClientHello:       opts.ClientHello,
 	}
 }
 
@@ -1811,6 +1815,10 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 		ForceHTTP1:              options.ForceHTTP1,
 		ForceHTTP3:              options.ForceHTTP3,
 		HeaderOrder:             options.HeaderOrder,
+		// 3.0.1: TLS spec options
+		TLSProfile:        options.TLSProfile,
+		ShuffleExtensions: options.ShuffleExtensions,
+		ClientHello:       options.ClientHello,
 	}
 
 	// Note: Don't automatically set HeaderOrder from UserAgent here as it can interfere with connection management

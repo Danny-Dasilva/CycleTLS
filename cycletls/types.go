@@ -89,6 +89,11 @@ type Options struct {
 
 	// Certificate pinning (optional)
 	CertPins []string `json:"certPins,omitempty"` // SHA256 certificate fingerprints for pinning (hex-encoded)
+
+	// 3.0.1: TLS spec options
+	TLSProfile        string `json:"tlsProfile,omitempty"`        // Named utls ClientHello, e.g. "chrome_133"; see TLSProfileNames. Wins over ja3 and ja4r.
+	ShuffleExtensions bool   `json:"shuffleExtensions,omitempty"` // Random extension order per connection on the default-Chrome, tlsProfile and ja4r paths. Ignored with ja3.
+	ClientHello       string `json:"clientHello,omitempty"`       // Hex of a captured ClientHello TLS record to replay; see ClientHelloToSpec. Wins over tlsProfile, ja3 and ja4r.
 }
 
 // UnmarshalJSON accepts both legacy string header values and multi-value arrays.
