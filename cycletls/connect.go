@@ -11,7 +11,9 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	http "github.com/Danny-Dasilva/fhttp"
@@ -124,6 +126,39 @@ func newConnectDialer(proxyURLStr string, UserAgent string, insecureSkipVerify b
 	}
 	client.DefaultHeader.Set("User-Agent", UserAgent)
 	return client, nil
+}
+
+// setProxyHeaders adds the proxyHeaders option to the CONNECT request of an
+// HTTP or HTTPS proxy dialer. A caller's header replaces a default of the same
+// name (User-Agent, Proxy-Authorization), whatever its casing. Other dialers,
+// SOCKS included, have no CONNECT request and are left alone.
+func setProxyHeaders(dialer proxy.ContextDialer, headers map[string]string) {
+	c, ok := dialer.(*connectDialer)
+	if !ok || len(headers) == 0 {
+		return
+	}
+	for name, value := range headers {
+		for existing := range c.DefaultHeader {
+			if strings.EqualFold(existing, name) {
+				delete(c.DefaultHeader, existing)
+			}
+		}
+		c.DefaultHeader[name] = []string{value}
+	}
+}
+
+// proxyHeadersKey is the part of the pooled-client key that depends on
+// proxyHeaders: the same headers in any map order give the same key.
+func proxyHeadersKey(headers map[string]string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	pairs := make([]string, 0, len(headers))
+	for name, value := range headers {
+		pairs = append(pairs, strconv.Quote(name)+"="+strconv.Quote(value))
+	}
+	sort.Strings(pairs)
+	return strings.Join(pairs, ",")
 }
 
 func (c *connectDialer) Dial(network, address string) (net.Conn, error) {

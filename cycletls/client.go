@@ -58,6 +58,10 @@ type Browser struct {
 	// TLS configuration
 	TLSConfig *utls.Config
 
+	// 3.0.1: HTTP/2, HTTP/3 and proxy options
+	HTTP2Priority *HTTP2PriorityOptions // HEADERS frame priority; nil keeps the default
+	ProxyHeaders  map[string]string     // extra headers for the proxy CONNECT request
+
 	// HTTP client
 	client *fhttp.Client
 }
@@ -178,7 +182,7 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 	// any one of them must produce a different pooled client. timeout is included
 	// because clients with different timeouts must not share a pool entry.
 	configStr := fmt.Sprintf(
-		"ja3:%s|ja4r:%s|http2:%s|quic:%s|uspec:%v|grease:%t|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|proxyskip:%s|forcehttp1:%t|forcehttp3:%t|tls13retry:%t|headerorder:%s|tlscfg:%s|cookies:%s",
+		"ja3:%s|ja4r:%s|http2:%s|quic:%s|uspec:%v|grease:%t|ua:%s|sni:%s|proxy:%s|timeout:%d|redirect:%t|skipverify:%t|proxyskip:%s|forcehttp1:%t|forcehttp3:%t|tls13retry:%t|headerorder:%s|tlscfg:%s|cookies:%s|h2priority:%s|proxyheaders:%s",
 		browser.JA3,
 		browser.JA4r,
 		browser.HTTP2Fingerprint,
@@ -198,6 +202,8 @@ func generateClientKey(browser Browser, timeout int, disableRedirect bool, proxy
 		headerOrder,
 		tlsCfg,
 		strings.Join(cookieSigs, ","),
+		browser.HTTP2Priority.key(),
+		proxyHeadersKey(browser.ProxyHeaders),
 	)
 
 	// FNV-1a 64-bit hash of the canonical config string. Fixed-size hex key.
@@ -282,6 +288,7 @@ func createNewClient(browser Browser, timeout int, disableRedirect bool, userAge
 				CheckRedirect: disabledRedirect,
 			}, err
 		}
+		setProxyHeaders(dialer, browser.ProxyHeaders)
 	} else {
 		dialer = proxy.Direct
 	}

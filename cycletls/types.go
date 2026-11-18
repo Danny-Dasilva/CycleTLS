@@ -89,6 +89,18 @@ type Options struct {
 
 	// Certificate pinning (optional)
 	CertPins []string `json:"certPins,omitempty"` // SHA256 certificate fingerprints for pinning (hex-encoded)
+
+	// 3.0.1: HTTP/2, HTTP/3 and proxy options
+	//
+	// HTTP2Priority sets the priority fields of the HTTP/2 HEADERS frame:
+	// {"weight":256,"exclusive":true,"streamDep":0}, or false to send none.
+	// Unset keeps the default (weight 256 when http2Fingerprint is set, no
+	// priority fields otherwise).
+	HTTP2Priority *HTTP2PriorityOptions `json:"http2Priority,omitempty"`
+	// ProxyHeaders are extra headers for the CONNECT request sent to an HTTP or
+	// HTTPS proxy. They are not sent to the target site. SOCKS proxies have no
+	// CONNECT request and ignore them.
+	ProxyHeaders map[string]string `json:"proxyHeaders,omitempty"`
 }
 
 // UnmarshalJSON accepts both legacy string header values and multi-value arrays.

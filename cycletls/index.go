@@ -215,6 +215,9 @@ func browserFromOptions(opts Options) Browser {
 		ForceHTTP3:              opts.ForceHTTP3,
 		TLS13AutoRetry:          opts.TLS13AutoRetry,
 		HeaderOrder:             opts.HeaderOrder,
+		// 3.0.1: HTTP/2, HTTP/3 and proxy options
+		HTTP2Priority: opts.HTTP2Priority,
+		ProxyHeaders:  opts.ProxyHeaders,
 	}
 }
 
@@ -437,6 +440,14 @@ func (res fullRequest) reqContext() context.Context {
 
 // dispatchHTTP3Request handles HTTP/3 specific request processing
 func dispatchHTTP3Request(request cycleTLSRequest) (result fullRequest) {
+	// HTTP/3 cannot go through a proxy. Refuse before a client or socket
+	// exists, so nothing is sent from the real IP.
+	if request.Options.Proxy != "" {
+		result.options = request
+		result.err = ErrHTTP3ProxyUnsupported
+		return result
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create browser configuration for HTTP/3 with forced settings
@@ -1798,8 +1809,17 @@ func (client CycleTLS) Do(URL string, options Options, Method string) (Response,
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// 3.0.1: HTTP/3 cannot go through a proxy; fail before anything is sent.
+	if options.Proxy != "" && options.ForceHTTP3 {
+		return Response{}, ErrHTTP3ProxyUnsupported
+	}
+
 	// Create browser from options
 	browser := Browser{
+		// 3.0.1: HTTP/2, HTTP/3 and proxy options
+		HTTP2Priority: options.HTTP2Priority,
+		ProxyHeaders:  options.ProxyHeaders,
+
 		JA3:                     options.Ja3,
 		JA4r:                    options.Ja4r,
 		HTTP2Fingerprint:        options.HTTP2Fingerprint,
