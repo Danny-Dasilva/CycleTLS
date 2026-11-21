@@ -16,6 +16,7 @@ import (
 
 	fhttp "github.com/Danny-Dasilva/fhttp"
 	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 	uquic "github.com/refraction-networking/uquic"
 	utls "github.com/refraction-networking/utls"
 )
@@ -24,7 +25,7 @@ const (
 	chrome  = "chrome"  //chrome User agent enum
 	firefox = "firefox" //firefox User agent enum
 
-	// maxDecompressedBody caps gzip/deflate/brotli inflate so io.ReadAll
+	// maxDecompressedBody caps gzip/deflate/brotli/zstd inflate so io.ReadAll
 	// cannot grow without bound on a malicious Content-Encoding payload.
 	maxDecompressedBody = 64 << 20 // 64 MiB
 )
@@ -106,6 +107,13 @@ func DecompressBody(Body []byte, encoding []string, content []string) (parsedBod
 			return Body
 		}
 		return unz
+	case "zstd":
+		unz, err := unZstdData(Body)
+		if err != nil {
+			// Return original body on decompression failure (axios behavior)
+			return Body
+		}
+		return unz
 	default:
 		// Unknown encoding, return original body
 		return Body
@@ -143,6 +151,16 @@ func enflateData(data []byte) (resData []byte, err error) {
 func unBrotliData(data []byte) (resData []byte, err error) {
 	br := brotli.NewReader(bytes.NewReader(data))
 	return readLimited(br)
+}
+
+// unZstdData : zstd 圧縮データを maxDecompressedBody を上限に解凍する.
+func unZstdData(data []byte) (resData []byte, err error) {
+	zr, err := zstd.NewReader(bytes.NewReader(data), zstd.WithDecoderMaxMemory(maxDecompressedBody))
+	if err != nil {
+		return []byte{}, err
+	}
+	defer zr.Close()
+	return readLimited(zr)
 }
 
 func ModernChromeSpec(forceHTTP1 bool) *utls.ClientHelloSpec {

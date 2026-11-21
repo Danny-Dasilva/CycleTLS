@@ -559,6 +559,7 @@ CycleTLS automatically handles response decompression for compressed content. No
 * `gzip` - Automatically decompressed
 * `deflate` - Automatically decompressed  
 * `brotli` - Automatically decompressed
+* `zstd` - Automatically decompressed
 
 ### JavaScript Decompression Example
 ```js

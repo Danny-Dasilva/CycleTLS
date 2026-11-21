@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestUnBrotliDataValid(t *testing.T) {
@@ -82,5 +83,57 @@ func TestGUnzipDataValid(t *testing.T) {
 	}
 	if string(got) != "hello gzip" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func zstdEncode(t *testing.T, src []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w, err := zstd.NewWriter(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(src); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestUnZstdDataValid(t *testing.T) {
+	enc := zstdEncode(t, []byte("hello zstd"))
+
+	got, err := unZstdData(enc)
+	if err != nil {
+		t.Fatalf("valid zstd: %v", err)
+	}
+	if string(got) != "hello zstd" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestDecompressBodyZstd(t *testing.T) {
+	enc := zstdEncode(t, []byte("hello zstd"))
+
+	for _, ev := range []string{"zstd", "ZSTD", " zstd "} {
+		if got := DecompressBody(enc, []string{ev}, nil); string(got) != "hello zstd" {
+			t.Errorf("encoding %q: got %q", ev, got)
+		}
+	}
+}
+
+func TestDecompressBodyZstdInvalidReturnsOriginal(t *testing.T) {
+	in := []byte("not zstd")
+	if got := DecompressBody(in, []string{"zstd"}, nil); !bytes.Equal(got, in) {
+		t.Errorf("should return original body on error, got %q", got)
+	}
+}
+
+func TestUnZstdDataCapsSize(t *testing.T) {
+	enc := zstdEncode(t, make([]byte, maxDecompressedBody+1))
+	if _, err := unZstdData(enc); err == nil {
+		t.Fatal("expected size limit error")
 	}
 }
